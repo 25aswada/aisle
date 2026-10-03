@@ -26,15 +26,20 @@ protocol AisleAPI: Sendable {
     func searchStores(query: String) async throws -> [Store]
     func store(id: String) async throws -> Store
     func searchItem(query: String, storeID: String?) async throws -> ItemSearchResult
+    func zones(storeID: String) async throws -> [StoreZone]
+    func sendFeedback(_ body: FeedbackBody) async throws -> FeedbackReceipt
 }
 
 struct APIClient: AisleAPI {
     let baseURL: URL
     let session: URLSession
+    /// Sent as `X-Aisle-Device` so the server can count repeat reports once.
+    let deviceID: String?
 
-    init(baseURL: URL = AppConfig.current.apiBaseURL, session: URLSession = .shared) {
+    init(baseURL: URL = AppConfig.current.apiBaseURL, session: URLSession = .shared, deviceID: String? = nil) {
         self.baseURL = baseURL
         self.session = session
+        self.deviceID = deviceID
     }
 
     func health() async throws -> HealthResponse {
@@ -67,6 +72,14 @@ struct APIClient: AisleAPI {
 
     func searchItem(query: String, storeID: String?) async throws -> ItemSearchResult {
         try await post("search", body: SearchRequestBody(query: query, storeID: storeID.flatMap(Int.init)))
+    }
+
+    func zones(storeID: String) async throws -> [StoreZone] {
+        try await get("stores/\(storeID)/zones")
+    }
+
+    func sendFeedback(_ body: FeedbackBody) async throws -> FeedbackReceipt {
+        try await post("feedback", body: body)
     }
 
     // MARK: - Request building
@@ -102,6 +115,9 @@ struct APIClient: AisleAPI {
     private func send<T: Decodable>(_ request: URLRequest) async throws -> T {
         var request = request
         request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let deviceID {
+            request.setValue(deviceID, forHTTPHeaderField: "X-Aisle-Device")
+        }
         request.timeoutInterval = 10
 
         let data: Data

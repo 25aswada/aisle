@@ -12,6 +12,9 @@ struct SearchResultCard: View {
             if !result.location.neighbors.isEmpty {
                 neighborsBlock
             }
+            if let reports = result.reports, reports.found + reports.notHere > 0 {
+                ReportSummary(reports: reports)
+            }
             if result.availability == .unlikely {
                 Label("This store may not carry this item.", systemImage: "exclamationmark.triangle")
                     .font(.subheadline)
@@ -89,6 +92,24 @@ struct SearchResultCard: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Look near \(result.location.neighbors.joined(separator: ", "))")
+    }
+}
+
+struct ReportSummary: View {
+    let reports: ReportCounts
+
+    var body: some View {
+        HStack(spacing: 12) {
+            if reports.found > 0 {
+                Label("\(reports.found) found it here", systemImage: "person.fill.checkmark")
+            }
+            if reports.notHere > 0 {
+                Label("\(reports.notHere) didn't", systemImage: "person.fill.xmark")
+            }
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .accessibilityElement(children: .combine)
     }
 }
 

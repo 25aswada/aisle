@@ -1,12 +1,17 @@
 """Resolve an item intent to a location in a store, in source priority order.
 
 1. product_locations rows: "verified", then "retailer"     -> source "database", high
-2. a "verified" store zone that holds the item's category  -> source "store_layout", medium
-3. AI model (when configured and the strategy calls for it) -> source "model"
-4. deterministic catalog + the store's template zones      -> source "fallback"
+2. shopper consensus from location_observations           -> source "observations"
+3. a "verified" store zone that holds the item's category  -> source "store_layout", medium
+4. AI model (when configured and the strategy calls for it) -> source "model"
+5. deterministic catalog + the store's template zones      -> source "fallback"
 
-Database rows always beat the model: the model is not called when 1 or 2 match.
-Aisle and section text only ever comes from rows in steps 1 and 2.
+Database rows always beat the model: the model is not called when 1-3 match.
+Aisle and section text only ever comes from rows in steps 1-3. Shopper-typed aisle
+text needs several agreeing reports (see observations.py).
+
+When several shoppers say an item is not in the zone we would suggest, the
+answer's confidence drops to low.
 """
 from __future__ import annotations
 
@@ -20,6 +25,7 @@ from .ai.intent import Intent
 from .ai.providers import LocationModel
 from .ai.reasoning import clean_neighbors, fallback_guess
 from .config import get_settings
+from .observations import ReportCounts, consensus, counts_by_zone, observations_for
 from .models import (
     Category, ProductAlias, ProductConcept, ProductLocation, Store, StoreZone, zone_categories,
 )
@@ -42,6 +48,7 @@ class Resolution:
     availability: Availability = "unknown"
     confidence: Confidence = "low"
     source: LocationSource = "fallback"
+    reports: ReportCounts | None = None
 
 
 def find_concept(db: Session, intent: Intent) -> ProductConcept | None:
@@ -88,6 +95,20 @@ def best_product_location(db: Session, store: Store, concept: ProductConcept | N
 
 def resolve(db: Session, intent: Intent, store: Store | None, model: LocationModel | None) -> Resolution:
     concept = find_concept(db, intent)
+    observations = observations_for(db, store, concept, intent.normalized) if store else []
+    result = _resolve(db, intent, store, model, concept, observations)
+    if store is not None and result.zone_id is not None:
+        result.reports = counts_by_zone(observations).get(result.zone_id, ReportCounts())
+        doubted = result.reports.not_here >= 2 and result.reports.not_here > result.reports.found
+        if doubted and result.source not in ("database", "observations"):
+            result.confidence = "low"
+    return result
+
+
+def _resolve(
+    db: Session, intent: Intent, store: Store | None, model: LocationModel | None,
+    concept: ProductConcept | None, observations: list,
+) -> Resolution:
     category = find_category(db, intent, concept)
     neighbors = clean_neighbors(list(category.neighbors), intent) if category else []
 
@@ -117,6 +138,13 @@ def resolve(db: Session, intent: Intent, store: Store | None, model: LocationMod
                 section=location.section,
                 zone_id=location.zone_id or (zone.id if zone else None),
                 availability="likely", confidence="high", source="database",
+            )
+        agreed = consensus(observations)
+        if agreed is not None:
+            return base(
+                department=agreed.zone.name, aisle=agreed.aisle or agreed.zone.aisle_label,
+                zone_id=agreed.zone.id, availability="likely",
+                confidence=agreed.confidence, source="observations",
             )
         if zone is not None and zone.source == "verified":
             return base(

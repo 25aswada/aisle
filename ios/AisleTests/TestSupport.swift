@@ -65,13 +65,19 @@ final class StubURLProtocol: URLProtocol {
 
 enum Fixtures {
     static let mapleSyrupJSON = """
-    {"query":"maple syrup","item":"maple syrup","modifiers":[],"quantity":null,"store_id":2,
+    {"search_id":"evt-1","query":"maple syrup","item":"maple syrup","modifiers":[],"quantity":null,"store_id":2,
     "concept":{"id":118,"name":"maple syrup"},
     "category":{"slug":"syrups-sweeteners","name":"Syrups & Sweeteners"},
     "location":{"department":"Breakfast/Pantry","zone_id":17,"aisle":null,"section":null,
     "neighbors":["pancake mix","honey","sweeteners"]},
-    "availability":"likely","confidence":"medium","source":"fallback"}
+    "availability":"likely","confidence":"medium","source":"fallback",
+    "reports":{"found":0,"not_here":0}}
     """
+
+    static let zones = [
+        StoreZone(id: 17, name: "Breakfast/Pantry", aisleLabel: nil, source: "template"),
+        StoreZone(id: 21, name: "Frozen", aisleLabel: nil, source: "template"),
+    ]
 
     static var mapleSyrup: ItemSearchResult {
         try! JSONDecoder().decode(ItemSearchResult.self, from: Data(mapleSyrupJSON.utf8))
@@ -89,6 +95,11 @@ final class StubAPI: AisleAPI, @unchecked Sendable {
     var searchResult: Result<[Store], Error> = .success([Fixtures.store])
     var searchItemResult: Result<ItemSearchResult, Error> = .success(Fixtures.mapleSyrup)
     private(set) var itemSearches: [(String, String?)] = []
+    var zonesResult: Result<[StoreZone], Error> = .success(Fixtures.zones)
+    var feedbackResult: Result<FeedbackReceipt, Error> = .success(
+        FeedbackReceipt(id: 1, verdict: .found, zoneID: 17, reports: nil)
+    )
+    private(set) var feedbackBodies: [FeedbackBody] = []
     private(set) var nearbyCalls: [(Double, Double, Int?)] = []
     private(set) var searchQueries: [String] = []
 
@@ -109,6 +120,13 @@ final class StubAPI: AisleAPI, @unchecked Sendable {
     func searchItem(query: String, storeID: String?) async throws -> ItemSearchResult {
         itemSearches.append((query, storeID))
         return try searchItemResult.get()
+    }
+
+    func zones(storeID: String) async throws -> [StoreZone] { try zonesResult.get() }
+
+    func sendFeedback(_ body: FeedbackBody) async throws -> FeedbackReceipt {
+        feedbackBodies.append(body)
+        return try feedbackResult.get()
     }
 }
 

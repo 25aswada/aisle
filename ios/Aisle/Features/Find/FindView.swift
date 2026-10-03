@@ -8,6 +8,7 @@ struct FindView: View {
     @Environment(HealthMonitor.self) private var health
     @State private var isPickingStore = false
     @State private var model: FindModel
+    @State private var isCorrecting = false
     @FocusState private var searchFocused: Bool
 
     init(api: AisleAPI, location: LocationProviding) {
@@ -84,6 +85,17 @@ extension FindView {
             .accessibilityElement(children: .combine)
         case .loaded(let result):
             SearchResultCard(result: result, storeName: store.name)
+            FeedbackBar(
+                state: model.feedback,
+                onFound: { Task { await model.confirmFound(storeID: store.id) } },
+                onNotHere: { Task { await model.reportNotHere(storeID: store.id) } },
+                onCorrect: { isCorrecting = true }
+            )
+            .sheet(isPresented: $isCorrecting) {
+                CorrectionSheet(api: api, storeID: store.id, item: result.item) { zone, aisle in
+                    Task { await model.submitCorrection(storeID: store.id, zone: zone, aisle: aisle) }
+                }
+            }
         case .failed(let message):
             VStack(alignment: .leading, spacing: 8) {
                 Label(message, systemImage: "exclamationmark.triangle")

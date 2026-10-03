@@ -8,7 +8,7 @@ struct AisleApp: App {
     private let location: LocationProvider
 
     init() {
-        let api = APIClient(baseURL: AppConfig.current.apiBaseURL)
+        let api = APIClient(baseURL: AppConfig.current.apiBaseURL, deviceID: DeviceIdentity.current())
         self.api = api
         self.location = LocationProvider()
         _health = State(initialValue: HealthMonitor(api: api))

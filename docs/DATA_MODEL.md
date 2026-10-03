@@ -20,6 +20,13 @@ SQLAlchemy models live in `backend/app/models.py`; Alembic migrations in
 | `store_zone_categories(zone_id, category_id)` | Which categories a zone holds. |
 | `product_locations(id, store_id, concept_id, zone_id null, aisle_label null, section null, source, updated_at)` | Where a concept is in a specific store. `source` is `verified` or `retailer`. Unique per (store, concept, source). |
 
+## Feedback and events (Milestone 4)
+
+| Table | Purpose |
+| --- | --- |
+| `search_events(id uuid string, store_id null, query, item_normalized, concept_id null, category_slug null, department null, zone_id null, source, confidence, device_id null, created_at)` | One row per `POST /search`, with what was answered. |
+| `location_observations(id, store_id, search_event_id null, concept_id null, item_normalized, verdict, zone_id null, aisle_text null, note null, device_id null, created_at)` | Shopper reports. `verdict` is `found` or `not_here`. Unknown items are grouped by `item_normalized`. |
+
 ### Seeding and imports
 
 `python -m backend.app.seed` loads demo stores, the catalog (categories, concepts,
@@ -35,8 +42,9 @@ writer of `aisle_label`.
 `backend/app/resolver.py`, best first:
 
 1. `product_locations` with source `verified`, then `retailer` → `source: "database"`, high confidence, aisle/section from the row.
-2. A `verified` store zone holding the category → `"store_layout"`, medium.
-3. The AI model, when configured → `"model"`.
-4. The deterministic catalog, using the store's template zone → `"fallback"`.
+2. Shopper consensus from `location_observations` → `"observations"` (see `API.md`).
+3. A `verified` store zone holding the category → `"store_layout"`, medium.
+4. The AI model, when configured → `"model"`.
+5. The deterministic catalog, using the store's template zone → `"fallback"`.
 
-The model is never called when step 1 or 2 matches.
+The model is never called when steps 1–3 match.

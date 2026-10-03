@@ -2,6 +2,7 @@ import Foundation
 
 /// Structured result of `POST /search`. The app renders these fields; the server never sends prose.
 struct ItemSearchResult: Codable, Equatable, Hashable {
+    let searchID: String?
     let query: String
     let item: String
     let modifiers: [String]
@@ -13,9 +14,13 @@ struct ItemSearchResult: Codable, Equatable, Hashable {
     let availability: Availability
     let confidence: Confidence
     let source: LocationSource
+    /// Shopper reports for the suggested zone at this store.
+    let reports: ReportCounts?
 
     enum CodingKeys: String, CodingKey {
         case query, item, modifiers, quantity, concept, category, location, availability, confidence, source
+        case reports
+        case searchID = "search_id"
         case storeID = "store_id"
     }
 }

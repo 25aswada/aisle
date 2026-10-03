@@ -70,7 +70,13 @@ class LocationOut(BaseModel):
     neighbors: list[str] = []
 
 
+class ReportCountsOut(BaseModel):
+    found: int
+    not_here: int
+
+
 class SearchResponse(BaseModel):
+    search_id: str | None = None
     query: str
     item: str
     modifiers: list[str]
@@ -82,3 +88,47 @@ class SearchResponse(BaseModel):
     availability: Availability
     confidence: Confidence
     source: LocationSource
+    # Shopper reports for the suggested zone at this store; null without a store or zone.
+    reports: ReportCountsOut | None = None
+
+
+class FeedbackRequest(BaseModel):
+    store_id: int
+    item: str = Field(min_length=1, max_length=200)
+    verdict: Literal["found", "not_here"]
+    search_id: str | None = Field(default=None, max_length=36)
+    # Where the shopper found it (correction) or where it wasn't (not_here).
+    zone_id: int | None = None
+    aisle: str | None = Field(default=None, max_length=40)
+    note: str | None = Field(default=None, max_length=280)
+
+    @field_validator("item")
+    @classmethod
+    def item_not_blank(cls, value: str) -> str:
+        value = " ".join(value.split())
+        if not value:
+            raise ValueError("item must not be blank")
+        return value
+
+    @field_validator("aisle", "note")
+    @classmethod
+    def blank_to_none(cls, value: str | None) -> str | None:
+        value = " ".join((value or "").split())
+        return value or None
+
+
+class FeedbackResponse(BaseModel):
+    id: int
+    store_id: int
+    verdict: Literal["found", "not_here"]
+    zone_id: int | None
+    concept_id: int | None
+    reports: ReportCountsOut | None
+
+
+class StoreZoneOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    aisle_label: str | None
+    source: str

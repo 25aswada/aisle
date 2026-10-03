@@ -4,6 +4,12 @@ Local origin: `http://127.0.0.1:8000`. JSON in and out. No accounts or auth.
 `/docs` on the running service shows the live OpenAPI schema. This document and
 `ios/Aisle/Networking/APIClient.swift` must change together.
 
+## Device header
+
+The app sends `X-Aisle-Device: <random install id>` on every request. It is
+anonymous (no account, not a hardware id). The server stores it on search events
+and observations so repeat reports from one install count once. It is optional.
+
 ## Identifiers
 
 Database ids are integers in JSON. The iOS client stores `Store.id` as a string
@@ -50,6 +56,7 @@ Response (Trader Joe's, no database row for this item):
 
 ```json
 {
+  "search_id": "6f0c1d1e-8a43-4d1e-9c55-3f0f5d3a9e10",
   "query": "maple syrup",
   "item": "maple syrup",
   "modifiers": [],
@@ -66,7 +73,8 @@ Response (Trader Joe's, no database row for this item):
   },
   "availability": "likely",
   "confidence": "medium",
-  "source": "fallback"
+  "source": "fallback",
+  "reports": {"found": 0, "not_here": 0}
 }
 ```
 
@@ -84,8 +92,49 @@ Response (Trader Joe's, no database row for this item):
 | availability | `likely`, `unlikely` (this store format usually doesn't stock it), `unknown` |
 | confidence | `high`, `medium`, `low` |
 | source | `database`, `observations`, `store_layout`, `model`, `fallback` |
+| search_id | id of the recorded search event; pass it back with feedback. Null if logging failed |
+| reports | distinct shoppers who found / didn't find it in the suggested zone; null without a store or zone |
 
 Source priority is described in `DATA_MODEL.md`. A database row for the item at this
 store always beats the model.
 
 The response is structured data only. The app composes all display text.
+
+## Feedback (Milestone 4)
+
+### GET /stores/{store_id}/zones
+
+The store's departments, for the correction picker. 404 for an unknown store.
+
+```json
+[{"id": 17, "name": "Breakfast/Pantry", "aisle_label": null, "source": "template"}]
+```
+
+### POST /feedback
+
+"Found it", "Not here", and corrections. Status 201.
+
+```json
+{"store_id": 2, "item": "maple syrup", "verdict": "found",
+ "search_id": "6f0c…", "zone_id": 21, "aisle": "Aisle 9", "note": null}
+```
+
+| Field | Rules |
+| --- | --- |
+| verdict | `found` or `not_here` |
+| zone_id | optional. For `found`, where it was (the suggested zone, or a correction). For `not_here`, the zone it wasn't in. Must belong to the store, else 422 |
+| aisle | optional, ≤ 40 chars, kept only for `found`. Shown in search results only after 2+ shoppers type the same text |
+| search_id | optional; unknown ids are ignored |
+
+Response:
+
+```json
+{"id": 5, "store_id": 2, "verdict": "found", "zone_id": 21, "concept_id": 118,
+ "reports": {"found": 1, "not_here": 0}}
+```
+
+Consensus rule: a zone becomes the answer (`source: "observations"`) when at least
+2 distinct shoppers found the item there and they outnumber "not here" reports for
+that zone; 3+ with no "not here" makes it high confidence. Two or more "not here"
+reports that outnumber "found" for the suggested zone drop confidence to low.
+Database rows still win over observations.

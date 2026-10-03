@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from uuid import uuid4
 
 from sqlalchemy import (
     JSON, CheckConstraint, Column, DateTime, ForeignKey, String, Table, UniqueConstraint,
@@ -121,3 +122,46 @@ class ProductLocation(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     zone: Mapped[StoreZone | None] = relationship(lazy="joined")
     concept: Mapped[ProductConcept] = relationship(lazy="joined")
+
+
+def new_id() -> str:
+    return str(uuid4())
+
+
+class SearchEvent(Base):
+    """One item search and what the resolver answered. Anonymous."""
+    __tablename__ = "search_events"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    store_id: Mapped[int | None] = mapped_column(ForeignKey("stores.id", ondelete="SET NULL"), index=True)
+    query: Mapped[str] = mapped_column(String(200))
+    item_normalized: Mapped[str] = mapped_column(String(200))
+    concept_id: Mapped[int | None] = mapped_column(ForeignKey("product_concepts.id", ondelete="SET NULL"))
+    category_slug: Mapped[str | None] = mapped_column(String(80))
+    department: Mapped[str | None] = mapped_column(String(120))
+    zone_id: Mapped[int | None] = mapped_column(ForeignKey("store_zones.id", ondelete="SET NULL"))
+    source: Mapped[str] = mapped_column(String(20))
+    confidence: Mapped[str] = mapped_column(String(10))
+    device_id: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+
+class LocationObservation(Base):
+    """A shopper's report: the item was found in a zone, or was not where we said.
+
+    aisle_text is what the shopper typed. It is only shown once several reports agree.
+    """
+    __tablename__ = "location_observations"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    store_id: Mapped[int] = mapped_column(ForeignKey("stores.id", ondelete="CASCADE"), index=True)
+    search_event_id: Mapped[str | None] = mapped_column(ForeignKey("search_events.id", ondelete="SET NULL"))
+    concept_id: Mapped[int | None] = mapped_column(ForeignKey("product_concepts.id", ondelete="SET NULL"), index=True)
+    item_normalized: Mapped[str] = mapped_column(String(200), index=True)
+    verdict: Mapped[str] = mapped_column(String(10))  # "found" or "not_here"
+    zone_id: Mapped[int | None] = mapped_column(ForeignKey("store_zones.id", ondelete="SET NULL"))
+    aisle_text: Mapped[str | None] = mapped_column(String(40))
+    note: Mapped[str | None] = mapped_column(String(280))
+    device_id: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    zone: Mapped[StoreZone | None] = relationship(lazy="joined")

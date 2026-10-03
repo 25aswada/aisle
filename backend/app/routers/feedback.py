@@ -1,0 +1,61 @@
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, Header, HTTPException
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from ..ai.intent import parse_intent
+from ..database import get_db
+from ..models import LocationObservation, SearchEvent, Store, StoreZone
+from ..observations import counts_by_zone, observations_for
+from ..resolver import find_concept
+from ..schemas import FeedbackRequest, FeedbackResponse, ReportCountsOut, StoreZoneOut
+
+router = APIRouter()
+Database = Annotated[Session, Depends(get_db)]
+DeviceID = Annotated[str | None, Header(alias="X-Aisle-Device", max_length=64)]
+
+
+@router.get("/stores/{store_id}/zones", response_model=list[StoreZoneOut])
+def store_zones(store_id: int, db: Database):
+    if db.get(Store, store_id) is None:
+        raise HTTPException(status_code=404, detail="Store not found")
+    return db.scalars(
+        select(StoreZone).where(StoreZone.store_id == store_id).order_by(StoreZone.sort_order, StoreZone.id)
+    ).all()
+
+
+@router.post("/feedback", response_model=FeedbackResponse, status_code=201)
+def submit_feedback(body: FeedbackRequest, db: Database, device_id: DeviceID = None):
+    store = db.get(Store, body.store_id)
+    if store is None:
+        raise HTTPException(status_code=404, detail="Store not found")
+    if body.zone_id is not None:
+        zone = db.get(StoreZone, body.zone_id)
+        if zone is None or zone.store_id != store.id:
+            raise HTTPException(status_code=422, detail="zone_id does not belong to this store")
+    event = db.get(SearchEvent, body.search_id) if body.search_id else None
+    intent = parse_intent(body.item)
+    concept = find_concept(db, intent)
+    observation = LocationObservation(
+        store_id=store.id,
+        search_event_id=event.id if event else None,
+        concept_id=concept.id if concept else (event.concept_id if event else None),
+        item_normalized=intent.normalized,
+        verdict=body.verdict,
+        zone_id=body.zone_id,
+        aisle_text=body.aisle if body.verdict == "found" else None,
+        note=body.note,
+        device_id=device_id,
+    )
+    db.add(observation)
+    db.commit()
+    counts = None
+    if body.zone_id is not None:
+        zone_counts = counts_by_zone(observations_for(db, store, concept, intent.normalized)).get(body.zone_id)
+        if zone_counts:
+            counts = ReportCountsOut(found=zone_counts.found, not_here=zone_counts.not_here)
+    return FeedbackResponse(
+        id=observation.id, store_id=store.id, verdict=observation.verdict,
+        zone_id=observation.zone_id, concept_id=observation.concept_id, reports=counts,
+    )
