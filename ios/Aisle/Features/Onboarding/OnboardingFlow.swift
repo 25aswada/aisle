@@ -1,13 +1,14 @@
 import SwiftUI
 
 enum OnboardingStep: Hashable {
-    case signUp, email, code, name, ask, honest, location
+    case signUp, email, code, name
 }
 
-/// First launch: welcome → optional sign-up → two tips → location → app.
+/// First launch: the animated walkthrough, then an optional account.
 struct OnboardingFlow: View {
     static let completedKey = "aisle.onboardingComplete"
 
+    let api: AisleAPI
     let location: LocationProviding
     let onFinish: () -> Void
 
@@ -15,7 +16,8 @@ struct OnboardingFlow: View {
     @State private var path: [OnboardingStep] = []
     @State private var signUp: SignUpModel
 
-    init(location: LocationProviding, auth: AuthService, onFinish: @escaping () -> Void) {
+    init(api: AisleAPI, location: LocationProviding, auth: AuthService, onFinish: @escaping () -> Void) {
+        self.api = api
         self.location = location
         self.onFinish = onFinish
         _signUp = State(initialValue: SignUpModel(auth: auth))
@@ -23,9 +25,12 @@ struct OnboardingFlow: View {
 
     var body: some View {
         NavigationStack(path: $path) {
-            WelcomeStep(
-                onStart: { path.append(.signUp) },
-                onSignIn: { path.append(.signUp) }
+            LiveOnboarding(
+                api: api,
+                location: location,
+                onCreateAccount: { path.append(.signUp) },
+                onSignIn: { path.append(.signUp) },
+                onFinish: onFinish
             )
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: OnboardingStep.self) { step in
@@ -47,7 +52,7 @@ struct OnboardingFlow: View {
                 onBack: back,
                 onEmail: { path.append(.email) },
                 onProviderSuccess: { path.append(.name) },
-                onSkip: { path.append(.ask) }
+                onSkip: onFinish
             )
         case .email:
             EmailStep(model: signUp, onBack: back) { path.append(.code) }
@@ -58,14 +63,8 @@ struct OnboardingFlow: View {
                 if let account = signUp.makeAccount() {
                     accounts.signIn(account)
                 }
-                path.append(.ask)
+                onFinish()
             }
-        case .ask:
-            AskTipStep(onSkip: onFinish) { path.append(.honest) }
-        case .honest:
-            HonestTipStep(onSkip: onFinish) { path.append(.location) }
-        case .location:
-            LocationStep(location: location, onFinish: onFinish)
         }
     }
 
@@ -189,22 +188,5 @@ struct OnboardingFieldStyle: ViewModifier {
             .background(Theme.surface, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).strokeBorder(Theme.accentRing, lineWidth: 1.5))
             .shadow(color: Theme.glow.opacity(0.10), radius: 14, y: 8)
-    }
-}
-
-struct PageDots: View {
-    let count: Int
-    let current: Int
-
-    var body: some View {
-        HStack(spacing: 6) {
-            ForEach(0..<count, id: \.self) { index in
-                Capsule()
-                    .fill(index == current ? AnyShapeStyle(Theme.accentInk) : AnyShapeStyle(Theme.hairline))
-                    .frame(width: index == current ? 22 : 8, height: 8)
-            }
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Page \(current + 1) of \(count)")
     }
 }

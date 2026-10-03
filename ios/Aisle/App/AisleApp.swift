@@ -42,7 +42,7 @@ struct AisleApp: App {
                 if onboardingComplete {
                     RootView(api: api, location: location, analytics: analytics, recents: recentSearches)
                 } else {
-                    OnboardingFlow(location: location, auth: auth) {
+                    OnboardingFlow(api: api, location: location, auth: auth) {
                         withAnimation(.easeInOut(duration: 0.3)) { onboardingComplete = true }
                     }
                 }
