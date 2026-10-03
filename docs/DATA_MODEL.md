@@ -35,6 +35,11 @@ SQLAlchemy models live in `backend/app/models.py`; Alembic migrations in
 Seeding fills these from the store format's layout template and backfills missing
 values on template zones. It never changes `verified` zones.
 
+## Analytics (Milestone 7)
+
+`analytics_events(id, name, device_id null, properties json, occurred_at, received_at)`.
+Names come from a fixed list; properties are small scalars with no user text.
+
 ### Seeding and imports
 
 `python -m backend.app.seed` loads demo stores, the catalog (categories, concepts,

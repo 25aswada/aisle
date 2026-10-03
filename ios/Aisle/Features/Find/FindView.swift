@@ -3,6 +3,7 @@ import SwiftUI
 struct FindView: View {
     let api: AisleAPI
     let location: LocationProviding
+    let analytics: AnalyticsTracking
 
     @Environment(StoreSelection.self) private var storeSelection
     @Environment(HealthMonitor.self) private var health
@@ -11,10 +12,11 @@ struct FindView: View {
     @State private var isCorrecting = false
     @FocusState private var searchFocused: Bool
 
-    init(api: AisleAPI, location: LocationProviding) {
+    init(api: AisleAPI, location: LocationProviding, analytics: AnalyticsTracking, recents: RecentSearches) {
         self.api = api
         self.location = location
-        _model = State(initialValue: FindModel(api: api))
+        self.analytics = analytics
+        _model = State(initialValue: FindModel(api: api, analytics: analytics, recents: recents))
     }
 
     var body: some View {
@@ -57,6 +59,7 @@ struct FindView: View {
                     selected: storeSelection.current
                 ) { store in
                     storeSelection.select(store)
+                    analytics.track(.storeSelected, ["nearby": .bool(store.distanceMiles != nil)])
                     isPickingStore = false
                 }
             }
@@ -74,15 +77,22 @@ extension FindView {
     private func resultSection(store: Store) -> some View {
         switch model.phase {
         case .idle:
-            Text("Search for an item to see where it usually is in \(store.name).")
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-        case .loading:
-            HStack(spacing: 10) {
-                ProgressView()
-                Text("Finding \(model.trimmedQuery)…").foregroundStyle(.secondary)
+            if model.recents.queries.isEmpty {
+                Text("Search for an item to see where it usually is in \(store.name).")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else {
+                RecentSearchList(recents: model.recents) { query in
+                    searchFocused = false
+                    Task { await model.searchRecent(query, storeID: store.id) }
+                }
             }
-            .accessibilityElement(children: .combine)
+        case .loading:
+            SearchResultCard(result: .placeholder, storeName: nil)
+                .redacted(reason: .placeholder)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("Finding \(model.trimmedQuery)")
+                .overlay(alignment: .topTrailing) { ProgressView().padding() }
         case .loaded(let result):
             SearchResultCard(result: result, storeName: store.name)
             FeedbackBar(
@@ -103,6 +113,36 @@ extension FindView {
                 Button("Try again") { runSearch(store: store) }
             }
         }
+    }
+}
+
+struct RecentSearchList: View {
+    let recents: RecentSearches
+    let onSelect: (String) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Recent searches")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                Button("Clear") { recents.clear() }
+                    .font(.subheadline)
+                    .accessibilityLabel("Clear recent searches")
+            }
+            ForEach(recents.queries, id: \.self) { query in
+                Button { onSelect(query) } label: {
+                    Label(query, systemImage: "clock.arrow.circlepath")
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .padding(.vertical, 6)
+                .accessibilityHint("Searches again")
+                .contextMenu { Button("Remove", systemImage: "trash", role: .destructive) { recents.remove(query) } }
+            }
+        }
+        .accessibilityIdentifier("recentSearches")
     }
 }
 

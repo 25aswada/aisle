@@ -3,13 +3,15 @@ import SwiftUI
 struct RootView: View {
     let api: AisleAPI
     let location: LocationProviding
+    let analytics: AnalyticsTracking
+    let recents: RecentSearches
 
     var body: some View {
         TabView {
-            FindView(api: api, location: location)
+            FindView(api: api, location: location, analytics: analytics, recents: recents)
                 .tabItem { Label("Find", systemImage: "magnifyingglass") }
 
-            ShoppingListView(api: api)
+            ShoppingListView(api: api, analytics: analytics)
                 .tabItem { Label("List", systemImage: "checklist") }
 
             YouView()

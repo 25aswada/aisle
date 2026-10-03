@@ -103,6 +103,8 @@ final class StubAPI: AisleAPI, @unchecked Sendable {
     var parseListResult: Result<[ParsedListItem], Error> = .success([])
     private(set) var parsedTexts: [String] = []
     var routeResult: Result<RoutePlan, Error>?
+    var eventsError: Error?
+    private(set) var sentEventBatches: [[AnalyticsEvent]] = []
     private(set) var routeRequests: [(String, [ListItem])] = []
     private(set) var nearbyCalls: [(Double, Double, Int?)] = []
     private(set) var searchQueries: [String] = []
@@ -136,6 +138,11 @@ final class StubAPI: AisleAPI, @unchecked Sendable {
     func parseList(text: String) async throws -> [ParsedListItem] {
         parsedTexts.append(text)
         return try parseListResult.get()
+    }
+
+    func sendEvents(_ events: [AnalyticsEvent]) async throws {
+        if let eventsError { throw eventsError }
+        sentEventBatches.append(events)
     }
 
     func planRoute(storeID: String, items: [ListItem]) async throws -> RoutePlan {
@@ -175,5 +182,24 @@ final class FakeLocationProvider: LocationProviding {
         guard authorization == .authorized else { throw LocationError.notAuthorized }
         guard let coordinate else { throw LocationError.unavailable }
         return coordinate
+    }
+}
+
+@MainActor
+final class RecordingAnalytics: AnalyticsTracking {
+    private(set) var events: [(AnalyticsEventName, [String: AnalyticsValue])] = []
+
+    var names: [AnalyticsEventName] { events.map(\.0) }
+
+    func track(_ name: AnalyticsEventName, _ properties: [String: AnalyticsValue]) {
+        events.append((name, properties))
+    }
+}
+
+extension UserDefaults {
+    static func fresh(_ name: String) -> UserDefaults {
+        let defaults = UserDefaults(suiteName: name)!
+        defaults.removePersistentDomain(forName: name)
+        return defaults
     }
 }

@@ -187,3 +187,16 @@ extension LocationSource {
         }
     }
 }
+
+extension ItemSearchResult {
+    /// Shape-only stand-in shown redacted while a search loads.
+    static let placeholder = ItemSearchResult(
+        searchID: nil, query: "", item: "Searching item", modifiers: [], quantity: nil, storeID: nil,
+        concept: nil, category: ItemCategory(slug: "", name: "Category name"),
+        location: ItemLocation(
+            department: "Department name", zoneID: nil, aisle: nil, section: nil,
+            neighbors: ["Nearby item", "Another item"]
+        ),
+        availability: .likely, confidence: .medium, source: .fallback, reports: nil
+    )
+}

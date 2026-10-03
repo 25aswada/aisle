@@ -1,12 +1,16 @@
 from math import asin, cos, radians, sin, sqrt
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+import logging
+
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from .database import get_db
 from .models import Retailer, Store
+from .routers import analytics as analytics_routes
 from .routers import feedback as feedback_routes
 from .routers import lists as list_routes
 from .routers import route as route_routes
@@ -18,6 +22,15 @@ app.include_router(search_routes.router)
 app.include_router(feedback_routes.router)
 app.include_router(list_routes.router)
 app.include_router(route_routes.router)
+app.include_router(analytics_routes.router)
+log = logging.getLogger(__name__)
+
+
+@app.exception_handler(Exception)
+async def unexpected_error(request: Request, exc: Exception):
+    """Unexpected failures return JSON the app can show, never a stack trace."""
+    log.exception("Unhandled error on %s %s", request.method, request.url.path)
+    return JSONResponse(status_code=500, content={"detail": "Something went wrong. Please try again."})
 Database = Annotated[Session, Depends(get_db)]
 
 

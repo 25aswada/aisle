@@ -173,3 +173,15 @@ class LocationObservation(Base):
     device_id: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     zone: Mapped[StoreZone | None] = relationship(lazy="joined")
+
+
+class AnalyticsEvent(Base):
+    """Basic product analytics from the app. Anonymous; no free text from users."""
+    __tablename__ = "analytics_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(40), index=True)
+    device_id: Mapped[str | None] = mapped_column(String(64))
+    properties: Mapped[dict] = mapped_column(JSON, default=dict)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)

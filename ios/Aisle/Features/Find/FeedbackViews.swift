@@ -13,7 +13,7 @@ struct FeedbackBar: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Was it there?")
                     .font(.subheadline.weight(.semibold))
-                HStack(spacing: 10) {
+                AdaptiveStack {
                     Button(action: onFound) {
                         Label("Found it", systemImage: "checkmark")
                             .frame(maxWidth: .infinity)

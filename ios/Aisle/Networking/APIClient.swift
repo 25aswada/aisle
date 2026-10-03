@@ -6,14 +6,32 @@ enum APIError: Error, Equatable, LocalizedError {
     case httpStatus(Int)
     case decoding(String)
     case transport(String)
+    case offline
+    case timeout
 
     var errorDescription: String? {
         switch self {
         case .invalidURL: return "The request URL was invalid."
         case .invalidResponse: return "The server sent an unexpected response."
+        case .httpStatus(let code) where code >= 500: return "Aisle is having trouble right now. Try again in a moment."
         case .httpStatus(let code): return "The server returned an error (\(code))."
-        case .decoding: return "The server response couldn't be read."
+        case .decoding: return "The server response couldn't be read. You may need to update the app."
         case .transport: return "Couldn't reach the Aisle server."
+        case .offline: return "You're offline. Check your connection and try again."
+        case .timeout: return "The request took too long. Try again."
+        }
+    }
+
+    /// A short, stable label for analytics. Never includes server text.
+    var kind: String {
+        switch self {
+        case .invalidURL: return "invalid_url"
+        case .invalidResponse: return "invalid_response"
+        case .httpStatus(let code): return "http_\(code)"
+        case .decoding: return "decoding"
+        case .transport: return "transport"
+        case .offline: return "offline"
+        case .timeout: return "timeout"
         }
     }
 }
@@ -30,6 +48,7 @@ protocol AisleAPI: Sendable {
     func sendFeedback(_ body: FeedbackBody) async throws -> FeedbackReceipt
     func parseList(text: String) async throws -> [ParsedListItem]
     func planRoute(storeID: String, items: [ListItem]) async throws -> RoutePlan
+    func sendEvents(_ events: [AnalyticsEvent]) async throws
 }
 
 struct APIClient: AisleAPI {
@@ -98,6 +117,10 @@ struct APIClient: AisleAPI {
         return try await post("route", body: body)
     }
 
+    func sendEvents(_ events: [AnalyticsEvent]) async throws {
+        let _: AnalyticsAccepted = try await post("events", body: AnalyticsBatchBody(events: events))
+    }
+
     // MARK: - Request building
 
     func makeURL(path: String, query: [URLQueryItem] = []) throws -> URL {
@@ -144,6 +167,11 @@ struct APIClient: AisleAPI {
             throw CancellationError()
         } catch let error as URLError where error.code == .cancelled {
             throw CancellationError()
+        } catch let error as URLError
+            where [.notConnectedToInternet, .networkConnectionLost, .dataNotAllowed].contains(error.code) {
+            throw APIError.offline
+        } catch let error as URLError where error.code == .timedOut {
+            throw APIError.timeout
         } catch {
             throw APIError.transport(error.localizedDescription)
         }

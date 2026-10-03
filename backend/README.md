@@ -1,7 +1,8 @@
-# Aisle backend — Milestones 0 and 1
+# Aisle backend
 
 Python 3.10+ / FastAPI / SQLAlchemy 2 / Alembic / Pydantic 2.
-This backend provides health and store discovery only.
+Store discovery, item search, feedback, list parsing, routing, and analytics.
+The full contract is in `docs/API.md`; tables are in `docs/DATA_MODEL.md`.
 
 ## Setup
 
@@ -71,6 +72,24 @@ connect to the configured production database and need neither Docker nor Postgr
 They cover health, nearby ordering/distances/limits, missing coordinates,
 search, details/404, invalid input, seed idempotence, and migration round trips.
 
+## Item search and AI
+
+Without `ANTHROPIC_API_KEY`, search uses the deterministic catalog fallback; nothing
+blocks. With a key, Claude (`AISLE_AI_MODEL`, default `claude-opus-5-5`) handles
+queries the catalog can't classify (`AISLE_AI_STRATEGY=catalog_first`) or answers first
+(`model_first`). Check provider quality with:
+
+```sh
+python -m backend.app.ai.evaluate             # model if a key is set
+python -m backend.app.ai.evaluate --fallback  # deterministic only
+```
+
+Import real product locations (the only source of aisle text):
+
+```sh
+python -m backend.app.import_locations locations.csv
+```
+
 ## Current limitations
 
 Seed data is representative demo data with approximate coordinates, not a verified
@@ -78,4 +97,5 @@ or live store directory. Provider place IDs and store numbers remain null.
 Distances are straight-line miles, not driving distances. Nearby discovery sorts
 all stores in memory and search has no pagination; this is appropriate for the
 small Milestone 1 directory and will need indexing/pagination for larger datasets.
-There is no item search, product data, or aisle mapping.
+Zone layouts and coordinates are per-format templates, not real floor plans. No real
+aisle data is seeded.

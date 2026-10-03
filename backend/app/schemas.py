@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -190,3 +191,36 @@ class RouteResponse(BaseModel):
     unplaced: list[UnplacedItem]
     # Rough walking distance in floor-plan units, for comparing orders.
     distance: float
+
+
+# Event names the app may send. Anything else is rejected so analytics stay a known set.
+ANALYTICS_EVENT_NAMES = (
+    "app_opened", "store_selected", "search_submitted", "search_failed", "recent_search_tapped",
+    "feedback_sent", "list_items_added", "shopping_started", "shopping_item_found",
+    "shopping_item_skipped", "shopping_finished",
+)
+AnalyticsValue = str | int | float | bool | None
+
+
+class AnalyticsEventIn(BaseModel):
+    name: Literal[ANALYTICS_EVENT_NAMES]  # type: ignore[valid-type]
+    occurred_at: datetime | None = None
+    properties: dict[str, AnalyticsValue] = Field(default_factory=dict, max_length=12)
+
+    @field_validator("properties")
+    @classmethod
+    def small_values(cls, value: dict) -> dict:
+        for key, item in value.items():
+            if len(key) > 40:
+                raise ValueError("property names are at most 40 characters")
+            if isinstance(item, str) and len(item) > 80:
+                raise ValueError("string properties are at most 80 characters")
+        return value
+
+
+class AnalyticsBatch(BaseModel):
+    events: list[AnalyticsEventIn] = Field(min_length=1, max_length=50)
+
+
+class AnalyticsAccepted(BaseModel):
+    accepted: int

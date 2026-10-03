@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ShoppingListView: View {
     let api: AisleAPI
+    let analytics: AnalyticsTracking
 
     @Environment(ShoppingListStore.self) private var list
     @Environment(StoreSelection.self) private var storeSelection
@@ -10,9 +11,10 @@ struct ShoppingListView: View {
     @State private var showNeedsStore = false
     @FocusState private var composerFocused: Bool
 
-    init(api: AisleAPI) {
+    init(api: AisleAPI, analytics: AnalyticsTracking) {
         self.api = api
-        _composer = State(initialValue: ListComposerModel(api: api))
+        self.analytics = analytics
+        _composer = State(initialValue: ListComposerModel(api: api, analytics: analytics))
     }
 
     var body: some View {
@@ -98,7 +100,7 @@ extension ShoppingListView {
             showNeedsStore = true
             return
         }
-        trip = ShoppingTripModel(api: api, store: store, list: list)
+        trip = ShoppingTripModel(api: api, store: store, list: list, analytics: analytics)
     }
 }
 

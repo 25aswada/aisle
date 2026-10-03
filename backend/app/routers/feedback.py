@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -17,9 +17,11 @@ DeviceID = Annotated[str | None, Header(alias="X-Aisle-Device", max_length=64)]
 
 
 @router.get("/stores/{store_id}/zones", response_model=list[StoreZoneOut])
-def store_zones(store_id: int, db: Database):
+def store_zones(store_id: int, db: Database, response: Response):
     if db.get(Store, store_id) is None:
         raise HTTPException(status_code=404, detail="Store not found")
+    # Zones change rarely; let the app's URL cache reuse them for a few minutes.
+    response.headers["Cache-Control"] = "public, max-age=300"
     return db.scalars(
         select(StoreZone).where(StoreZone.store_id == store_id).order_by(StoreZone.sort_order, StoreZone.id)
     ).all()

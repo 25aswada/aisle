@@ -29,9 +29,20 @@ final class FindModel {
     private(set) var feedback: FeedbackState = .none
 
     @ObservationIgnored private let api: AisleAPI
+    @ObservationIgnored private let analytics: AnalyticsTracking
+    @ObservationIgnored let recents: RecentSearches
+    @ObservationIgnored private let cache: SearchCache
 
-    init(api: AisleAPI) {
+    init(
+        api: AisleAPI,
+        analytics: AnalyticsTracking? = nil,
+        recents: RecentSearches? = nil,
+        cache: SearchCache? = nil
+    ) {
         self.api = api
+        self.analytics = analytics ?? NoopAnalytics()
+        self.recents = recents ?? RecentSearches(defaults: UserDefaults(suiteName: "aisle.ephemeral") ?? .standard)
+        self.cache = cache ?? SearchCache()
     }
 
     var trimmedQuery: String {
@@ -44,19 +55,47 @@ final class FindModel {
             phase = .idle
             return
         }
-        phase = .loading
         feedback = .none
+        if let cached = cache.result(query: text, storeID: storeID) {
+            phase = .loaded(cached)
+            recents.record(text)
+            trackResult(cached, storeID: storeID, cached: true)
+            return
+        }
+        phase = .loading
         do {
             let result = try await api.searchItem(query: text, storeID: storeID)
             try Task.checkCancellation()
+            cache.store(result, query: text, storeID: storeID)
+            recents.record(text)
             phase = .loaded(result)
+            trackResult(result, storeID: storeID, cached: false)
         } catch is CancellationError {
             // A newer search replaced this one.
         } catch APIError.httpStatus(404) {
             phase = .failed("This store is no longer available. Choose another store.")
+            analytics.track(.searchFailed, ["error": "store_not_found"])
         } catch {
             phase = .failed((error as? LocalizedError)?.errorDescription ?? "Something went wrong.")
+            analytics.track(.searchFailed, ["error": .string((error as? APIError)?.kind ?? "unknown")])
         }
+    }
+
+    /// Runs a recent search again.
+    func searchRecent(_ query: String, storeID: String?) async {
+        self.query = query
+        analytics.track(.recentSearchTapped)
+        await search(storeID: storeID)
+    }
+
+    private func trackResult(_ result: ItemSearchResult, storeID: String?, cached: Bool) {
+        analytics.track(.searchSubmitted, [
+            "source": .string(result.source.rawValue),
+            "confidence": .string(result.confidence.rawValue),
+            "has_store": .bool(storeID != nil),
+            "has_aisle": .bool(result.location.aisle != nil),
+            "cached": .bool(cached),
+        ])
     }
 
     func clear() {
@@ -110,6 +149,12 @@ final class FindModel {
         do {
             _ = try await api.sendFeedback(body)
             feedback = onSuccess()
+            // The next search for this item should show the updated report counts.
+            cache.invalidate(item: result.item, storeID: storeID)
+            analytics.track(.feedbackSent, [
+                "verdict": .string(verdict.rawValue),
+                "correction": .bool(verdict == .found && zoneID != result.location.zoneID),
+            ])
         } catch is CancellationError {
             feedback = previous
         } catch {

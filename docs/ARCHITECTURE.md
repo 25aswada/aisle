@@ -35,6 +35,20 @@ Aisle helps people find items inside physical stores. These documents describe t
 - Eval cases live in `backend/app/ai/eval_cases.json`. Run
   `python -m backend.app.ai.evaluate` (model if a key is set) or `--fallback`.
 
+## Milestones 3–7
+
+- **3: resolver.** Categories, product concepts, store zones, and product locations in the
+  database. Source priority: verified/retailer rows > shopper consensus > verified zone >
+  model > catalog fallback. Database rows always beat the model.
+- **4: feedback.** Found it / Not here / corrections become `location_observations`;
+  every search is a `search_event`.
+- **5: lists.** `POST /lists/parse` splits text into items; the list lives on the device.
+- **6: routing.** Zones have floor-plan coordinates; `POST /route` orders stops from
+  entrance to checkout; the app's Start Shopping mode walks them with Found / Skip.
+- **7: polish.** Loading skeletons, offline/timeout messages, a JSON 500 handler, light/dark
+  themes with an accent that adapts, Dynamic Type layouts, recent searches, result and AI
+  caching, and opt-out anonymous analytics (`POST /events`).
+
 See `API.md` for routes and `DATA_MODEL.md` for tables.
 
 ## Monorepo
@@ -75,7 +89,7 @@ The API process reads `DATABASE_URL` for its Postgres connection.
 
 Nearby results include `distance_miles`. Search results and store detail set `distance_miles` to null, because those requests carry no origin.
 
-Stores are loaded into Postgres outside the HTTP API. This milestone has no write routes.
+Stores are loaded into Postgres outside the HTTP API (seed script).
 
 Nearby ordering uses the haversine formula on `stores.latitude` and `stores.longitude`, with an Earth radius of 3958.8 miles. Postgres extensions such as PostGIS are not required.
 
@@ -94,4 +108,4 @@ Pytest discovery is the default: files named `test_*.py` or `*_test.py` under `b
 
 ## Access
 
-The four routes are public reads. This milestone has no accounts, tokens, or sessions. The SwiftUI app is the client, so browser CORS is unused.
+All routes are public. Aisle has no accounts, tokens, or sessions; the app sends an anonymous install id in `X-Aisle-Device`. The SwiftUI app is the client, so browser CORS is unused.

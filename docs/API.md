@@ -199,3 +199,36 @@ its checkout: nearest neighbor, then 2-opt, using Manhattan distance on zone `x`
 are approximate template positions. Zones without coordinates come last. `unplaced`
 reasons: `unknown` (no department) or `not_carried` (the store format usually doesn't
 stock it).
+
+## Analytics and errors (Milestone 7)
+
+### POST /events
+
+Basic, anonymous product analytics. Status 202.
+
+```json
+{"events": [
+  {"name": "search_submitted", "occurred_at": "2026-10-03T19:00:00Z",
+   "properties": {"source": "fallback", "confidence": "medium", "has_store": true, "cached": false}}
+]}
+```
+
+- 1–50 events per batch. `occurred_at` is optional and clamped to the server clock.
+- `name` must be one of: `app_opened`, `store_selected`, `search_submitted`, `search_failed`,
+  `recent_search_tapped`, `feedback_sent`, `list_items_added`, `shopping_started`,
+  `shopping_item_found`, `shopping_item_skipped`, `shopping_finished`.
+- `properties`: at most 12 scalar values (string ≤ 80 chars, number, bool, null). The app
+  never sends queries or item text. Users can turn analytics off in the You tab.
+
+### Errors
+
+- Validation errors: 422 with FastAPI's standard body.
+- Not found: 404 `{"detail": "..."}`.
+- Unexpected failures: 500 `{"detail": "Something went wrong. Please try again."}`. No stack traces.
+
+### Caching
+
+- `GET /stores/{id}/zones` sends `Cache-Control: public, max-age=300`.
+- The server caches AI answers in memory for 6 hours per (store format, retailer, item).
+- The app caches search results for 5 minutes per store and query, and drops an item's
+  entry after feedback for it.

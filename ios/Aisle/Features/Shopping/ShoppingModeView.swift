@@ -184,7 +184,7 @@ struct TripItemRow: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
-            HStack(spacing: 10) {
+            AdaptiveStack {
                 Button(action: onFound) {
                     Label("Found", systemImage: "checkmark")
                         .frame(maxWidth: .infinity)

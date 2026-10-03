@@ -26,11 +26,14 @@ final class ShoppingTripModel {
     @ObservationIgnored private let store: Store
     @ObservationIgnored private let list: ShoppingListStore
     @ObservationIgnored private var items: [ListItem] = []
+    @ObservationIgnored private let analytics: AnalyticsTracking
+    @ObservationIgnored private var reportedFinish = false
 
-    init(api: AisleAPI, store: Store, list: ShoppingListStore) {
+    init(api: AisleAPI, store: Store, list: ShoppingListStore, analytics: AnalyticsTracking? = nil) {
         self.api = api
         self.store = store
         self.list = list
+        self.analytics = analytics ?? NoopAnalytics()
     }
 
     var storeName: String { store.name }
@@ -94,6 +97,7 @@ final class ShoppingTripModel {
             unplaced = plan.unplaced
             isUnrouted = false
             phase = .shopping
+            trackStart()
         } catch is CancellationError {
             return
         } catch {
@@ -114,6 +118,21 @@ final class ShoppingTripModel {
         unplaced = []
         isUnrouted = true
         phase = .shopping
+        trackStart()
+    }
+
+    private func trackStart() {
+        analytics.track(.shoppingStarted, [
+            "items": .int(totalCount), "stops": .int(stops.count), "unrouted": .bool(isUnrouted),
+        ])
+    }
+
+    private func trackFinishIfNeeded() {
+        guard isFinished, !reportedFinish else { return }
+        reportedFinish = true
+        analytics.track(.shoppingFinished, [
+            "found": .int(foundCount), "skipped": .int(skippedCount), "total": .int(totalCount),
+        ])
     }
 
     func markFound(_ id: String) {
@@ -122,10 +141,14 @@ final class ShoppingTripModel {
             list.setDone(uuid, true)
         }
         reportFound(id)
+        analytics.track(.shoppingItemFound)
+        trackFinishIfNeeded()
     }
 
     func skip(_ id: String) {
         status[id] = .skipped
+        analytics.track(.shoppingItemSkipped)
+        trackFinishIfNeeded()
     }
 
     func undo(_ id: String) {
@@ -139,6 +162,7 @@ final class ShoppingTripModel {
         for (id, value) in status where value == .skipped {
             status[id] = .pending
         }
+        reportedFinish = false
     }
 
     /// Finding an item at a routed stop confirms that zone for other shoppers.

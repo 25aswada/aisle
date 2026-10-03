@@ -126,9 +126,11 @@ def get_location_model() -> LocationModel | None:
     model: LocationModel | None = None
     if settings.anthropic_api_key:
         try:
-            model = AnthropicLocationModel(
+            from .cache import CachedLocationModel
+
+            model = CachedLocationModel(AnthropicLocationModel(
                 settings.anthropic_api_key, settings.aisle_ai_model, settings.aisle_ai_timeout_seconds
-            )
+            ))
         except ImportError:
             log.warning("anthropic package not installed; using deterministic fallback")
     _cached_model = (key, model)

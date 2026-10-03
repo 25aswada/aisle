@@ -84,9 +84,11 @@ final class ListComposerModel {
     private(set) var notice: String?
 
     @ObservationIgnored private let api: AisleAPI
+    @ObservationIgnored private let analytics: AnalyticsTracking
 
-    init(api: AisleAPI) {
+    init(api: AisleAPI, analytics: AnalyticsTracking? = nil) {
         self.api = api
+        self.analytics = analytics ?? NoopAnalytics()
     }
 
     func add(to store: ShoppingListStore) async {
@@ -99,6 +101,7 @@ final class ListComposerModel {
             let parsed = try await api.parseList(text: text)
             store.add(parsed)
             draft = ""
+            analytics.track(.listItemsAdded, ["count": .int(parsed.count), "offline": false])
         } catch is CancellationError {
             return
         } catch {
@@ -106,6 +109,7 @@ final class ListComposerModel {
             store.add(parsed)
             draft = ""
             notice = "Added offline. Check that multi-word items weren't split."
+            analytics.track(.listItemsAdded, ["count": .int(parsed.count), "offline": true])
         }
     }
 }
