@@ -39,6 +39,7 @@ struct ShoppingListView: View {
                             systemImage: "checklist",
                             message: "Add items above."
                         )
+                        .listRowBackground(Rectangle().fill(Theme.accentWash))
                     }
                 } else {
                     Section {

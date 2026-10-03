@@ -6,11 +6,7 @@ struct AisleWordmark: View {
 
     var body: some View {
         HStack(spacing: size * 0.28) {
-            Image("AisleLogo")
-                .resizable()
-                .renderingMode(.template)
-                .scaledToFit()
-                .frame(width: size, height: size)
+            AisleMark(size: size)
             Text("aisle")
                 .font(Theme.font(size * 0.8, .bold))
                 .tracking(-0.6)
@@ -22,28 +18,24 @@ struct AisleWordmark: View {
     }
 }
 
-/// A retailer's logo on a white tile, or `placeholder` while loading, offline, or
-/// when there's no logo. White in both modes because logos are drawn for light backgrounds.
+/// A retailer's logo drawn bare (no tile), or `placeholder` while loading, offline, or
+/// when there's no logo. Asks logo.dev for the variant made for the current light or
+/// dark background, so no backing tile is needed.
 struct RetailerLogo<Placeholder: View>: View {
     let url: URL?
     var size: CGFloat = 44
-    var cornerRadius: CGFloat = 12
     @ViewBuilder var placeholder: () -> Placeholder
 
+    @Environment(\.colorScheme) private var colorScheme
+
     var body: some View {
-        if let url {
+        if let url = themed(url) {
             AsyncImage(url: url) { phase in
                 if let image = phase.image {
                     image
                         .resizable()
                         .scaledToFit()
-                        .padding(size * 0.14)
                         .frame(width: size, height: size)
-                        .background(Color.white, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                                .strokeBorder(Theme.hairline, lineWidth: 1)
-                        )
                 } else {
                     placeholder()
                 }
@@ -53,17 +45,28 @@ struct RetailerLogo<Placeholder: View>: View {
             placeholder()
         }
     }
+
+    /// Sets logo.dev's `theme` parameter to match the colour scheme.
+    private func themed(_ url: URL?) -> URL? {
+        guard let url, var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url }
+        var items = (components.queryItems ?? []).filter { $0.name != "theme" }
+        items.append(URLQueryItem(name: "theme", value: colorScheme == .dark ? "dark" : "light"))
+        components.queryItems = items
+        return components.url ?? url
+    }
 }
 
-/// Small "Aisle" avatar: a soft gradient ring.
-struct AisleAvatar: View {
-    var size: CGFloat = 22
+/// The Aisle logo on its own. Always drawn bare, never on a tile or circle.
+struct AisleMark: View {
+    var size: CGFloat = 16
 
     var body: some View {
-        Circle()
-            .fill(AngularGradient(colors: Theme.accentColors + [Theme.accentColors[0]], center: .center))
-            .overlay(Circle().inset(by: size * 0.24).fill(Color.white.opacity(0.6)))
+        Image("AisleLogo")
+            .resizable()
+            .renderingMode(.template)
+            .scaledToFit()
             .frame(width: size, height: size)
+            .foregroundStyle(Theme.ink)
             .accessibilityHidden(true)
     }
 }
@@ -93,8 +96,8 @@ struct AisleReply<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                AisleAvatar()
+            HStack(spacing: 6) {
+                AisleMark(size: 16)
                 Text("Aisle")
                     .font(Theme.font(13, .semibold, relativeTo: .footnote))
                     .foregroundStyle(Theme.ink)
@@ -264,7 +267,7 @@ extension ButtonStyle where Self == AccentPillButtonStyle {
     static var aisleAccentPill: AccentPillButtonStyle { AccentPillButtonStyle() }
 }
 
-/// Geist version of `ContentUnavailableView`: icon tile, title, message, optional buttons.
+/// Geist version of `ContentUnavailableView`: gradient icon, title, message, optional buttons.
 struct AisleEmptyState<Actions: View>: View {
     let title: String
     let systemImage: String
@@ -274,10 +277,8 @@ struct AisleEmptyState<Actions: View>: View {
     var body: some View {
         VStack(spacing: 12) {
             Image(systemName: systemImage)
-                .font(.system(size: 24, weight: .semibold))
-                .foregroundStyle(Theme.ink)
-                .frame(width: 56, height: 56)
-                .background(Theme.tile, in: RoundedRectangle(cornerRadius: Theme.Radius.tile, style: .continuous))
+                .font(.system(size: 34, weight: .semibold))
+                .foregroundStyle(Theme.accentInk)
                 .accessibilityHidden(true)
             VStack(spacing: 4) {
                 Text(title)
@@ -303,7 +304,7 @@ extension AisleEmptyState where Actions == EmptyView {
     }
 }
 
-/// A short confirmation line with a gradient check, e.g. after "Found it".
+/// A short confirmation line with a gradient check mark, e.g. after "Found it".
 struct AisleNote: View {
     let text: String
     var systemImage = "checkmark"
@@ -311,10 +312,8 @@ struct AisleNote: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: systemImage)
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(Theme.onAccent)
-                .frame(width: 26, height: 26)
-                .background(Theme.accent, in: Circle())
+                .font(.system(size: 17, weight: .bold))
+                .foregroundStyle(Theme.accentInk)
                 .accessibilityHidden(true)
             Text(text)
                 .font(.aisleSubheadline)

@@ -11,7 +11,8 @@ def logo_url(domain: str | None) -> str | None:
 
     Uses the publishable (pk_) key, which logo.dev documents as safe in client code.
     `fallback=404` makes unknown domains fail so the app shows its letter tile
-    instead of a generated monogram.
+    instead of a generated monogram. The app adds `theme=light|dark` to match its
+    appearance, so the URL here leaves it out.
     """
     key = get_settings().logo_dev_publishable_key
     if not domain or not key:

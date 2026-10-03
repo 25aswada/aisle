@@ -66,11 +66,15 @@ enum Theme {
         )
     }
 
-    /// Background of icon and picture tiles.
-    static var tile: LinearGradient {
+    /// Soft gradient for whole cards and highlighted rows (recents, empty states, the
+    /// selected store). Pale pastels in light mode, a deep tint of the same hues in dark,
+    /// so `ink` text reads on both. Icons never get their own tile; the card carries the colour.
+    static var accentWash: LinearGradient {
         LinearGradient(
-            // Dark stops sit well above `surface` (0x1F1C22) so tiles read inside cards.
-            colors: [Color(light: 0xFBEAF3, dark: 0x45344B), Color(light: 0xFFF3DC, dark: 0x4A3F31)],
+            colors: [
+                Color(light: 0xF6EEFD, dark: 0x2A2236), Color(light: 0xFDEDF3, dark: 0x31222C),
+                Color(light: 0xFFF2E7, dark: 0x302621), Color(light: 0xFFF8E3, dark: 0x2E2A20),
+            ],
             startPoint: .topLeading, endPoint: .bottomTrailing
         )
     }

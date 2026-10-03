@@ -178,9 +178,8 @@ struct RecentSearchList: View {
                         HStack(spacing: 14) {
                             Image(systemName: "clock.arrow.circlepath")
                                 .font(.system(size: 16, weight: .semibold))
-                                .foregroundStyle(Theme.ink)
-                                .frame(width: 40, height: 40)
-                                .background(Theme.tile, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                .foregroundStyle(Theme.secondaryInk)
+                                .frame(width: 22)
                             Text(query)
                                 .font(.aisleBody)
                                 .foregroundStyle(Theme.ink)
@@ -197,11 +196,12 @@ struct RecentSearchList: View {
                     .accessibilityHint("Searches again")
                     .contextMenu { Button("Remove", systemImage: "trash", role: .destructive) { recents.remove(query) } }
                     if index < recents.queries.count - 1 {
-                        Divider().overlay(Theme.hairline).padding(.leading, 68)
+                        Divider().overlay(Theme.ink.opacity(0.08)).padding(.leading, 50)
                     }
                 }
             }
-            .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
+            .padding(.vertical, 4)
+            .background(Theme.accentWash, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
         }
         .accessibilityIdentifier("recentSearches")
     }
@@ -259,12 +259,11 @@ private struct CurrentStoreCard: View {
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: 12) {
-                RetailerLogo(url: store?.retailerLogoURL, size: 46, cornerRadius: 13) {
+                RetailerLogo(url: store?.retailerLogoURL, size: 46) {
                     Image(systemName: "storefront")
-                        .font(.system(size: 19, weight: .semibold))
+                        .font(.system(size: 24, weight: .semibold))
                         .foregroundStyle(Theme.ink)
                         .frame(width: 46, height: 46)
-                        .background(Theme.tile, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
                 }
                 .accessibilityHidden(true)
 
