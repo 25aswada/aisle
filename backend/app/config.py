@@ -9,7 +9,11 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://aisle:aisle_local@localhost:5432/aisle"
     # AI provider. Without a key the deterministic catalog fallback answers every query.
     anthropic_api_key: str | None = None
-    aisle_ai_model: str = "claude-opus-5-5"
+    openai_api_key: str | None = None
+    # auto: Anthropic when its key is set, otherwise OpenAI when its key is set.
+    aisle_ai_provider: Literal["auto", "anthropic", "openai"] = "auto"
+    # Unset means the provider's default model.
+    aisle_ai_model: str | None = None
     # catalog_first: the model only handles queries the catalog can't classify.
     # model_first: the model answers first and the catalog is the fallback.
     aisle_ai_strategy: Literal["catalog_first", "model_first"] = "catalog_first"

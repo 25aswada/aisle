@@ -172,4 +172,48 @@ def test_no_api_key_means_no_model(monkeypatch):
     from backend.app.config import get_settings
 
     monkeypatch.setattr(get_settings(), "anthropic_api_key", None)
+    monkeypatch.setattr(get_settings(), "openai_api_key", None)
     assert get_location_model() is None
+
+
+@pytest.mark.parametrize("provider, anthropic_key, openai_key, expected", [
+    ("auto", "a-key", "o-key", "anthropic"),
+    ("auto", None, "o-key", "openai"),
+    ("openai", "a-key", "o-key", "openai"),
+    ("anthropic", None, "o-key", None),
+])
+def test_provider_selection(monkeypatch, provider, anthropic_key, openai_key, expected):
+    from backend.app.ai import providers
+    from backend.app.config import get_settings
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "aisle_ai_provider", provider)
+    monkeypatch.setattr(settings, "anthropic_api_key", anthropic_key)
+    monkeypatch.setattr(settings, "openai_api_key", openai_key)
+    choice = providers._choose_provider(settings)
+    assert (choice[0] if choice else None) == expected
+
+
+def test_openai_model_parses_structured_output():
+    from types import SimpleNamespace
+
+    from backend.app.ai.providers import OpenAILocationModel
+
+    content = json.dumps({
+        "item": "maple syrup", "category": "syrups-sweeteners", "department": "Breakfast/Pantry",
+        "neighbors": ["pancake mix"], "carried": "likely", "confidence": "medium",
+    })
+    sent = {}
+
+    def create(**kwargs):
+        sent.update(kwargs)
+        message = SimpleNamespace(content=content, refusal=None)
+        return SimpleNamespace(choices=[SimpleNamespace(finish_reason="stop", message=message)])
+
+    model = OpenAILocationModel("test-key", "gpt-6-luna", timeout=1)
+    model._client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    guess = model.locate(parse_intent("maple syrup"), "Trader Joe's", LAYOUTS["trader_joes"])
+    assert sent["model"] == "gpt-6-luna"
+    assert sent["response_format"]["json_schema"]["strict"] is True
+    assert guess.department == "Breakfast/Pantry"
+    assert guess.source == "model"

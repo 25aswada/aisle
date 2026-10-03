@@ -77,7 +77,8 @@ search, details/404, invalid input, seed idempotence, and migration round trips.
 Without `ANTHROPIC_API_KEY`, search uses the deterministic catalog fallback; nothing
 blocks. With a key, Claude (`AISLE_AI_MODEL`, default `claude-opus-5-5`) handles
 queries the catalog can't classify (`AISLE_AI_STRATEGY=catalog_first`) or answers first
-(`model_first`). Check provider quality with:
+(`model_first`). To use OpenAI instead, set `OPENAI_API_KEY` (and `AISLE_AI_PROVIDER=openai`
+if an Anthropic key is also set); the model defaults to `gpt-6-luna`. Check provider quality with:
 
 ```sh
 python -m backend.app.ai.evaluate             # model if a key is set

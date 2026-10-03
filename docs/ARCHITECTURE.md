@@ -27,7 +27,9 @@ Aisle helps people find items inside physical stores. These documents describe t
   layout template (Trader Joe's, warehouse club, supercenter, pharmacy, home improvement,
   generic grocery).
 - AI provider (`backend/app/ai/providers.py`): Claude via the Anthropic SDK when
-  `ANTHROPIC_API_KEY` is set. The model must pick a department from the layout's list
+  `ANTHROPIC_API_KEY` is set, or an OpenAI model (default `gpt-6-luna`) when
+  `OPENAI_API_KEY` is set. `AISLE_AI_PROVIDER` (`auto`, `anthropic`, `openai`) picks one when
+  both keys are present; `auto` prefers Anthropic. The model must pick a department from the layout's list
   through a JSON schema, so it cannot invent aisle numbers. Its output is validated again
   server-side. With the default `AISLE_AI_STRATEGY=catalog_first` the model only handles
   queries the catalog can't classify. Without a key, or on any provider error, the
