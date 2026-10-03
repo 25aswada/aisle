@@ -28,6 +28,7 @@ struct AisleApp: App {
         _storeSelection = State(initialValue: StoreSelection())
         _shoppingList = State(initialValue: ShoppingListStore())
         _recentSearches = State(initialValue: RecentSearches())
+        Theme.applyAppearance()
     }
 
     var body: some Scene {

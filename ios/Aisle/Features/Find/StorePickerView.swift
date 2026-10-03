@@ -21,6 +21,8 @@ struct StorePickerView: View {
                     nearbySection
                 }
             }
+            .aislePage()
+            .tint(Theme.ink)
             .navigationTitle("Choose a store")
             .navigationBarTitleDisplayMode(.inline)
             .searchable(
@@ -119,34 +121,46 @@ struct StoreRow: View {
     let isSelected: Bool
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline) {
+        HStack(spacing: 14) {
+            Text(String(store.name.prefix(1)).uppercased())
+                .font(Theme.font(18, .bold, relativeTo: .headline))
+                .foregroundStyle(Theme.ink)
+                .frame(width: 44, height: 44)
+                .background(Theme.tile, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
-                Text(store.name).font(.body)
+                Text(store.name)
+                    .font(.aisleHeadline)
+                    .foregroundStyle(Theme.ink)
                 Text(store.address)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .font(.aisleFootnote)
+                    .foregroundStyle(Theme.secondaryInk)
                     .lineLimit(2)
                 if let retailer = store.retailerName, retailer != store.name {
                     Text(retailer)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(.aisleCaption)
+                        .foregroundStyle(Theme.secondaryInk)
                 }
             }
             Spacer(minLength: 8)
-            VStack(alignment: .trailing, spacing: 4) {
+            VStack(alignment: .trailing, spacing: 6) {
                 if let miles = store.distanceMiles {
                     Text(Self.format(miles: miles))
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .font(Theme.font(14, .semibold, relativeTo: .subheadline))
+                        .foregroundStyle(Theme.ink)
                         .monospacedDigit()
                 }
                 if isSelected {
                     Image(systemName: "checkmark")
-                        .foregroundStyle(.tint)
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(Theme.onAccent)
+                        .frame(width: 24, height: 24)
+                        .background(Theme.accent, in: Circle())
                         .accessibilityLabel("Selected")
                 }
             }
         }
+        .padding(.vertical, 4)
         .contentShape(Rectangle())
     }
 

@@ -17,5 +17,7 @@ struct RootView: View {
             YouView()
                 .tabItem { Label("You", systemImage: "person.crop.circle") }
         }
+        .tint(Theme.ink)
+        .font(.aisleBody)
     }
 }

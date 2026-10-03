@@ -52,17 +52,16 @@ struct ShoppingListView: View {
                     }
                 }
             }
+            .aislePage()
+            .tint(Theme.ink)
             .safeAreaInset(edge: .bottom) {
                 if !list.remaining.isEmpty {
                     Button(action: startShopping) {
                         Label("Start Shopping", systemImage: "cart")
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
-                    .padding()
-                    .background(.bar)
+                    .buttonStyle(.aisleAccent)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 10)
                     .accessibilityIdentifier("startShoppingButton")
                 }
             }
@@ -126,7 +125,7 @@ private struct ListComposer: View {
                 ProgressView()
             } else {
                 Button("Add", action: onAdd)
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.aisleAccentPill)
                     .disabled(composer.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     .accessibilityIdentifier("listAddButton")
             }
@@ -149,7 +148,7 @@ struct ListItemRow: View {
             } label: {
                 Image(systemName: item.isDone ? "checkmark.circle.fill" : "circle")
                     .font(.title3)
-                    .foregroundStyle(item.isDone ? Color.green : Color.secondary)
+                    .foregroundStyle(item.isDone ? AnyShapeStyle(Theme.accentInk) : AnyShapeStyle(Theme.secondaryInk))
             }
             .buttonStyle(.plain)
             .accessibilityLabel(item.isDone ? "Mark \(item.text) as not done" : "Mark \(item.text) as done")
@@ -164,8 +163,8 @@ struct ListItemRow: View {
                     .accessibilityLabel("Item name")
                 if let detail {
                     Text(detail)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(.aisleCaption)
+                        .foregroundStyle(Theme.secondaryInk)
                 }
             }
         }

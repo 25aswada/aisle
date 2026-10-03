@@ -6,9 +6,16 @@ struct SearchResultCard: View {
     let storeName: String?
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ConfidenceHero(result: result)
+            details
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("searchResultCard")
+    }
+
+    private var details: some View {
         VStack(alignment: .leading, spacing: 14) {
-            header
-            locationBlock
             if !result.location.neighbors.isEmpty {
                 neighborsBlock
             }
@@ -17,81 +24,91 @@ struct SearchResultCard: View {
             }
             if result.availability == .unlikely {
                 Label("This store may not carry this item.", systemImage: "exclamationmark.triangle")
-                    .font(.subheadline)
-                    .foregroundStyle(.orange)
+                    .font(.aisleSubheadline)
+                    .foregroundStyle(Theme.warning)
             }
-            Divider()
-            HStack {
-                ConfidenceBadge(confidence: result.confidence)
-                Spacer(minLength: 8)
-                Text(result.source.label)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.trailing)
-            }
+            Label(result.source.label, systemImage: result.source.symbol)
+                .font(.aisleFootnote)
+                .foregroundStyle(Theme.secondaryInk)
         }
-        .padding()
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 14))
-        .accessibilityElement(children: .contain)
-        .accessibilityIdentifier("searchResultCard")
-    }
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(result.item.capitalized)
-                .font(.title3.weight(.semibold))
-            if let category = result.category {
-                Text(category.name)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var locationBlock: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Check")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .textCase(.uppercase)
-            if let department = result.location.department {
-                Text(department)
-                    .font(.title2.weight(.bold))
-                    .accessibilityIdentifier("resultDepartment")
-            } else {
-                Text("Not sure where this is")
-                    .font(.title3.weight(.semibold))
-                Text("Try a more common name, or ask a store employee.")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            if let aisle = result.location.aisle {
-                Label(
-                    [aisle, result.location.section].compactMap { $0 }.joined(separator: " · "),
-                    systemImage: "signpost.right"
-                )
-                .font(.headline)
-                .accessibilityIdentifier("resultAisle")
-            } else if result.location.department != nil {
-                Text("No aisle number on file for this store.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-        }
+        .aisleCard()
     }
 
     private var neighborsBlock: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             Text("Look near")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .textCase(.uppercase)
+                .font(.aisleCaption)
+                .foregroundStyle(Theme.secondaryInk)
             FlowTags(tags: result.location.neighbors)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Look near \(result.location.neighbors.joined(separator: ", "))")
+    }
+}
+
+/// The big "where is it" card. Its style shows how sure Aisle is:
+/// gradient = confident, soft grey = likely, dashed outline = best guess.
+struct ConfidenceHero: View {
+    let result: ItemSearchResult
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            ConfidenceBadge(confidence: result.confidence)
+            VStack(alignment: .leading, spacing: 4) {
+                if let department = result.location.department {
+                    if let aisle = result.aisleDisplay {
+                        Text(aisle)
+                            .font(Theme.font(40, .bold, relativeTo: .largeTitle))
+                            .tracking(-1)
+                            .accessibilityIdentifier("resultAisle")
+                        Text(department)
+                            .font(.aisleHeadline)
+                            .accessibilityIdentifier("resultDepartment")
+                    } else {
+                        Text(department)
+                            .font(Theme.font(32, .bold, relativeTo: .largeTitle))
+                            .tracking(-0.8)
+                            .accessibilityIdentifier("resultDepartment")
+                        Text("No aisle number on file for this store.")
+                            .font(.aisleFootnote)
+                            .opacity(0.75)
+                    }
+                } else {
+                    Text("Not sure where this is")
+                        .font(.aisleTitle)
+                    Text("Try a more common name, or ask a store employee.")
+                        .font(.aisleSubheadline)
+                        .opacity(0.75)
+                }
+                Text(itemLine)
+                    .font(.aisleFootnote)
+                    .opacity(0.75)
+                    .padding(.top, 2)
+            }
+        }
+        .foregroundStyle(result.confidence == .high ? Theme.onAccent : Theme.ink)
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background { background }
+    }
+
+    private var itemLine: String {
+        [result.item.capitalized, result.category?.name].compactMap { $0 }.joined(separator: " · ")
+    }
+
+    @ViewBuilder
+    private var background: some View {
+        let shape = RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+        switch result.confidence {
+        case .high:
+            shape.fill(Theme.accent)
+                .shadow(color: Theme.glow.opacity(0.14), radius: 13, y: 10)
+        case .medium:
+            shape.fill(Theme.section)
+        case .low:
+            shape.fill(Theme.surface)
+                .overlay(shape.strokeBorder(Theme.secondaryInk.opacity(0.55), style: StrokeStyle(lineWidth: 1.5, dash: [5, 4])))
+        }
     }
 }
 
@@ -107,8 +124,8 @@ struct ReportSummary: View {
                 Label("\(reports.notHere) didn't", systemImage: "person.fill.xmark")
             }
         }
-        .font(.caption)
-        .foregroundStyle(.secondary)
+        .font(.aisleFootnote)
+        .foregroundStyle(Theme.secondaryInk)
         .accessibilityElement(children: .combine)
     }
 }
@@ -117,14 +134,14 @@ struct ConfidenceBadge: View {
     let confidence: Confidence
 
     var body: some View {
-        Label(confidence.label, systemImage: confidence.symbol)
-            .font(.caption.weight(.semibold))
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .foregroundStyle(confidence.tint)
-            .background(confidence.tint.opacity(0.15), in: Capsule())
-            .accessibilityLabel("\(confidence.label)")
-            .accessibilityIdentifier("confidenceBadge")
+        HStack(spacing: 8) {
+            ConfidenceBars(level: confidence.level)
+            Text(confidence.shortLabel)
+                .font(Theme.font(13, .semibold, relativeTo: .footnote))
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(confidence.label)
+        .accessibilityIdentifier("confidenceBadge")
     }
 }
 
@@ -142,10 +159,11 @@ struct FlowTags: View {
     private var chips: some View {
         ForEach(tags, id: \.self) { tag in
             Text(tag)
-                .font(.subheadline)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
-                .background(.fill.tertiary, in: Capsule())
+                .font(.aisleSubheadline)
+                .foregroundStyle(Theme.ink)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Theme.accentSoft, in: Capsule())
         }
     }
 }
@@ -159,19 +177,29 @@ extension Confidence {
         }
     }
 
+    /// Short label shown next to the bars.
+    var shortLabel: String {
+        switch self {
+        case .high: return "Confident"
+        case .medium: return "Likely here"
+        case .low: return "Best guess"
+        }
+    }
+
+    /// Number of filled bars, 1–3.
+    var level: Int {
+        switch self {
+        case .high: return 3
+        case .medium: return 2
+        case .low: return 1
+        }
+    }
+
     var symbol: String {
         switch self {
         case .high: return "checkmark.seal.fill"
         case .medium: return "circle.lefthalf.filled"
         case .low: return "questionmark.circle"
-        }
-    }
-
-    var tint: Color {
-        switch self {
-        case .high: return .green
-        case .medium: return .orange
-        case .low: return .secondary
         }
     }
 }
@@ -186,9 +214,81 @@ extension LocationSource {
         case .fallback: return "Typical layout for this kind of store"
         }
     }
+
+    var symbol: String {
+        switch self {
+        case .database: return "building.2"
+        case .observations: return "person.2"
+        case .storeLayout: return "map"
+        case .model: return "text.magnifyingglass"
+        case .fallback: return "square.grid.2x2"
+        }
+    }
 }
 
 extension ItemSearchResult {
+    /// "Aisle 7 · Left side" when the store has an aisle on file. Never inferred.
+    var aisleDisplay: String? {
+        guard let raw = location.aisle?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
+            return nil
+        }
+        let aisle = raw.first?.isNumber == true ? "Aisle \(raw)" : raw
+        if let section = location.section, !section.isEmpty {
+            return "\(aisle) · \(section)"
+        }
+        return aisle
+    }
+
+    /// A short, friendly answer composed on the device from the structured fields.
+    /// It only restates what the result contains; it never adds an aisle or a place.
+    var replyText: AttributedString {
+        var reply = AttributedString()
+        func plain(_ text: String) { reply.append(AttributedString(text)) }
+        func strong(_ text: String) {
+            var run = AttributedString(text)
+            run.font = Theme.font(16, .semibold, relativeTo: .callout)
+            reply.append(run)
+        }
+
+        let name = item.prefix(1).uppercased() + item.dropFirst()
+        guard let department = location.department else {
+            plain("I'm not sure where ")
+            strong(item)
+            plain(" is in this store yet. Try a more common name, or ask someone who works here.")
+            return reply
+        }
+
+        switch confidence {
+        case .high:
+            if let aisle = aisleDisplay {
+                plain("Found it! \(name) is in ")
+                strong(aisle)
+                plain(", in \(department).")
+            } else {
+                plain("\(name) is in ")
+                strong(department)
+                plain(".")
+            }
+        case .medium:
+            plain("\(name) is most likely in ")
+            strong(aisleDisplay.map { "\($0), \(department)" } ?? department)
+            plain(".")
+        case .low:
+            plain("I'm not certain yet, but stores like this usually keep \(item) in ")
+            strong(department)
+            plain(".")
+        }
+
+        let near = location.neighbors.prefix(2).map { $0.lowercased() }
+        if !near.isEmpty {
+            plain(" Look near \(near.joined(separator: " and ")).")
+        }
+        if availability == .unlikely {
+            plain(" Heads up: this store may not carry it.")
+        }
+        return reply
+    }
+
     /// Shape-only stand-in shown redacted while a search loads.
     static let placeholder = ItemSearchResult(
         searchID: nil, query: "", item: "Searching item", modifiers: [], quantity: nil, storeID: nil,

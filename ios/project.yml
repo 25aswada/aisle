@@ -20,7 +20,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.aisle.Aisle
         TARGETED_DEVICE_FAMILY: "1"
-        # Green accent with a lighter variant for dark mode (Assets.xcassets).
+        # Near-black ink accent with a light variant for dark mode (Assets.xcassets).
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         # No app icon until the TestFlight milestone.
         ASSETCATALOG_COMPILER_APPICON_NAME: ""
@@ -32,6 +32,7 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
+        UIAppFonts: [Geist-Regular.ttf, Geist-Medium.ttf, Geist-SemiBold.ttf, Geist-Bold.ttf]
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         AisleAPIBaseURL: $(AISLE_API_BASE_URL)
         NSLocationWhenInUseUsageDescription: >-

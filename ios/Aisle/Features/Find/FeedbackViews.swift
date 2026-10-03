@@ -10,49 +10,47 @@ struct FeedbackBar: View {
     var body: some View {
         switch state {
         case .none, .failed:
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 10) {
                 Text("Was it there?")
-                    .font(.subheadline.weight(.semibold))
+                    .font(.aisleHeadline)
+                    .foregroundStyle(Theme.ink)
                 AdaptiveStack {
-                    Button(action: onFound) {
-                        Label("Found it", systemImage: "checkmark")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .accessibilityIdentifier("foundItButton")
-
                     Button(action: onNotHere) {
                         Label("Not here", systemImage: "xmark")
-                            .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(.aisleSoft)
                     .accessibilityIdentifier("notHereButton")
+
+                    Button(action: onFound) {
+                        Label("Found it", systemImage: "checkmark")
+                    }
+                    .buttonStyle(.aisleAccent)
+                    .accessibilityIdentifier("foundItButton")
                 }
-                .controlSize(.large)
                 if case .failed(let message) = state {
                     Text(message)
-                        .font(.footnote)
-                        .foregroundStyle(.red)
+                        .font(.aisleFootnote)
+                        .foregroundStyle(Theme.warning)
                 }
             }
         case .sending:
             HStack(spacing: 8) {
                 ProgressView()
-                Text("Sending…").foregroundStyle(.secondary)
+                Text("Sending…")
+                    .font(.aisleSubheadline)
+                    .foregroundStyle(Theme.secondaryInk)
             }
         case .confirmed:
-            Label("Thanks! That helps other shoppers.", systemImage: "hand.thumbsup.fill")
-                .foregroundStyle(.green)
+            AisleNote(text: "Thanks! That helps other shoppers.")
         case .reportedMissing:
-            VStack(alignment: .leading, spacing: 8) {
-                Label("Thanks for letting us know.", systemImage: "info.circle")
-                    .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 10) {
+                AisleNote(text: "Thanks for letting us know.", systemImage: "info")
                 Button("Tell us where you found it", action: onCorrect)
+                    .buttonStyle(.aisleSoft)
                     .accessibilityIdentifier("correctLocationButton")
             }
         case .corrected(let zone):
-            Label("Thanks! We noted it's in \(zone).", systemImage: "hand.thumbsup.fill")
-                .foregroundStyle(.green)
+            AisleNote(text: "Thanks! We noted it's in \(zone).")
         }
     }
 }
@@ -109,6 +107,8 @@ struct CorrectionSheet: View {
                     Text("Only enter what's posted in the store. Aisle text appears once other shoppers agree.")
                 }
             }
+            .aislePage()
+            .tint(Theme.ink)
             .navigationTitle("Correct location")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

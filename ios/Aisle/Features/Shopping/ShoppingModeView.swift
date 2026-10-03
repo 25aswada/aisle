@@ -8,6 +8,8 @@ struct ShoppingModeView: View {
     var body: some View {
         NavigationStack {
             content
+                .aislePage()
+                .tint(Theme.ink)
                 .navigationTitle(model.storeName)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
@@ -131,17 +133,17 @@ private struct TripProgress: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("\(model.foundCount) of \(model.totalCount) found")
-                    .font(.headline)
+                    .font(.aisleHeadline)
                     .monospacedDigit()
                 Spacer()
                 if model.skippedCount > 0 {
                     Text("\(model.skippedCount) skipped")
-                        .font(.subheadline)
+                        .font(.aisleSubheadline)
                         .foregroundStyle(.secondary)
                 }
             }
             ProgressView(value: model.progress)
-                .tint(.green)
+                .tint(Color(hex: 0xDC6F9C))
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(model.foundCount) of \(model.totalCount) found, \(model.skippedCount) skipped")
@@ -158,9 +160,9 @@ private struct StopHeader: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(unrouted ? "No route available" : "Stop \(number) of \(count)")
-                .font(.caption)
+                .font(.aisleCaption)
             Text(stop.department)
-                .font(.title2.weight(.bold))
+                .font(.aisleTitle)
                 .foregroundStyle(.primary)
                 .textCase(nil)
         }
@@ -178,10 +180,10 @@ struct TripItemRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(text.capitalized)
-                .font(.headline)
+                .font(.aisleHeadline)
             if let detail {
                 Text(detail)
-                    .font(.subheadline)
+                    .font(.aisleSubheadline)
                     .foregroundStyle(.secondary)
             }
             AdaptiveStack {
@@ -189,18 +191,16 @@ struct TripItemRow: View {
                     Label("Found", systemImage: "checkmark")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.green)
+                .buttonStyle(.aisleAccent)
                 .accessibilityLabel("Found \(text)")
 
                 Button(action: onSkip) {
                     Label("Skip", systemImage: "forward")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.aisleSoft)
                 .accessibilityLabel("Skip \(text)")
             }
-            .controlSize(.large)
         }
         .padding(.vertical, 4)
     }
@@ -215,25 +215,24 @@ private struct TripSummary: View {
             VStack(spacing: 16) {
                 Image(systemName: model.skippedCount == 0 ? "checkmark.circle.fill" : "flag.checkered")
                     .font(.system(size: 56))
-                    .foregroundStyle(.green)
+                    .foregroundStyle(Theme.accentInk)
                     .accessibilityHidden(true)
                 Text(model.skippedCount == 0 ? "All done!" : "Trip complete")
-                    .font(.title.weight(.bold))
+                    .font(.aisleLargeTitle)
                 Text("Found \(model.foundCount) of \(model.totalCount) items.")
                     .foregroundStyle(.secondary)
                 if !model.skippedTexts.isEmpty {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Skipped").font(.headline)
+                        Text("Skipped").font(.aisleHeadline)
                         ForEach(model.skippedTexts, id: \.self) { Text("• \($0)") }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding()
-                    .background(.background.secondary, in: RoundedRectangle(cornerRadius: 12))
+                    .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
                     Button("Look for skipped items again") { withAnimation { model.retrySkipped() } }
                 }
                 Button("Done", action: onDone)
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
+                    .buttonStyle(.aisleAccent)
             }
             .padding()
         }

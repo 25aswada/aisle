@@ -42,6 +42,8 @@ struct YouView: View {
                     Text("Locations are estimates unless marked as store data or confirmed by shoppers. Aisle never guesses aisle numbers.")
                 }
             }
+            .aislePage()
+            .tint(Theme.ink)
             .navigationTitle("You")
         }
     }
