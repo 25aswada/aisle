@@ -7,6 +7,16 @@ from .ai.intent import normalize
 from .database import get_engine
 from .models import Category, ProductAlias, ProductConcept, Retailer, Store, StoreZone
 
+# Retailer website domains, used for logos.
+RETAILER_DOMAINS = {
+    "Costco": "costco.com",
+    "Trader Joe's": "traderjoes.com",
+    "Walmart": "walmart.com",
+    "Target": "target.com",
+    "CVS": "cvs.com",
+    "Home Depot": "homedepot.com",
+}
+
 # Leave provider IDs and store numbers null rather than inventing identifiers.
 STORES = (
     ("Costco", "Costco King of Prussia", "201 Allendale Rd, King of Prussia, PA 19406", 40.0925, -75.3855),
@@ -25,6 +35,8 @@ def seed_stores(session: Session) -> None:
             retailer = Retailer(name=retailer_name)
             session.add(retailer)
             session.flush()
+        if retailer.domain is None:  # Backfill only; never overwrite an edited domain.
+            retailer.domain = RETAILER_DOMAINS.get(retailer_name)
         existing = session.scalar(select(Store).where(
             Store.retailer_id == retailer.id, Store.name == name, Store.address == address
         ))

@@ -9,16 +9,19 @@ struct Store: Codable, Equatable, Hashable, Identifiable {
     /// Only present on results from `/stores/nearby`.
     let distanceMiles: Double?
     let retailerName: String?
+    /// Retailer logo image (logo.dev); nil when the server has no key or domain.
+    let retailerLogoURL: URL?
 
     enum CodingKeys: String, CodingKey {
         case id, name, address, latitude, longitude
         case distanceMiles = "distance_miles"
         case retailerName = "retailer_name"
+        case retailerLogoURL = "retailer_logo_url"
     }
 
     init(
         id: String, name: String, address: String, latitude: Double, longitude: Double,
-        distanceMiles: Double?, retailerName: String?
+        distanceMiles: Double?, retailerName: String?, retailerLogoURL: URL? = nil
     ) {
         self.id = id
         self.name = name
@@ -27,6 +30,7 @@ struct Store: Codable, Equatable, Hashable, Identifiable {
         self.longitude = longitude
         self.distanceMiles = distanceMiles
         self.retailerName = retailerName
+        self.retailerLogoURL = retailerLogoURL
     }
 
     init(from decoder: Decoder) throws {
@@ -39,6 +43,8 @@ struct Store: Codable, Equatable, Hashable, Identifiable {
         longitude = try container.decode(Double.self, forKey: .longitude)
         distanceMiles = try container.decodeIfPresent(Double.self, forKey: .distanceMiles)
         retailerName = try container.decodeIfPresent(String.self, forKey: .retailerName)
+        // A bad logo URL shouldn't make the whole store undecodable.
+        retailerLogoURL = (try? container.decodeIfPresent(URL.self, forKey: .retailerLogoURL)) ?? nil
     }
 }
 

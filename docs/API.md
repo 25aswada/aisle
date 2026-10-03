@@ -27,8 +27,9 @@ and sends it back as an integer `store_id`.
 | address | string | single line |
 | latitude, longitude | number | WGS84 |
 | external_place_id, store_number | string or null | null in demo data |
-| retailer | object | `{id, name}` |
+| retailer | object | `{id, name, domain}`; `domain` (e.g. `target.com`) may be null |
 | retailer_name | string | flat copy of `retailer.name`; the iOS client reads this |
+| retailer_logo_url | string \| null | logo.dev image for `retailer.domain`; null without a domain or `LOGO_DEV_PUBLISHABLE_KEY`. Unknown domains return 404 (no generated monogram), so clients fall back to their own tile. |
 | distance_miles | number | only on `/stores/nearby` |
 
 - `GET /health` → `{"status":"ok"}`. No database access.

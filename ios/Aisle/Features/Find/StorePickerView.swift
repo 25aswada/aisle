@@ -122,12 +122,14 @@ struct StoreRow: View {
 
     var body: some View {
         HStack(spacing: 14) {
-            Text(String(store.name.prefix(1)).uppercased())
-                .font(Theme.font(18, .bold, relativeTo: .headline))
-                .foregroundStyle(Theme.ink)
-                .frame(width: 44, height: 44)
-                .background(Theme.tile, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .accessibilityHidden(true)
+            RetailerLogo(url: store.retailerLogoURL) {
+                Text(String(store.name.prefix(1)).uppercased())
+                    .font(Theme.font(18, .bold, relativeTo: .headline))
+                    .foregroundStyle(Theme.ink)
+                    .frame(width: 44, height: 44)
+                    .background(Theme.tile, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            }
+            .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(store.name)
                     .font(.aisleHeadline)

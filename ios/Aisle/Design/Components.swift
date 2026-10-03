@@ -22,6 +22,39 @@ struct AisleWordmark: View {
     }
 }
 
+/// A retailer's logo on a white tile, or `placeholder` while loading, offline, or
+/// when there's no logo. White in both modes because logos are drawn for light backgrounds.
+struct RetailerLogo<Placeholder: View>: View {
+    let url: URL?
+    var size: CGFloat = 44
+    var cornerRadius: CGFloat = 12
+    @ViewBuilder var placeholder: () -> Placeholder
+
+    var body: some View {
+        if let url {
+            AsyncImage(url: url) { phase in
+                if let image = phase.image {
+                    image
+                        .resizable()
+                        .scaledToFit()
+                        .padding(size * 0.14)
+                        .frame(width: size, height: size)
+                        .background(Color.white, in: RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                                .strokeBorder(Theme.hairline, lineWidth: 1)
+                        )
+                } else {
+                    placeholder()
+                }
+            }
+            .frame(width: size, height: size)
+        } else {
+            placeholder()
+        }
+    }
+}
+
 /// Small "Aisle" avatar: a soft gradient ring.
 struct AisleAvatar: View {
     var size: CGFloat = 22

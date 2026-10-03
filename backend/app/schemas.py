@@ -8,6 +8,7 @@ class RetailerResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     name: str
+    domain: str | None = None
 
 
 class StoreResponse(BaseModel):
@@ -23,6 +24,8 @@ class StoreResponse(BaseModel):
     retailer: RetailerResponse
     # Flat copy of retailer.name; the iOS client reads this field.
     retailer_name: str
+    # logo.dev image for the retailer, or null without a domain or key.
+    retailer_logo_url: str | None = None
 
 
 class NearbyStoreResponse(StoreResponse):

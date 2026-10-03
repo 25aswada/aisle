@@ -53,8 +53,9 @@ Interactive API documentation: <http://127.0.0.1:8000/docs>.
 - `GET /stores/{store_id}` → one store, or 404 if absent.
 
 Stores expose `id`, `retailer_id`, `name`, `address`, `latitude`, `longitude`,
-nullable `external_place_id` and `store_number`, plus nested `retailer` with
-`id` and `name`. Latitude must be between -90 and 90, longitude between -180
+nullable `external_place_id` and `store_number`, `retailer_logo_url` (a logo.dev image
+when `LOGO_DEV_PUBLISHABLE_KEY` is set, else null), plus nested `retailer` with
+`id`, `name` and nullable `domain`. Latitude must be between -90 and 90, longitude between -180
 and 180, and limit between 1 and 100 (default 20). Invalid parameters return 422.
 
 ## Tests

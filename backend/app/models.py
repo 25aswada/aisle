@@ -20,6 +20,8 @@ class Retailer(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(200), unique=True)
+    # Website domain ("target.com"), used to look up the retailer's logo.
+    domain: Mapped[str | None] = mapped_column(String(253))
 
 
 class Store(Base):
@@ -47,6 +49,12 @@ class Store(Base):
     @property
     def retailer_name(self) -> str:
         return self.retailer.name
+
+    @property
+    def retailer_logo_url(self) -> str | None:
+        from .logos import logo_url  # Local import: logos reads settings, models stays config-free.
+
+        return logo_url(self.retailer.domain)
 
 
 class Category(Base):

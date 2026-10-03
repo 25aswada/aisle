@@ -64,6 +64,7 @@ struct FindView: View {
             .navigationTitle("Find")
             .toolbar(.hidden, for: .navigationBar)
             .onChange(of: storeSelection.current?.id) { model.clear() }
+            .task { await refreshSelectedStore() }
             .sheet(isPresented: $isPickingStore) {
                 StorePickerView(
                     model: StorePickerModel(api: api, location: location),
@@ -88,6 +89,13 @@ struct FindView: View {
 }
 
 extension FindView {
+    /// Picks up server-side changes (like a new logo) to the saved store. Silent on failure.
+    private func refreshSelectedStore() async {
+        guard let id = storeSelection.current?.id,
+              let fresh = try? await api.store(id: id) else { return }
+        storeSelection.refresh(fresh)
+    }
+
     private func runSearch(store: Store) {
         searchFocused = false
         Task { await model.search(storeID: store.id) }
@@ -251,11 +259,14 @@ private struct CurrentStoreCard: View {
     var body: some View {
         Button(action: onTap) {
             HStack(spacing: 12) {
-                Image(systemName: "storefront")
-                    .font(.system(size: 19, weight: .semibold))
-                    .foregroundStyle(Theme.ink)
-                    .frame(width: 46, height: 46)
-                    .background(Theme.tile, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                RetailerLogo(url: store?.retailerLogoURL, size: 46, cornerRadius: 13) {
+                    Image(systemName: "storefront")
+                        .font(.system(size: 19, weight: .semibold))
+                        .foregroundStyle(Theme.ink)
+                        .frame(width: 46, height: 46)
+                        .background(Theme.tile, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
+                }
+                .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(store == nil ? "No store selected" : "You're shopping at")

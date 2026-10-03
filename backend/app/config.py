@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     # model_first: the model answers first and the catalog is the fallback.
     aisle_ai_strategy: Literal["catalog_first", "model_first"] = "catalog_first"
     aisle_ai_timeout_seconds: float = 8.0
+    # logo.dev publishable key (pk_...). Without it stores show letter tiles.
+    logo_dev_publishable_key: str | None = None
     model_config = SettingsConfigDict(
         env_file=Path(__file__).resolve().parents[1] / ".env", extra="ignore"
     )

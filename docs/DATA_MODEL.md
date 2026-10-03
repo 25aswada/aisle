@@ -5,7 +5,8 @@ SQLAlchemy models live in `backend/app/models.py`; Alembic migrations in
 
 ## retailers, stores (Milestone 1)
 
-- `retailers(id, name unique)`
+- `retailers(id, name unique, domain null)`: `domain` is the website (`target.com`), used
+  for logos (migration 0006). Seeding fills it for known retailers but never overwrites it.
 - `stores(id, retailer_id → retailers, name, address, latitude, longitude,
   external_place_id null, store_number null)`
 
