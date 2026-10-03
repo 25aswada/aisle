@@ -7,6 +7,7 @@ struct ItemSearchResult: Codable, Equatable, Hashable {
     let modifiers: [String]
     let quantity: String?
     let storeID: Int?
+    let concept: ItemConcept?
     let category: ItemCategory?
     let location: ItemLocation
     let availability: Availability
@@ -14,9 +15,14 @@ struct ItemSearchResult: Codable, Equatable, Hashable {
     let source: LocationSource
 
     enum CodingKeys: String, CodingKey {
-        case query, item, modifiers, quantity, category, location, availability, confidence, source
+        case query, item, modifiers, quantity, concept, category, location, availability, confidence, source
         case storeID = "store_id"
     }
+}
+
+struct ItemConcept: Codable, Equatable, Hashable {
+    let id: Int
+    let name: String
 }
 
 struct ItemCategory: Codable, Equatable, Hashable {
@@ -26,10 +32,17 @@ struct ItemCategory: Codable, Equatable, Hashable {
 
 struct ItemLocation: Codable, Equatable, Hashable {
     let department: String?
+    /// The store zone the department maps to, when the store has zones.
+    let zoneID: Int?
     /// Only present when a database row supports it. Never inferred.
     let aisle: String?
     let section: String?
     let neighbors: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case department, aisle, section, neighbors
+        case zoneID = "zone_id"
+    }
 }
 
 enum Confidence: String, Codable, Equatable, Hashable {

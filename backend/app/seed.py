@@ -2,8 +2,10 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from .ai.catalog import CATEGORIES, layout_for_retailer
+from .ai.intent import normalize
 from .database import get_engine
-from .models import Retailer, Store
+from .models import Category, ProductAlias, ProductConcept, Retailer, Store, StoreZone
 
 # Leave provider IDs and store numbers null rather than inventing identifiers.
 STORES = (
@@ -34,8 +36,50 @@ def seed_stores(session: Session) -> None:
     session.commit()
 
 
+def seed_catalog(session: Session) -> None:
+    """Load catalog categories and concepts. Existing rows are left as they are."""
+    categories = {c.slug: c for c in session.scalars(select(Category))}
+    known_aliases = set(session.scalars(select(ProductAlias.alias)))
+    known_names = set(session.scalars(select(ProductConcept.name)))
+    for definition in CATEGORIES:
+        category = categories.get(definition.slug)
+        if category is None:
+            category = Category(slug=definition.slug, name=definition.name, neighbors=list(definition.neighbors))
+            session.add(category)
+            categories[definition.slug] = category
+        for term in definition.terms:
+            alias = normalize(term)
+            if alias in known_aliases or term in known_names:
+                continue
+            known_aliases.add(alias)
+            known_names.add(term)
+            session.add(ProductConcept(name=term, category=category, aliases=[ProductAlias(alias=alias)]))
+    session.commit()
+
+
+def seed_store_zones(session: Session) -> None:
+    """Give each store without zones the generic layout for its store format.
+
+    Template zones carry department names only. No aisle labels are generated.
+    """
+    categories = {c.slug: c for c in session.scalars(select(Category))}
+    stores_with_zones = set(session.scalars(select(StoreZone.store_id).distinct()))
+    for store in session.scalars(select(Store)):
+        if store.id in stores_with_zones:
+            continue
+        layout = layout_for_retailer(store.retailer_name)
+        for order, zone in enumerate(layout.zones):
+            session.add(StoreZone(
+                store_id=store.id, name=zone.name, source="template", sort_order=order,
+                categories=[categories[slug] for slug in zone.categories if slug in categories],
+            ))
+    session.commit()
+
+
 def seed_all(session: Session) -> None:
     seed_stores(session)
+    seed_catalog(session)
+    seed_store_zones(session)
 
 
 if __name__ == "__main__":

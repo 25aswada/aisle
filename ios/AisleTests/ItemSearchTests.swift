@@ -114,3 +114,26 @@ extension URLRequest {
         return data
     }
 }
+
+final class DatabaseLocationDecodingTests: XCTestCase {
+    func testDecodesDatabaseLocationWithAisle() throws {
+        let json = """
+        {"query":"maple syrup","item":"maple syrup","modifiers":[],"quantity":null,"store_id":2,
+        "concept":{"id":118,"name":"maple syrup"},
+        "category":{"slug":"syrups-sweeteners","name":"Syrups & Sweeteners"},
+        "location":{"department":"Breakfast/Pantry","zone_id":17,"aisle":"Aisle 4","section":"Top shelf",
+        "neighbors":["pancake mix"]},"availability":"likely","confidence":"high","source":"database"}
+        """
+        let result = try JSONDecoder().decode(ItemSearchResult.self, from: Data(json.utf8))
+        XCTAssertEqual(result.source, .database)
+        XCTAssertEqual(result.location.aisle, "Aisle 4")
+        XCTAssertEqual(result.location.zoneID, 17)
+        XCTAssertEqual(result.concept?.id, 118)
+        XCTAssertEqual(result.confidence, .high)
+    }
+
+    func testFixtureHasConceptAndZone() {
+        XCTAssertEqual(Fixtures.mapleSyrup.concept?.name, "maple syrup")
+        XCTAssertEqual(Fixtures.mapleSyrup.location.zoneID, 17)
+    }
+}

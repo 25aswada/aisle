@@ -66,8 +66,9 @@ final class StubURLProtocol: URLProtocol {
 enum Fixtures {
     static let mapleSyrupJSON = """
     {"query":"maple syrup","item":"maple syrup","modifiers":[],"quantity":null,"store_id":2,
+    "concept":{"id":118,"name":"maple syrup"},
     "category":{"slug":"syrups-sweeteners","name":"Syrups & Sweeteners"},
-    "location":{"department":"Breakfast/Pantry","aisle":null,"section":null,
+    "location":{"department":"Breakfast/Pantry","zone_id":17,"aisle":null,"section":null,
     "neighbors":["pancake mix","honey","sweeteners"]},
     "availability":"likely","confidence":"medium","source":"fallback"}
     """

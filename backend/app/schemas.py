@@ -56,8 +56,14 @@ class CategoryOut(BaseModel):
     name: str
 
 
+class ConceptOut(BaseModel):
+    id: int
+    name: str
+
+
 class LocationOut(BaseModel):
     department: str | None
+    zone_id: int | None = None
     # Exact aisle/section text appears only when a database row supports it.
     aisle: str | None = None
     section: str | None = None
@@ -70,6 +76,7 @@ class SearchResponse(BaseModel):
     modifiers: list[str]
     quantity: str | None
     store_id: int | None
+    concept: ConceptOut | None
     category: CategoryOut | None
     location: LocationOut
     availability: Availability

@@ -55,9 +55,11 @@ Response (Trader Joe's, no database row for this item):
   "modifiers": [],
   "quantity": null,
   "store_id": 2,
+  "concept": {"id": 118, "name": "maple syrup"},
   "category": {"slug": "syrups-sweeteners", "name": "Syrups & Sweeteners"},
   "location": {
     "department": "Breakfast/Pantry",
+    "zone_id": 17,
     "aisle": null,
     "section": null,
     "neighbors": ["pancake mix", "honey", "sweeteners"]
@@ -73,12 +75,17 @@ Response (Trader Joe's, no database row for this item):
 | item | the item phrase parsed from the query |
 | modifiers | words like `organic` that don't change the item |
 | quantity | e.g. `"2 gallons"`, or null |
+| concept | matched product concept, or null |
 | category | null when the item isn't recognized |
 | location.department | department or zone name, or null when unknown |
+| location.zone_id | the store zone id, when the store has zones |
 | location.aisle, location.section | **only** set when a database row supports it; never inferred |
 | location.neighbors | up to 4 items usually shelved nearby |
 | availability | `likely`, `unlikely` (this store format usually doesn't stock it), `unknown` |
 | confidence | `high`, `medium`, `low` |
 | source | `database`, `observations`, `store_layout`, `model`, `fallback` |
+
+Source priority is described in `DATA_MODEL.md`. A database row for the item at this
+store always beats the model.
 
 The response is structured data only. The app composes all display text.
