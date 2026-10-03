@@ -56,12 +56,13 @@ struct ConfidenceHero: View {
             ConfidenceBadge(confidence: result.confidence)
             VStack(alignment: .leading, spacing: 4) {
                 if let department = result.location.department {
-                    if let aisle = result.aisleDisplay {
+                    if let aisle = result.aisleLabel {
+                        // Section rides with the department so the big line never wraps mid-phrase.
                         Text(aisle)
                             .font(Theme.font(40, .bold, relativeTo: .largeTitle))
                             .tracking(-1)
                             .accessibilityIdentifier("resultAisle")
-                        Text(department)
+                        Text([result.sectionLabel, department].compactMap { $0 }.joined(separator: " · "))
                             .font(.aisleHeadline)
                             .accessibilityIdentifier("resultDepartment")
                     } else {
@@ -93,7 +94,10 @@ struct ConfidenceHero: View {
     }
 
     private var itemLine: String {
-        [result.item.capitalized, result.category?.name].compactMap { $0 }.joined(separator: " · ")
+        let item = result.item.capitalized
+        guard let category = result.category?.name,
+              category.caseInsensitiveCompare(item) != .orderedSame else { return item }
+        return "\(item) · \(category)"
     }
 
     @ViewBuilder
@@ -145,26 +149,78 @@ struct ConfidenceBadge: View {
     }
 }
 
-/// Simple wrapping row of tags.
+/// Tags that wrap onto as many rows as they need.
 struct FlowTags: View {
     let tags: [String]
 
     var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 6) { chips }
-            VStack(alignment: .leading, spacing: 6) { chips }
+        FlowLayout(spacing: 6) {
+            ForEach(tags, id: \.self) { tag in
+                Text(tag)
+                    .font(.aisleSubheadline)
+                    // The soft gradient is light in both modes, so the text stays dark.
+                    .foregroundStyle(Theme.onAccent)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Theme.accentSoft, in: Capsule())
+            }
+        }
+    }
+}
+
+/// Left-aligned rows that wrap, like words in a paragraph.
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let rows = rows(for: subviews, maxWidth: proposal.width ?? .infinity)
+        let width = rows.map(\.width).max() ?? 0
+        let height = rows.map(\.height).reduce(0, +) + spacing * CGFloat(max(rows.count - 1, 0))
+        return CGSize(width: width, height: height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var y = bounds.minY
+        for row in rows(for: subviews, maxWidth: bounds.width) {
+            var x = bounds.minX
+            for index in row.indices {
+                let size = fittedSize(subviews[index], maxWidth: bounds.width)
+                subviews[index].place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
+                x += size.width + spacing
+            }
+            y += row.height + spacing
         }
     }
 
-    private var chips: some View {
-        ForEach(tags, id: \.self) { tag in
-            Text(tag)
-                .font(.aisleSubheadline)
-                .foregroundStyle(Theme.ink)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Theme.accentSoft, in: Capsule())
+    private struct Row {
+        var indices: [Int] = []
+        var width: CGFloat = 0
+        var height: CGFloat = 0
+    }
+
+    private func rows(for subviews: Subviews, maxWidth: CGFloat) -> [Row] {
+        var rows: [Row] = []
+        var current = Row()
+        for index in subviews.indices {
+            let size = fittedSize(subviews[index], maxWidth: maxWidth)
+            let needed = current.indices.isEmpty ? size.width : current.width + spacing + size.width
+            if needed > maxWidth, !current.indices.isEmpty {
+                rows.append(current)
+                current = Row()
+            }
+            current.width = current.indices.isEmpty ? size.width : current.width + spacing + size.width
+            current.height = max(current.height, size.height)
+            current.indices.append(index)
         }
+        if !current.indices.isEmpty { rows.append(current) }
+        return rows
+    }
+
+    /// Natural size, but a tag wider than the row wraps its text instead of overflowing.
+    private func fittedSize(_ subview: LayoutSubview, maxWidth: CGFloat) -> CGSize {
+        let natural = subview.sizeThatFits(.unspecified)
+        guard natural.width > maxWidth else { return natural }
+        return subview.sizeThatFits(ProposedViewSize(width: maxWidth, height: nil))
     }
 }
 
@@ -227,16 +283,24 @@ extension LocationSource {
 }
 
 extension ItemSearchResult {
-    /// "Aisle 7 · Left side" when the store has an aisle on file. Never inferred.
-    var aisleDisplay: String? {
+    /// "Aisle 7" when the store has an aisle on file. Never inferred.
+    var aisleLabel: String? {
         guard let raw = location.aisle?.trimmingCharacters(in: .whitespacesAndNewlines), !raw.isEmpty else {
             return nil
         }
-        let aisle = raw.first?.isNumber == true ? "Aisle \(raw)" : raw
-        if let section = location.section, !section.isEmpty {
-            return "\(aisle) · \(section)"
-        }
-        return aisle
+        return raw.first?.isNumber == true ? "Aisle \(raw)" : raw
+    }
+
+    /// The section on file, e.g. "Left side".
+    var sectionLabel: String? {
+        guard let section = location.section, !section.isEmpty else { return nil }
+        return section
+    }
+
+    /// "Aisle 7 · Left side" when the store has an aisle on file. Never inferred.
+    var aisleDisplay: String? {
+        guard let aisle = aisleLabel else { return nil }
+        return sectionLabel.map { "\(aisle) · \($0)" } ?? aisle
     }
 
     /// A short, friendly answer composed on the device from the structured fields.

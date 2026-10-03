@@ -95,6 +95,30 @@ struct ConfidenceBars: View {
     }
 }
 
+/// Covers the status bar on screens that hide the navigation bar, so content
+/// scrolling up doesn't run under the clock. Use as a top `safeAreaInset`.
+struct StatusBarBackdrop: View {
+    var body: some View {
+        // Sits at the top of the safe area and draws upward over the status bar.
+        // Solid behind the clock, fading out so the page's glows show through at rest.
+        GeometryReader { proxy in
+            LinearGradient(
+                stops: [
+                    .init(color: Theme.background, location: 0),
+                    .init(color: Theme.background, location: 0.75),
+                    .init(color: Theme.background.opacity(0), location: 1),
+                ],
+                startPoint: .top, endPoint: .bottom
+            )
+            .frame(height: proxy.safeAreaInsets.top)
+            .offset(y: -proxy.safeAreaInsets.top)
+        }
+        .frame(height: 0)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
 /// White rounded card on the off-white page.
 struct AisleCardModifier: ViewModifier {
     var padding: CGFloat = 16

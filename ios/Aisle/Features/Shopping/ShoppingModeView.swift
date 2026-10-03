@@ -81,7 +81,7 @@ struct ShoppingModeView: View {
                         HStack {
                             Text(stop.department)
                             Spacer()
-                            Text("\(model.pendingItems(in: stop).count) items")
+                            Text(itemCount(model.pendingItems(in: stop).count))
                                 .foregroundStyle(.secondary)
                                 .monospacedDigit()
                         }
@@ -107,11 +107,17 @@ struct ShoppingModeView: View {
                 }
             } else if !model.pendingUnplaced.isEmpty {
                 Section {
-                    Text("\(model.pendingUnplaced.count) items we couldn't place come last.")
+                    Text(model.pendingUnplaced.count == 1
+                        ? "1 item we couldn't place comes last."
+                        : "\(model.pendingUnplaced.count) items we couldn't place come last.")
                         .foregroundStyle(.secondary)
                 }
             }
         }
+    }
+
+    private func itemCount(_ count: Int) -> String {
+        count == 1 ? "1 item" : "\(count) items"
     }
 
     private func detail(for item: RouteStopItem) -> String? {
@@ -161,9 +167,11 @@ private struct StopHeader: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(unrouted ? "No route available" : "Stop \(number) of \(count)")
                 .font(.aisleCaption)
+                .foregroundStyle(Theme.secondaryInk)
+            // Explicit ink: `.primary` inside a List section header renders muted.
             Text(stop.department)
                 .font(.aisleTitle)
-                .foregroundStyle(.primary)
+                .foregroundStyle(Theme.ink)
                 .textCase(nil)
         }
         .accessibilityElement(children: .combine)

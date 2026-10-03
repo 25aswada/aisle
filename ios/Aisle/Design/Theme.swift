@@ -17,6 +17,9 @@ enum Theme {
     static let warning = Color(light: 0xB4532F, dark: 0xF2A07E)
     /// Text and icons drawn on the gradient. Always dark, because the gradient is always light.
     static let onAccent = Color(hex: 0x1F1B24)
+    /// "On" tint for switches. Ink in light mode; in dark mode ink is near-white and
+    /// the white knob would vanish, so use the deep pink from `accentInk`.
+    static let toggleOn = Color(light: 0x1F1B24, dark: 0xDC6F9C)
     /// Soft pink used for glows under accent elements.
     static let glow = Color(hex: 0xF48FB8)
 

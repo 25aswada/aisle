@@ -22,6 +22,7 @@ struct YouView: View {
 
                 Section {
                     Toggle("Share anonymous usage data", isOn: $analyticsEnabled)
+                        .tint(Theme.toggleOn)
                         .accessibilityIdentifier("analyticsToggle")
                 } header: {
                     Text("Privacy")

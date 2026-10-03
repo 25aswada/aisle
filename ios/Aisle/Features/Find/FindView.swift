@@ -50,6 +50,7 @@ struct FindView: View {
                 .padding(.bottom, 24)
                 .animation(.easeInOut(duration: 0.25), value: model.phase)
             }
+            .safeAreaInset(edge: .top, spacing: 0) { StatusBarBackdrop() }
             .background(AisleBackground())
             .scrollDismissesKeyboard(.interactively)
             .safeAreaInset(edge: .bottom) {

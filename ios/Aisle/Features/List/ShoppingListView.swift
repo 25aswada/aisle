@@ -113,7 +113,8 @@ private struct ListComposer: View {
     let onAdd: () -> Void
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
+        // Centered: a vertical-axis field doesn't report a baseline that lines up with the pill.
+        HStack(alignment: .center, spacing: 8) {
             TextField("Add items", text: $composer.draft, axis: .vertical)
                 .lineLimit(1...4)
                 .focused(focused)
@@ -176,7 +177,9 @@ struct ListItemRow: View {
     }
 
     private var detail: String? {
-        let parts = [item.quantity.map { "Qty \($0)" }, item.categoryName].compactMap { $0 }
+        // Skip the category when it just repeats the item ("cheese" / "Cheese").
+        let category = item.categoryName.flatMap { $0.caseInsensitiveCompare(item.text) == .orderedSame ? nil : $0 }
+        let parts = [item.quantity.map { "Qty \($0)" }, category].compactMap { $0 }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 }
