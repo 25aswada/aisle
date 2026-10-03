@@ -30,12 +30,24 @@ struct SignUpMethodStep: View {
                     .foregroundStyle(Theme.warning)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            Button("Continue with Apple") { provider(.apple) }
-                .buttonStyle(InkButtonStyle())
-                .accessibilityIdentifier("appleSignUpButton")
-            Button("Continue with Google") { provider(.google) }
-                .buttonStyle(.aisleSoft)
-                .accessibilityIdentifier("googleSignUpButton")
+            Button { provider(.apple) } label: {
+                Label("Continue with Apple", systemImage: "apple.logo")
+            }
+            .buttonStyle(InkButtonStyle())
+            .accessibilityIdentifier("appleSignUpButton")
+            Button { provider(.google) } label: {
+                Label {
+                    Text("Continue with Google")
+                } icon: {
+                    // Google's multicolour "G", kept in its own colours as their brand rules require.
+                    Image(decorative: "GoogleG")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 18, height: 18)
+                }
+            }
+            .buttonStyle(.aisleSoft)
+            .accessibilityIdentifier("googleSignUpButton")
             Button("Continue with email") {
                 model.clearError()
                 onEmail()
@@ -65,10 +77,9 @@ private struct Benefit: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: symbol)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(Theme.ink)
-                .frame(width: 30, height: 30)
-                .background(Theme.accentSoft, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(Theme.accentInk)
+                .frame(width: 24)
             Text(text)
                 .font(.aisleSubheadline)
                 .foregroundStyle(Theme.ink)

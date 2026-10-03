@@ -106,10 +106,9 @@ private struct ExampleExchange: View {
             QueryBubble(text: question)
             HStack(spacing: 10) {
                 Image(systemName: symbol)
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(Theme.ink)
-                    .frame(width: 34, height: 34)
-                    .background(Theme.accentSoft, in: Circle())
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(Theme.accentInk)
+                    .frame(width: 24)
                 (Text(item).font(Theme.font(15, .semibold, relativeTo: .subheadline)) + Text(" · \(place)"))
                     .font(.aisleSubheadline)
                     .foregroundStyle(Theme.ink)
@@ -256,10 +255,9 @@ private struct NearbyPreview: View {
     private func row(isHere: Bool, width: CGFloat) -> some View {
         HStack(spacing: 12) {
             Image(systemName: "storefront")
-                .font(.system(size: 17, weight: .semibold))
+                .font(.system(size: 20, weight: .semibold))
                 .foregroundStyle(Theme.ink)
-                .frame(width: 42, height: 42)
-                .background(Theme.fill, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+                .frame(width: 30)
             VStack(alignment: .leading, spacing: 6) {
                 Capsule().fill(Theme.ink.opacity(0.75)).frame(width: width, height: 9)
                 Capsule().fill(Theme.secondaryInk.opacity(0.3)).frame(width: width * 0.55, height: 7)
@@ -275,6 +273,6 @@ private struct NearbyPreview: View {
             }
         }
         .padding(10)
-        .background(isHere ? AnyShapeStyle(Theme.accentSoft) : AnyShapeStyle(Color.clear), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .background(isHere ? AnyShapeStyle(Theme.accentWash) : AnyShapeStyle(Color.clear), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
     }
 }
