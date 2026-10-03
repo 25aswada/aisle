@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  backend-pytest:
+    name: backend pytest
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check for backend
+        id: backend
+        run: |
+          if [ -d backend ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "backend/ not present; skipping pytest"
+          fi
+
+      - name: Set up Python
+        if: steps.backend.outputs.present == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install and run pytest
+        if: steps.backend.outputs.present == 'true'
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          if [ -f backend/requirements.txt ]; then
+            python -m pip install -r backend/requirements.txt
+          fi
+          if [ -f backend/pyproject.toml ]; then
+            python -m pip install -e backend
+          fi
+          python -m pip install pytest
+          cd backend
+          python -m pytest
