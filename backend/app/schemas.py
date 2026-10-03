@@ -132,3 +132,17 @@ class StoreZoneOut(BaseModel):
     name: str
     aisle_label: str | None
     source: str
+
+
+class ListParseRequest(BaseModel):
+    text: str = Field(max_length=2000)
+
+
+class ParsedListItem(BaseModel):
+    text: str
+    quantity: str | None
+    category: CategoryOut | None
+
+
+class ListParseResponse(BaseModel):
+    items: list[ParsedListItem]

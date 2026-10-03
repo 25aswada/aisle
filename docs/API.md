@@ -138,3 +138,29 @@ Consensus rule: a zone becomes the answer (`source: "observations"`) when at lea
 that zone; 3+ with no "not here" makes it high confidence. Two or more "not here"
 reports that outnumber "found" for the suggested zone drop confidence to low.
 Database rows still win over observations.
+
+## Shopping lists (Milestone 5)
+
+Lists live on the device (no accounts). The server only parses text.
+
+### POST /lists/parse
+
+```json
+{"text": "milk eggs bananas toothpaste"}
+```
+
+```json
+{"items": [
+  {"text": "milk", "quantity": null, "category": {"slug": "dairy", "name": "Milk & Dairy"}},
+  {"text": "eggs", "quantity": null, "category": {"slug": "eggs", "name": "Eggs"}},
+  {"text": "bananas", "quantity": null, "category": {"slug": "produce-fruit", "name": "Fruit"}},
+  {"text": "toothpaste", "quantity": null, "category": {"slug": "oral-care", "name": "Oral Care"}}
+]}
+```
+
+`text` ≤ 2000 characters; at most 100 items are returned. Newlines, commas,
+semicolons, bullets, and " and " (outside phrases like "half and half") split items.
+Without separators, words are segmented by known catalog phrases ("maple syrup paper
+towels" is two items); consecutive unknown words stay one item. Leading quantities
+("2", "a dozen", "half gallon") go to `quantity`. Unknown items have `category: null`.
+When the server is unreachable, the app splits on separators or spaces locally.

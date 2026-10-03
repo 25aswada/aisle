@@ -15,13 +15,13 @@ _FILLER_PREFIXES = (
     "looking for", "i need", "i want", "need", "find", "get", "buy",
 )
 _STOPWORDS = {"the", "a", "an", "some", "any", "please", "of", "for", "me", "my", "to"}
-_QUANTITY_UNITS = {
+QUANTITY_UNITS = {
     "dozen", "pack", "packs", "bag", "bags", "box", "boxes", "bottle", "bottles", "can",
     "cans", "jar", "jars", "gallon", "gallons", "lb", "lbs", "pound", "pounds", "oz",
     "ounce", "ounces", "carton", "cartons", "loaf", "loaves", "bunch", "bunches", "roll",
     "rolls", "half", "liter", "liters", "case", "cases", "container", "containers",
 }
-_NUMBER_WORDS = {
+NUMBER_WORDS = {
     "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7,
     "eight": 8, "nine": 9, "ten": 10, "twelve": 12, "a": 1, "an": 1,
 }
@@ -123,9 +123,9 @@ def parse_intent(raw: str) -> Intent:
     """Parse one item query such as "where is the organic maple syrup?"."""
     tokens = tokenize(_strip_filler(raw))
     quantity_parts: list[str] = []
-    while tokens and (
-        tokens[0].isdigit() or tokens[0] in _QUANTITY_UNITS
-        or (tokens[0] in _NUMBER_WORDS and len(tokens) > 1 and tokens[1] in _QUANTITY_UNITS)
+    while tokens and known_phrase(tuple(singularize(t) for t in tokens)) is None and (
+        tokens[0].isdigit() or tokens[0] in QUANTITY_UNITS
+        or (tokens[0] in NUMBER_WORDS and len(tokens) > 1 and tokens[1] in QUANTITY_UNITS)
         or (tokens[0] == "of" and quantity_parts)
     ):
         quantity_parts.append(tokens.pop(0))

@@ -9,7 +9,7 @@ struct RootView: View {
             FindView(api: api, location: location)
                 .tabItem { Label("Find", systemImage: "magnifyingglass") }
 
-            ListPlaceholderView()
+            ShoppingListView(api: api)
                 .tabItem { Label("List", systemImage: "checklist") }
 
             YouView()

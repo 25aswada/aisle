@@ -28,6 +28,7 @@ protocol AisleAPI: Sendable {
     func searchItem(query: String, storeID: String?) async throws -> ItemSearchResult
     func zones(storeID: String) async throws -> [StoreZone]
     func sendFeedback(_ body: FeedbackBody) async throws -> FeedbackReceipt
+    func parseList(text: String) async throws -> [ParsedListItem]
 }
 
 struct APIClient: AisleAPI {
@@ -80,6 +81,11 @@ struct APIClient: AisleAPI {
 
     func sendFeedback(_ body: FeedbackBody) async throws -> FeedbackReceipt {
         try await post("feedback", body: body)
+    }
+
+    func parseList(text: String) async throws -> [ParsedListItem] {
+        let response: ListParseResponse = try await post("lists/parse", body: ListParseRequestBody(text: text))
+        return response.items
     }
 
     // MARK: - Request building

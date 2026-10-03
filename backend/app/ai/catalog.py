@@ -78,7 +78,7 @@ CATEGORIES: tuple[CategoryDef, ...] = (
         "half and half", "butter", "yogurt", "greek yogurt", "sour cream",
         "cottage cheese", "kefir", "whipped cream",
     ]),
-    _c("eggs", "Eggs", ["milk", "butter"], ["egg", "egg white", "dozen egg"]),
+    _c("eggs", "Eggs", ["milk", "butter"], ["egg", "egg white"]),
     _c("cheese", "Cheese", ["shredded cheese", "cream cheese", "butter"], [
         "cheese", "cheddar", "mozzarella", "parmesan", "swiss cheese", "brie", "feta",
         "goat cheese", "string cheese", "cream cheese", "shredded cheese", "provolone",
@@ -189,7 +189,7 @@ CATEGORIES: tuple[CategoryDef, ...] = (
     ]),
     _c("ice-cream", "Ice Cream & Frozen Desserts", ["ice cream", "popsicles", "frozen yogurt"], [
         "ice cream", "gelato", "sorbet", "popsicle", "ice pop", "frozen yogurt",
-        "ice cream sandwich", "mochi", "ice", "bag of ice",
+        "ice cream sandwich", "mochi", "ice",
     ]),
     # Personal care and health
     _c("oral-care", "Oral Care", ["toothbrushes", "mouthwash", "floss"], [

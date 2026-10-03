@@ -100,6 +100,8 @@ final class StubAPI: AisleAPI, @unchecked Sendable {
         FeedbackReceipt(id: 1, verdict: .found, zoneID: 17, reports: nil)
     )
     private(set) var feedbackBodies: [FeedbackBody] = []
+    var parseListResult: Result<[ParsedListItem], Error> = .success([])
+    private(set) var parsedTexts: [String] = []
     private(set) var nearbyCalls: [(Double, Double, Int?)] = []
     private(set) var searchQueries: [String] = []
 
@@ -127,6 +129,11 @@ final class StubAPI: AisleAPI, @unchecked Sendable {
     func sendFeedback(_ body: FeedbackBody) async throws -> FeedbackReceipt {
         feedbackBodies.append(body)
         return try feedbackResult.get()
+    }
+
+    func parseList(text: String) async throws -> [ParsedListItem] {
+        parsedTexts.append(text)
+        return try parseListResult.get()
     }
 }
 

@@ -32,4 +32,5 @@ Plain HTTP is allowed only for local networking (`NSAllowsLocalNetworking`).
 - `Aisle/Models` – `Store`, `HealthResponse`
 - `Aisle/Location` – optional CoreLocation wrapper
 - `Aisle/Stores` – persisted store selection, store picker model
-- `Aisle/Features` – Find (current store + picker), List and You placeholders
+- `Aisle/List` – shopping list store (persisted on device) and composer
+- `Aisle/Features` – Find (store picker, item search, feedback), List, You
