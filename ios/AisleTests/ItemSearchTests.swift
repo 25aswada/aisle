@@ -137,3 +137,81 @@ final class DatabaseLocationDecodingTests: XCTestCase {
         XCTAssertEqual(Fixtures.mapleSyrup.location.zoneID, 17)
     }
 }
+
+
+final class ReplyTextTests: XCTestCase {
+    private func result(
+        department: String?, aisle: String? = nil, zoneID: Int? = 1, confidence: Confidence,
+        availability: Availability = .likely, neighbors: [String] = []
+    ) -> ItemSearchResult {
+        ItemSearchResult(
+            searchID: nil, query: "lychee", item: "lychee", modifiers: [], quantity: nil, storeID: 2,
+            concept: nil, category: nil,
+            location: ItemLocation(department: department, zoneID: zoneID, aisle: aisle, section: nil, neighbors: neighbors),
+            availability: availability, confidence: confidence, source: .model, reports: nil
+        )
+    }
+
+    private func text(_ result: ItemSearchResult, at retailer: String?) -> String {
+        String(result.replyText(at: retailer).characters)
+    }
+
+    func testLowConfidenceNamesTheStore() {
+        let reply = text(result(department: "Flowers & Produce", confidence: .low, neighbors: ["Mangoes"]), at: "Trader Joe's")
+        XCTAssertEqual(
+            reply,
+            "I'm not certain, but Trader Joe's usually keeps lychee in Flowers & Produce. Look near mangoes. If it's not there, ask an employee."
+        )
+        XCTAssertFalse(reply.contains("stores like this"))
+    }
+
+    func testUnlikelyWithoutDepartmentSaysStoreDoesNotCarryIt() {
+        let reply = text(result(department: nil, confidence: .low, availability: .unlikely), at: "Trader Joe's")
+        XCTAssertEqual(reply, "Trader Joe's typically doesn't carry lychee, but you can ask an employee.")
+    }
+
+    func testUnlikelyWithDepartmentPointsThereAndToAnEmployee() {
+        let reply = text(result(department: "Frozen", confidence: .low, availability: .unlikely), at: "Costco")
+        XCTAssertEqual(reply, "Costco typically doesn't carry lychee. If this one does, check Frozen, or ask an employee.")
+    }
+
+    func testUnlikelyCategoryWithoutAZoneIsNotPresentedAsAPlace() {
+        // Trader Joe's has no Clothing department; "Clothing" is only the item's category.
+        let underwear = result(department: "Clothing", zoneID: nil, confidence: .low, availability: .unlikely, neighbors: ["socks"])
+        XCTAssertNil(underwear.placeInStore)
+        XCTAssertEqual(text(underwear, at: "Trader Joe's"), "Trader Joe's typically doesn't carry lychee, but you can ask an employee.")
+    }
+
+    func testUnknownLocationNamesTheStore() {
+        let reply = text(result(department: nil, confidence: .low), at: "Target")
+        XCTAssertEqual(reply, "I'm not sure where lychee is at Target yet. Try a more common name, or ask an employee.")
+    }
+
+    func testMediumNamesTheStore() {
+        XCTAssertEqual(
+            text(result(department: "Produce", confidence: .medium), at: "Walmart"),
+            "At Walmart, lychee is most likely in Produce."
+        )
+    }
+
+    func testFallsBackToThisStoreWithoutARetailer() {
+        XCTAssertEqual(
+            text(result(department: nil, confidence: .low, availability: .unlikely), at: nil),
+            "This store typically doesn't carry lychee, but you can ask an employee."
+        )
+        XCTAssertTrue(text(result(department: "Produce", confidence: .low), at: nil).contains("this store usually keeps"))
+    }
+
+    func testNeverMentionsAnAisleThatIsNotOnFile() {
+        for confidence in [Confidence.high, .medium, .low] {
+            XCTAssertFalse(text(result(department: "Produce", confidence: confidence), at: "Costco").contains("Aisle"))
+        }
+        XCTAssertTrue(text(result(department: "Produce", aisle: "7", confidence: .high), at: "Costco").contains("Aisle 7"))
+    }
+
+    func testSourceLabelsNameTheStore() {
+        XCTAssertEqual(LocationSource.model.label(for: "Trader Joe's"), "AI estimate for Trader Joe's")
+        XCTAssertEqual(LocationSource.fallback.label(for: "Costco"), "Typical Costco layout")
+        XCTAssertEqual(LocationSource.model.label(for: nil), "AI estimate")
+    }
+}

@@ -48,6 +48,14 @@ struct Store: Codable, Equatable, Hashable, Identifiable {
     }
 }
 
+extension Store {
+    /// The chain for sentences like "Trader Joe's usually keeps…"; the store's own name if unknown.
+    var retailerDisplayName: String {
+        guard let retailer = retailerName?.trimmingCharacters(in: .whitespaces), !retailer.isEmpty else { return name }
+        return retailer
+    }
+}
+
 /// `/stores/nearby` wraps stores in an object; `/stores/search` returns a bare array.
 struct StoresResponse: Codable, Equatable {
     let stores: [Store]

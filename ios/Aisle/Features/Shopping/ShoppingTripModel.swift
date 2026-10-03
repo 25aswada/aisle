@@ -37,6 +37,7 @@ final class ShoppingTripModel {
     }
 
     var storeName: String { store.name }
+    var retailerName: String { store.retailerDisplayName }
 
     // MARK: Progress
 

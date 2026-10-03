@@ -98,7 +98,7 @@ struct ShoppingModeView: View {
                         TripItemRow(
                             text: item.text,
                             detail: item.reason == .notCarried
-                                ? "This store may not carry this."
+                                ? "\(model.retailerName) typically doesn't carry this. Ask an employee."
                                 : "We don't know where this is. Ask a store employee.",
                             onFound: { withAnimation { model.markFound(item.id) } },
                             onSkip: { withAnimation { model.skip(item.id) } }

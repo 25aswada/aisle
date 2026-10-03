@@ -123,16 +123,16 @@ extension FindView {
                     Text("Looking in \(store.name)…")
                 }
             }
-            SearchResultCard(result: .placeholder, storeName: nil)
+            SearchResultCard(result: .placeholder, retailer: nil)
                 .redacted(reason: .placeholder)
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel("Finding \(model.trimmedQuery)")
         case .loaded(let result):
             QueryBubble(text: result.query.isEmpty ? result.item : result.query)
             AisleReply {
-                Text(result.replyText)
+                Text(result.replyText(at: store.retailerDisplayName))
             }
-            SearchResultCard(result: result, storeName: store.name)
+            SearchResultCard(result: result, retailer: store.retailerDisplayName)
             FeedbackBar(
                 state: model.feedback,
                 onFound: { Task { await model.confirmFound(storeID: store.id) } },

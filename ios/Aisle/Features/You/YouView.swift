@@ -1,15 +1,42 @@
 import SwiftUI
 
-/// Settings. Aisle has no accounts; everything here stays on the device.
+/// Settings and the optional account. Lists and searches stay on the device.
 struct YouView: View {
     @AppStorage(AppearancePreference.defaultsKey) private var appearance = AppearancePreference.system
     @AppStorage(AnalyticsClient.enabledKey) private var analyticsEnabled = true
     @Environment(RecentSearches.self) private var recents
     @Environment(StoreSelection.self) private var storeSelection
+    @Environment(AccountStore.self) private var accounts
+    @AppStorage(OnboardingFlow.completedKey) private var onboardingComplete = false
 
     var body: some View {
         NavigationStack {
             Form {
+                Section("Account") {
+                    if let account = accounts.account {
+                        HStack(spacing: 12) {
+                            Text(account.initial)
+                                .font(Theme.font(17, .bold, relativeTo: .headline))
+                                .foregroundStyle(Theme.onAccent)
+                                .frame(width: 40, height: 40)
+                                .background(Theme.accent, in: Circle())
+                                .accessibilityHidden(true)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(account.firstName)
+                                    .font(.aisleHeadline)
+                                Text(account.email ?? "Signed in with \(account.provider.label)")
+                                    .font(.aisleFootnote)
+                                    .foregroundStyle(Theme.secondaryInk)
+                            }
+                        }
+                        Button("Sign out", role: .destructive) { accounts.signOut() }
+                            .accessibilityIdentifier("signOutButton")
+                    } else {
+                        Button("Create an account or sign in") { onboardingComplete = false }
+                            .accessibilityIdentifier("createAccountRowButton")
+                    }
+                }
+
                 Section("Appearance") {
                     Picker("Theme", selection: $appearance) {
                         ForEach(AppearancePreference.allCases) { option in
