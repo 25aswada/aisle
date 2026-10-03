@@ -95,3 +95,12 @@ def test_empty_database(engine):
             assert client.get("/stores/search?q=Costco").json() == []
     finally:
         app.dependency_overrides.clear()
+
+
+def test_store_payload_matches_ios_contract(client):
+    """iOS decodes `retailer_name` and a numeric or string `id`."""
+    nearby = client.get("/stores/nearby", params={"lat": 40, "lon": -75}).json()["stores"]
+    searched = client.get("/stores/search", params={"q": "Near"}).json()
+    for store in (nearby[0], searched[0]):
+        assert store["retailer_name"] == "Trader Joe's"
+        assert isinstance(store["id"], int)

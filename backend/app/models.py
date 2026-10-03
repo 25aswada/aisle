@@ -29,3 +29,7 @@ class Store(Base):
     external_place_id: Mapped[str | None] = mapped_column(String(255))
     store_number: Mapped[str | None] = mapped_column(String(50))
     retailer: Mapped[Retailer] = relationship(lazy="joined")
+
+    @property
+    def retailer_name(self) -> str:
+        return self.retailer.name

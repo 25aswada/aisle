@@ -18,6 +18,8 @@ class StoreResponse(BaseModel):
     external_place_id: str | None
     store_number: str | None
     retailer: RetailerResponse
+    # Flat copy of retailer.name; the iOS client reads this field.
+    retailer_name: str
 
 
 class NearbyStoreResponse(StoreResponse):

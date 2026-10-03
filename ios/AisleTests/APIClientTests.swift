@@ -57,7 +57,7 @@ final class APIClientTests: XCTestCase {
     }
 
     func testSearchEncodesQuery() async throws {
-        StubURLProtocol.respond(json: #"{"stores":[]}"#)
+        StubURLProtocol.respond(json: "[]")
         _ = try await client.searchStores(query: "trader joe's & co")
         let url = try XCTUnwrap(StubURLProtocol.requests.first?.url)
         let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
