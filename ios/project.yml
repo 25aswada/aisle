@@ -1,0 +1,56 @@
+name: Aisle
+options:
+  bundleIdPrefix: com.aisle
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    # Override per-configuration or on the xcodebuild command line.
+    AISLE_API_BASE_URL: "http://127.0.0.1:8000"
+targets:
+  Aisle:
+    type: application
+    platform: iOS
+    sources: [Aisle]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.aisle.Aisle
+        TARGETED_DEVICE_FAMILY: "1"
+        GENERATE_INFOPLIST_FILE: NO
+    info:
+      path: Aisle/Info.plist
+      properties:
+        CFBundleDisplayName: Aisle
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        AisleAPIBaseURL: $(AISLE_API_BASE_URL)
+        NSLocationWhenInUseUsageDescription: >-
+          Aisle uses your location only to show stores near you. This is
+          optional: you can always search for a store by name or address instead.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+  AisleTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [AisleTests]
+    dependencies:
+      - target: Aisle
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.aisle.AisleTests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  Aisle:
+    build:
+      targets:
+        Aisle: all
+        AisleTests: [test]
+    test:
+      targets: [AisleTests]
+      gatherCoverageData: false
