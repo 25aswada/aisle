@@ -37,6 +37,11 @@ class Store(Base):
     longitude: Mapped[float]
     external_place_id: Mapped[str | None] = mapped_column(String(255))
     store_number: Mapped[str | None] = mapped_column(String(50))
+    # Floor-plan anchors in normalized units (x 0..1 left to right, y 0..1 front to back).
+    entrance_x: Mapped[float | None]
+    entrance_y: Mapped[float | None]
+    checkout_x: Mapped[float | None]
+    checkout_y: Mapped[float | None]
     retailer: Mapped[Retailer] = relationship(lazy="joined")
 
     @property
@@ -101,6 +106,9 @@ class StoreZone(Base):
     aisle_label: Mapped[str | None] = mapped_column(String(40))
     source: Mapped[str] = mapped_column(String(20), default="template")
     sort_order: Mapped[int] = mapped_column(default=0)
+    # Approximate position on the floor plan, same units as the store anchors.
+    x: Mapped[float | None]
+    y: Mapped[float | None]
     categories: Mapped[list[Category]] = relationship(secondary=zone_categories, lazy="selectin")
 
 

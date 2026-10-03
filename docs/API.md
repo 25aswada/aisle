@@ -164,3 +164,38 @@ Without separators, words are segmented by known catalog phrases ("maple syrup p
 towels" is two items); consecutive unknown words stay one item. Leading quantities
 ("2", "a dozen", "half gallon") go to `quantity`. Unknown items have `category: null`.
 When the server is unreachable, the app splits on separators or spaces locally.
+
+## Route (Milestone 6)
+
+### POST /route
+
+Orders the list into stops for Start Shopping mode.
+
+```json
+{"store_id": 2, "items": [{"id": "client-uuid-1", "text": "milk"}, {"id": "client-uuid-2", "text": "bananas"}]}
+```
+
+1–100 items; `id` is the client's item id (≤ 64 chars) and is echoed back. Unknown
+store → 404.
+
+```json
+{
+  "store_id": 2,
+  "stops": [
+    {"order": 1, "zone_id": 12, "department": "Flowers & Produce", "x": 0.1, "y": 0.2,
+     "items": [{"id": "client-uuid-2", "text": "bananas", "aisle": null, "section": null,
+                "neighbors": ["apples", "berries"], "confidence": "medium", "source": "fallback"}]},
+    {"order": 2, "zone_id": 19, "department": "Dairy & Eggs", "x": 0.15, "y": 0.9, "items": [...]}
+  ],
+  "unplaced": [{"id": "client-uuid-3", "text": "hammer", "reason": "not_carried"}],
+  "distance": 3.19
+}
+```
+
+Each item is resolved like `POST /search` (same source priority; at most 5 AI calls
+per route). Items in the same zone share a stop. Stops run from the store's entrance to
+its checkout: nearest neighbor, then 2-opt, using Manhattan distance on zone `x`/`y`
+(normalized floor-plan units: x 0..1 left to right, y 0..1 front to back). Coordinates
+are approximate template positions. Zones without coordinates come last. `unplaced`
+reasons: `unknown` (no department) or `not_carried` (the store format usually doesn't
+stock it).

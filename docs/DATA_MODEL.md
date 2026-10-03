@@ -27,6 +27,14 @@ SQLAlchemy models live in `backend/app/models.py`; Alembic migrations in
 | `search_events(id uuid string, store_id null, query, item_normalized, concept_id null, category_slug null, department null, zone_id null, source, confidence, device_id null, created_at)` | One row per `POST /search`, with what was answered. |
 | `location_observations(id, store_id, search_event_id null, concept_id null, item_normalized, verdict, zone_id null, aisle_text null, note null, device_id null, created_at)` | Shopper reports. `verdict` is `found` or `not_here`. Unknown items are grouped by `item_normalized`. |
 
+## Coordinates (Milestone 6)
+
+- `store_zones.x`, `store_zones.y`: approximate floor-plan position (0..1), null when unknown.
+- `stores.entrance_x/_y`, `stores.checkout_x/_y`: route start and end anchors.
+
+Seeding fills these from the store format's layout template and backfills missing
+values on template zones. It never changes `verified` zones.
+
 ### Seeding and imports
 
 `python -m backend.app.seed` loads demo stores, the catalog (categories, concepts,

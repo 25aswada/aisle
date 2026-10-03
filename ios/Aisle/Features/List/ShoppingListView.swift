@@ -4,7 +4,10 @@ struct ShoppingListView: View {
     let api: AisleAPI
 
     @Environment(ShoppingListStore.self) private var list
+    @Environment(StoreSelection.self) private var storeSelection
     @State private var composer: ListComposerModel
+    @State private var trip: ShoppingTripModel?
+    @State private var showNeedsStore = false
     @FocusState private var composerFocused: Bool
 
     init(api: AisleAPI) {
@@ -47,6 +50,28 @@ struct ShoppingListView: View {
                     }
                 }
             }
+            .safeAreaInset(edge: .bottom) {
+                if !list.remaining.isEmpty {
+                    Button(action: startShopping) {
+                        Label("Start Shopping", systemImage: "cart")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .padding()
+                    .background(.bar)
+                    .accessibilityIdentifier("startShoppingButton")
+                }
+            }
+            .fullScreenCover(item: $trip) { trip in
+                ShoppingModeView(model: trip)
+            }
+            .alert("Choose a store first", isPresented: $showNeedsStore) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text("Pick your store on the Find tab, then start shopping.")
+            }
             .navigationTitle("List")
             .toolbar {
                 if !list.items.isEmpty {
@@ -64,6 +89,21 @@ struct ShoppingListView: View {
             }
         }
     }
+}
+
+extension ShoppingListView {
+    private func startShopping() {
+        composerFocused = false
+        guard let store = storeSelection.current else {
+            showNeedsStore = true
+            return
+        }
+        trip = ShoppingTripModel(api: api, store: store, list: list)
+    }
+}
+
+extension ShoppingTripModel: Identifiable {
+    nonisolated var id: ObjectIdentifier { ObjectIdentifier(self) }
 }
 
 private struct ListComposer: View {

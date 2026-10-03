@@ -9,6 +9,7 @@ from .database import get_db
 from .models import Retailer, Store
 from .routers import feedback as feedback_routes
 from .routers import lists as list_routes
+from .routers import route as route_routes
 from .routers import search as search_routes
 from .schemas import NearbyResponse, NearbyStoreResponse, StoreResponse
 
@@ -16,6 +17,7 @@ app = FastAPI(title="Aisle API", version="0.2.0")
 app.include_router(search_routes.router)
 app.include_router(feedback_routes.router)
 app.include_router(list_routes.router)
+app.include_router(route_routes.router)
 Database = Annotated[Session, Depends(get_db)]
 
 

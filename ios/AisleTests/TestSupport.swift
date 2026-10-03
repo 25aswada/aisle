@@ -102,6 +102,8 @@ final class StubAPI: AisleAPI, @unchecked Sendable {
     private(set) var feedbackBodies: [FeedbackBody] = []
     var parseListResult: Result<[ParsedListItem], Error> = .success([])
     private(set) var parsedTexts: [String] = []
+    var routeResult: Result<RoutePlan, Error>?
+    private(set) var routeRequests: [(String, [ListItem])] = []
     private(set) var nearbyCalls: [(Double, Double, Int?)] = []
     private(set) var searchQueries: [String] = []
 
@@ -134,6 +136,18 @@ final class StubAPI: AisleAPI, @unchecked Sendable {
     func parseList(text: String) async throws -> [ParsedListItem] {
         parsedTexts.append(text)
         return try parseListResult.get()
+    }
+
+    func planRoute(storeID: String, items: [ListItem]) async throws -> RoutePlan {
+        routeRequests.append((storeID, items))
+        if let routeResult { return try routeResult.get() }
+        // Default: one stop per item, in list order, with a fake zone id.
+        let stops = items.enumerated().map { index, item in
+            RouteStop(order: index + 1, zoneID: 100 + index, department: "Zone \(index + 1)", x: 0.1, y: 0.1,
+                      items: [RouteStopItem(id: item.id.uuidString, text: item.text, aisle: nil, section: nil,
+                                            neighbors: [], confidence: .medium, source: .fallback)])
+        }
+        return RoutePlan(storeID: Int(storeID) ?? 0, stops: stops, unplaced: [], distance: 1)
     }
 }
 

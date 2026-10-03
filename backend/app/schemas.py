@@ -146,3 +146,47 @@ class ParsedListItem(BaseModel):
 
 class ListParseResponse(BaseModel):
     items: list[ParsedListItem]
+
+
+class RouteItemIn(BaseModel):
+    id: str = Field(min_length=1, max_length=64)
+    text: str = Field(min_length=1, max_length=200)
+
+
+class RouteRequest(BaseModel):
+    store_id: int
+    items: list[RouteItemIn] = Field(min_length=1, max_length=100)
+
+
+class RouteStopItem(BaseModel):
+    id: str
+    text: str
+    aisle: str | None
+    section: str | None
+    neighbors: list[str]
+    confidence: Confidence
+    source: LocationSource
+
+
+class RouteStop(BaseModel):
+    order: int
+    zone_id: int | None
+    department: str
+    # Approximate floor-plan position (0..1); null when the zone has none.
+    x: float | None
+    y: float | None
+    items: list[RouteStopItem]
+
+
+class UnplacedItem(BaseModel):
+    id: str
+    text: str
+    reason: Literal["unknown", "not_carried"]
+
+
+class RouteResponse(BaseModel):
+    store_id: int
+    stops: list[RouteStop]
+    unplaced: list[UnplacedItem]
+    # Rough walking distance in floor-plan units, for comparing orders.
+    distance: float

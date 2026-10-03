@@ -29,6 +29,7 @@ protocol AisleAPI: Sendable {
     func zones(storeID: String) async throws -> [StoreZone]
     func sendFeedback(_ body: FeedbackBody) async throws -> FeedbackReceipt
     func parseList(text: String) async throws -> [ParsedListItem]
+    func planRoute(storeID: String, items: [ListItem]) async throws -> RoutePlan
 }
 
 struct APIClient: AisleAPI {
@@ -86,6 +87,15 @@ struct APIClient: AisleAPI {
     func parseList(text: String) async throws -> [ParsedListItem] {
         let response: ListParseResponse = try await post("lists/parse", body: ListParseRequestBody(text: text))
         return response.items
+    }
+
+    func planRoute(storeID: String, items: [ListItem]) async throws -> RoutePlan {
+        guard let store = Int(storeID) else { throw APIError.invalidURL }
+        let body = RouteRequestBody(
+            storeID: store,
+            items: items.map { .init(id: $0.id.uuidString, text: $0.text) }
+        )
+        return try await post("route", body: body)
     }
 
     // MARK: - Request building

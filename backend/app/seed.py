@@ -58,21 +58,32 @@ def seed_catalog(session: Session) -> None:
 
 
 def seed_store_zones(session: Session) -> None:
-    """Give each store without zones the generic layout for its store format.
+    """Give each store the generic layout for its store format.
 
-    Template zones carry department names only. No aisle labels are generated.
+    Stores without zones get template zones (department names only, no aisle labels).
+    Template zones and store anchors missing coordinates are backfilled from the
+    layout. Verified data is never overwritten.
     """
     categories = {c.slug: c for c in session.scalars(select(Category))}
-    stores_with_zones = set(session.scalars(select(StoreZone.store_id).distinct()))
     for store in session.scalars(select(Store)):
-        if store.id in stores_with_zones:
-            continue
         layout = layout_for_retailer(store.retailer_name)
-        for order, zone in enumerate(layout.zones):
-            session.add(StoreZone(
-                store_id=store.id, name=zone.name, source="template", sort_order=order,
-                categories=[categories[slug] for slug in zone.categories if slug in categories],
-            ))
+        if store.entrance_x is None or store.entrance_y is None:
+            store.entrance_x, store.entrance_y = layout.entrance
+        if store.checkout_x is None or store.checkout_y is None:
+            store.checkout_x, store.checkout_y = layout.checkout
+        existing = {z.name: z for z in session.scalars(select(StoreZone).where(StoreZone.store_id == store.id))}
+        if not existing:
+            for order, zone in enumerate(layout.zones):
+                session.add(StoreZone(
+                    store_id=store.id, name=zone.name, source="template", sort_order=order,
+                    x=zone.x, y=zone.y,
+                    categories=[categories[slug] for slug in zone.categories if slug in categories],
+                ))
+            continue
+        for zone in layout.zones:
+            row = existing.get(zone.name)
+            if row is not None and row.source == "template" and (row.x is None or row.y is None):
+                row.x, row.y = zone.x, zone.y
     session.commit()
 
 
