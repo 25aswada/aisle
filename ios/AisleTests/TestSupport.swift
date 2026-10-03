@@ -64,6 +64,18 @@ final class StubURLProtocol: URLProtocol {
 }
 
 enum Fixtures {
+    static let mapleSyrupJSON = """
+    {"query":"maple syrup","item":"maple syrup","modifiers":[],"quantity":null,"store_id":2,
+    "category":{"slug":"syrups-sweeteners","name":"Syrups & Sweeteners"},
+    "location":{"department":"Breakfast/Pantry","aisle":null,"section":null,
+    "neighbors":["pancake mix","honey","sweeteners"]},
+    "availability":"likely","confidence":"medium","source":"fallback"}
+    """
+
+    static var mapleSyrup: ItemSearchResult {
+        try! JSONDecoder().decode(ItemSearchResult.self, from: Data(mapleSyrupJSON.utf8))
+    }
+
     static let store = Store(
         id: "store-1", name: "Target Center City", address: "1128 Chestnut St, Philadelphia, PA",
         latitude: 39.9505, longitude: -75.1601, distanceMiles: 0.4, retailerName: "Target"
@@ -74,6 +86,8 @@ final class StubAPI: AisleAPI, @unchecked Sendable {
     var healthResult: Result<HealthResponse, Error> = .success(HealthResponse(status: "ok"))
     var nearbyResult: Result<[Store], Error> = .success([Fixtures.store])
     var searchResult: Result<[Store], Error> = .success([Fixtures.store])
+    var searchItemResult: Result<ItemSearchResult, Error> = .success(Fixtures.mapleSyrup)
+    private(set) var itemSearches: [(String, String?)] = []
     private(set) var nearbyCalls: [(Double, Double, Int?)] = []
     private(set) var searchQueries: [String] = []
 
@@ -90,6 +104,11 @@ final class StubAPI: AisleAPI, @unchecked Sendable {
     }
 
     func store(id: String) async throws -> Store { Fixtures.store }
+
+    func searchItem(query: String, storeID: String?) async throws -> ItemSearchResult {
+        itemSearches.append((query, storeID))
+        return try searchItemResult.get()
+    }
 }
 
 @MainActor

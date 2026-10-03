@@ -1,8 +1,6 @@
 # Aisle architecture
 
-Aisle helps people find items inside physical stores. These documents cover Milestone 0 and Milestone 1: the monorepo, the API, the database, the iOS shell, and store discovery.
-
-Item search is not in this milestone.
+Aisle helps people find items inside physical stores. These documents describe the monorepo, the API, the database, the iOS app, store discovery, and item search.
 
 ## Milestone 0
 
@@ -20,7 +18,24 @@ Item search is not in this milestone.
 - Manual store search by text.
 - Device location is optional. Manual search works when location is unavailable or denied.
 
-Milestone 0 and Milestone 1 stop at store discovery. The HTTP API has no item, aisle, list, or route routes. See `API.md` for the four routes and `DATA_MODEL.md` for the two tables.
+## Milestone 2: item search
+
+- Find screen search field calls `POST /search` with the query and selected store.
+- `backend/app/ai/intent.py` parses the query (filler words, quantity, modifiers) and
+  matches the catalog in `backend/app/ai/catalog.py`.
+- Generic location reasoning maps the category to a department in the store format's
+  layout template (Trader Joe's, warehouse club, supercenter, pharmacy, home improvement,
+  generic grocery).
+- AI provider (`backend/app/ai/providers.py`): Claude via the Anthropic SDK when
+  `ANTHROPIC_API_KEY` is set. The model must pick a department from the layout's list
+  through a JSON schema, so it cannot invent aisle numbers. Its output is validated again
+  server-side. With the default `AISLE_AI_STRATEGY=catalog_first` the model only handles
+  queries the catalog can't classify. Without a key, or on any provider error, the
+  deterministic fallback answers.
+- Eval cases live in `backend/app/ai/eval_cases.json`. Run
+  `python -m backend.app.ai.evaluate` (model if a key is set) or `--fallback`.
+
+See `API.md` for routes and `DATA_MODEL.md` for tables.
 
 ## Monorepo
 

@@ -1,120 +1,84 @@
 # API
 
-Contract for Milestone 0 and Milestone 1. Local origin: `http://127.0.0.1:8000`.
+Local origin: `http://127.0.0.1:8000`. JSON in and out. No accounts or auth.
+`/docs` on the running service shows the live OpenAPI schema. This document and
+`ios/Aisle/Networking/APIClient.swift` must change together.
 
-Every response uses `Content-Type: application/json`. The routes are public. JSON object key order is not significant. Whitespace inside JSON is not significant.
+## Identifiers
 
-Item search is not in this milestone. The only routes are:
+Database ids are integers in JSON. The iOS client stores `Store.id` as a string
+and sends it back as an integer `store_id`.
 
-- `GET /health`
-- `GET /stores/nearby?lat=&lon=&limit=`
-- `GET /stores/search?q=`
-- `GET /stores/{store_id}`
+## Stores
 
-`/openapi.json` on the running service must describe these routes and no others.
+### Store object
 
-## Store object
-
-List routes return a JSON array of store objects. `GET /stores/{store_id}` returns one store object.
-
-| Field | JSON type | Meaning |
+| Field | Type | Notes |
 | --- | --- | --- |
-| id | string | Lowercase UUID of the store. |
-| name | string | Store name. |
-| address | string | Single-line address. |
-| latitude | number | WGS84 degrees. |
-| longitude | number | WGS84 degrees. |
-| retailer_name | string | `retailers.name` for this store. |
-| distance_miles | number or null | Miles from the request origin. Null when the request has no origin. |
+| id | integer | |
+| retailer_id | integer | |
+| name | string | |
+| address | string | single line |
+| latitude, longitude | number | WGS84 |
+| external_place_id, store_number | string or null | null in demo data |
+| retailer | object | `{id, name}` |
+| retailer_name | string | flat copy of `retailer.name`; the iOS client reads this |
+| distance_miles | number | only on `/stores/nearby` |
 
-Nearby example:
+- `GET /health` → `{"status":"ok"}`. No database access.
+- `GET /stores/nearby?lat=&lon=&limit=` → `{"stores":[...],"message":null}`, nearest
+  first. `limit` 1–100, default 20. Missing `lat` or `lon` → `{"stores":[],"message":"..."}`
+  with status 200.
+- `GET /stores/search?q=` → bare JSON array, case-insensitive substring of store
+  name, retailer name, or address. Whitespace-only `q` → `[]`.
+- `GET /stores/{store_id}` → one store, or 404 `{"detail":"Store not found"}`.
+
+## Item search
+
+### POST /search
+
+Request:
+
+```json
+{"query": "maple syrup", "store_id": 2}
+```
+
+`query` is 1–200 characters and not blank. `store_id` is optional; without it the
+generic grocery layout is used. Unknown `store_id` → 404. Invalid body → 422.
+
+Response (Trader Joe's, no database row for this item):
 
 ```json
 {
-  "id": "3f1c2a4e-7b9d-4e2a-9c11-0a6b5d8e1f24",
-  "name": "Downtown",
-  "address": "100 Main St, Springfield",
-  "latitude": 39.7817,
-  "longitude": -89.6501,
-  "retailer_name": "Target",
-  "distance_miles": 1.4
+  "query": "maple syrup",
+  "item": "maple syrup",
+  "modifiers": [],
+  "quantity": null,
+  "store_id": 2,
+  "category": {"slug": "syrups-sweeteners", "name": "Syrups & Sweeteners"},
+  "location": {
+    "department": "Breakfast/Pantry",
+    "aisle": null,
+    "section": null,
+    "neighbors": ["pancake mix", "honey", "sweeteners"]
+  },
+  "availability": "likely",
+  "confidence": "medium",
+  "source": "fallback"
 }
 ```
 
-Search and store-detail example (`distance_miles` is null):
-
-```json
-{
-  "id": "3f1c2a4e-7b9d-4e2a-9c11-0a6b5d8e1f24",
-  "name": "Downtown",
-  "address": "100 Main St, Springfield",
-  "latitude": 39.7817,
-  "longitude": -89.6501,
-  "retailer_name": "Target",
-  "distance_miles": null
-}
-```
-
-`distance_miles` is a JSON number in miles. The server does not round it to a fixed number of decimal places. When it is present, it is greater than or equal to 0.
-
-## GET /health
-
-Process liveness. This route does not query Postgres.
-
-`200` body:
-
-```json
-{"status":"ok"}
-```
-
-The object has one field, `status`, and its value is the string `ok`.
-
-## GET /stores/nearby
-
-Stores nearest to a point.
-
-| Query | Required | Type | Rules |
-| --- | --- | --- | --- |
-| lat | yes | number | -90 through 90. |
-| lon | yes | number | -180 through 180. |
-| limit | no | integer | Default 20. Minimum 1. Maximum 50. |
-
-`200`: a JSON array of store objects, nearest first. Ties break by `id` ascending. Every object has a numeric `distance_miles`. No rows in range yields `[]`.
-
-Missing `lat` or `lon`, a value outside the ranges above, or a `limit` outside 1 through 50 yields `422` with FastAPI's standard validation body.
-
-## GET /stores/search
-
-Manual store search. This route takes no coordinates. Device location stays optional because this route works without it. Every object has `distance_miles` set to null.
-
-| Query | Required | Type | Rules |
-| --- | --- | --- | --- |
-| q | yes | string | Required. Trimmed. Must be non-empty. |
-
-A store matches when `q` is a case-insensitive substring of the store name, the retailer name, or the address. Characters `%`, `_`, and `\` in `q` are literal, not pattern wildcards.
-
-`200`: a JSON array ordered by store name ascending, then `id` ascending. No matches yields `[]`. This route has no `limit` parameter and returns every match.
-
-Missing `q`, or `q` that is empty after trimming, yields `422`.
-
-## GET /stores/{store_id}
-
-One store. `store_id` is a UUID. `distance_miles` is null.
-
-`200`: one store object.
-
-A UUID that matches no row yields `404`:
-
-```json
-{"detail":"Store not found"}
-```
-
-A `store_id` that is not a UUID yields `422`.
-
-## Status codes
-
-| Status | When |
+| Field | Values |
 | --- | --- |
-| 200 | Health, a store list (including empty), or a found store. |
-| 404 | `store_id` is a UUID and no store has that id. Body is `{"detail":"Store not found"}`. |
-| 422 | Query or path validation failed. Body is FastAPI's validation error. |
+| item | the item phrase parsed from the query |
+| modifiers | words like `organic` that don't change the item |
+| quantity | e.g. `"2 gallons"`, or null |
+| category | null when the item isn't recognized |
+| location.department | department or zone name, or null when unknown |
+| location.aisle, location.section | **only** set when a database row supports it; never inferred |
+| location.neighbors | up to 4 items usually shelved nearby |
+| availability | `likely`, `unlikely` (this store format usually doesn't stock it), `unknown` |
+| confidence | `high`, `medium`, `low` |
+| source | `database`, `observations`, `store_layout`, `model`, `fallback` |
+
+The response is structured data only. The app composes all display text.

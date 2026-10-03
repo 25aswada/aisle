@@ -25,6 +25,7 @@ protocol AisleAPI: Sendable {
     func nearbyStores(latitude: Double, longitude: Double, limit: Int?) async throws -> [Store]
     func searchStores(query: String) async throws -> [Store]
     func store(id: String) async throws -> Store
+    func searchItem(query: String, storeID: String?) async throws -> ItemSearchResult
 }
 
 struct APIClient: AisleAPI {
@@ -64,6 +65,10 @@ struct APIClient: AisleAPI {
         try await get("stores/\(id)")
     }
 
+    func searchItem(query: String, storeID: String?) async throws -> ItemSearchResult {
+        try await post("search", body: SearchRequestBody(query: query, storeID: storeID.flatMap(Int.init)))
+    }
+
     // MARK: - Request building
 
     func makeURL(path: String, query: [URLQueryItem] = []) throws -> URL {
@@ -83,6 +88,19 @@ struct APIClient: AisleAPI {
     private func get<T: Decodable>(_ path: String, query: [URLQueryItem] = []) async throws -> T {
         var request = URLRequest(url: try makeURL(path: path, query: query))
         request.httpMethod = "GET"
+        return try await send(request)
+    }
+
+    private func post<Body: Encodable, T: Decodable>(_ path: String, body: Body) async throws -> T {
+        var request = URLRequest(url: try makeURL(path: path))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(body)
+        return try await send(request)
+    }
+
+    private func send<T: Decodable>(_ request: URLRequest) async throws -> T {
+        var request = request
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.timeoutInterval = 10
 

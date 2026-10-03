@@ -60,3 +60,33 @@ def client(populated_engine):
     with TestClient(app) as client:
         yield client
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def seeded_engine(engine):
+    from backend.app.seed import seed_all
+
+    with Session(engine) as session:
+        seed_all(session)
+    return engine
+
+
+@pytest.fixture
+def seeded_client(seeded_engine):
+    from backend.app.ai.providers import get_location_model
+
+    def override_db():
+        with Session(seeded_engine) as session:
+            yield session
+
+    app.dependency_overrides[get_db] = override_db
+    # Tests never call a real AI provider unless they install a fake one.
+    app.dependency_overrides[get_location_model] = lambda: None
+    with TestClient(app) as client:
+        yield client
+    app.dependency_overrides.clear()
+
+
+def store_id_for(client, retailer):
+    stores = client.get("/stores/search", params={"q": retailer}).json()
+    return next(s["id"] for s in stores if s["retailer_name"] == retailer)

@@ -34,7 +34,11 @@ def seed_stores(session: Session) -> None:
     session.commit()
 
 
+def seed_all(session: Session) -> None:
+    seed_stores(session)
+
+
 if __name__ == "__main__":
     with Session(get_engine()) as session:
-        seed_stores(session)
-    print("Demo stores seeded.")
+        seed_all(session)
+    print("Demo data seeded.")

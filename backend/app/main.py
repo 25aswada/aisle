@@ -7,9 +7,11 @@ from sqlalchemy.orm import Session
 
 from .database import get_db
 from .models import Retailer, Store
+from .routers import search as search_routes
 from .schemas import NearbyResponse, NearbyStoreResponse, StoreResponse
 
-app = FastAPI(title="Aisle Store API", version="0.1.0")
+app = FastAPI(title="Aisle API", version="0.2.0")
+app.include_router(search_routes.router)
 Database = Annotated[Session, Depends(get_db)]
 
 
