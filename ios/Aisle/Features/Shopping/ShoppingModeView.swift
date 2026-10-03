@@ -30,20 +30,22 @@ struct ShoppingModeView: View {
         case .loading:
             VStack(spacing: 12) {
                 ProgressView()
-                Text("Planning your route…").foregroundStyle(.secondary)
+                    .tint(Theme.secondaryInk)
+                Text("Planning your route…")
+                    .font(.aisleSubheadline)
+                    .foregroundStyle(Theme.secondaryInk)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .accessibilityElement(children: .combine)
         case .failed(let message):
-            ContentUnavailableView {
-                Label("Couldn't plan a route", systemImage: "map")
-            } description: {
-                Text(message)
-            } actions: {
+            AisleEmptyState(title: "Couldn't plan a route", systemImage: "map", message: message) {
                 Button("Try again") { Task { await model.start() } }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.aisleAccent)
                 Button("Shop in list order") { model.shopWithoutRoute() }
+                    .buttonStyle(.aisleSoft)
             }
+            .padding(.horizontal, 20)
+            .frame(maxHeight: .infinity)
         case .shopping:
             if model.isFinished {
                 TripSummary(model: model) { dismiss() }

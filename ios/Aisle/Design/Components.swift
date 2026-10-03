@@ -160,12 +160,15 @@ private struct AccentButtonBody: View {
     var body: some View {
         configuration.label
             .font(.aisleHeadline)
-            .foregroundStyle(Theme.onAccent)
+            .foregroundStyle(isEnabled ? Theme.onAccent : Theme.secondaryInk)
             .frame(maxWidth: .infinity, minHeight: 50)
             .padding(.horizontal, 16)
-            .background(Theme.accent, in: RoundedRectangle(cornerRadius: Theme.Radius.button, style: .continuous))
-            .shadow(color: Theme.glow.opacity(0.16), radius: 9, y: 6)
-            .opacity(isEnabled ? (configuration.isPressed ? 0.85 : 1) : 0.45)
+            .background(
+                AccentFill(isEnabled: isEnabled),
+                in: RoundedRectangle(cornerRadius: Theme.Radius.button, style: .continuous)
+            )
+            .shadow(color: Theme.glow.opacity(isEnabled ? 0.16 : 0), radius: 9, y: 6)
+            .opacity(configuration.isPressed ? 0.85 : 1)
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
             .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
     }
@@ -198,11 +201,21 @@ private struct AccentPillBody: View {
     var body: some View {
         configuration.label
             .font(Theme.font(15, .semibold, relativeTo: .subheadline))
-            .foregroundStyle(Theme.onAccent)
+            .foregroundStyle(isEnabled ? Theme.onAccent : Theme.secondaryInk)
             .padding(.horizontal, 16)
             .padding(.vertical, 9)
-            .background(Theme.accent, in: Capsule())
-            .opacity(isEnabled ? (configuration.isPressed ? 0.85 : 1) : 0.45)
+            .background(AccentFill(isEnabled: isEnabled), in: Capsule())
+            .opacity(configuration.isPressed ? 0.85 : 1)
+    }
+}
+
+/// The gradient when enabled. Disabled, a flat neutral fill: a faded pastel turns
+/// muddy on the dark page.
+private struct AccentFill: ShapeStyle {
+    let isEnabled: Bool
+
+    func resolve(in environment: EnvironmentValues) -> AnyShapeStyle {
+        isEnabled ? AnyShapeStyle(Theme.accent) : AnyShapeStyle(Theme.fill)
     }
 }
 
@@ -216,6 +229,45 @@ extension ButtonStyle where Self == SoftButtonStyle {
 
 extension ButtonStyle where Self == AccentPillButtonStyle {
     static var aisleAccentPill: AccentPillButtonStyle { AccentPillButtonStyle() }
+}
+
+/// Geist version of `ContentUnavailableView`: icon tile, title, message, optional buttons.
+struct AisleEmptyState<Actions: View>: View {
+    let title: String
+    let systemImage: String
+    let message: String
+    @ViewBuilder var actions: () -> Actions
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Image(systemName: systemImage)
+                .font(.system(size: 24, weight: .semibold))
+                .foregroundStyle(Theme.ink)
+                .frame(width: 56, height: 56)
+                .background(Theme.tile, in: RoundedRectangle(cornerRadius: Theme.Radius.tile, style: .continuous))
+                .accessibilityHidden(true)
+            VStack(spacing: 4) {
+                Text(title)
+                    .font(.aisleTitle3)
+                    .foregroundStyle(Theme.ink)
+                Text(message)
+                    .font(.aisleSubheadline)
+                    .foregroundStyle(Theme.secondaryInk)
+            }
+            .multilineTextAlignment(.center)
+            VStack(spacing: 10) { actions() }
+                .padding(.top, 4)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 24)
+        .padding(.horizontal, 8)
+    }
+}
+
+extension AisleEmptyState where Actions == EmptyView {
+    init(title: String, systemImage: String, message: String) {
+        self.init(title: title, systemImage: systemImage, message: message) { EmptyView() }
+    }
 }
 
 /// A short confirmation line with a gradient check, e.g. after "Found it".

@@ -69,7 +69,8 @@ enum Theme {
     /// Background of icon and picture tiles.
     static var tile: LinearGradient {
         LinearGradient(
-            colors: [Color(light: 0xFBEAF3, dark: 0x2E2632), Color(light: 0xFFF3DC, dark: 0x2F2A24)],
+            // Dark stops sit well above `surface` (0x1F1C22) so tiles read inside cards.
+            colors: [Color(light: 0xFBEAF3, dark: 0x45344B), Color(light: 0xFFF3DC, dark: 0x4A3F31)],
             startPoint: .topLeading, endPoint: .bottomTrailing
         )
     }

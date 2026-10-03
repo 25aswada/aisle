@@ -34,10 +34,10 @@ struct ShoppingListView: View {
 
                 if list.items.isEmpty {
                     Section {
-                        ContentUnavailableView(
-                            "Your list is empty",
+                        AisleEmptyState(
+                            title: "Your list is empty",
                             systemImage: "checklist",
-                            description: Text("Add items above.")
+                            message: "Add items above."
                         )
                     }
                 } else {
