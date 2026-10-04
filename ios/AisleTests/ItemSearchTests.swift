@@ -516,3 +516,97 @@ final class CameraZoomLabelTests: XCTestCase {
         XCTAssertEqual(CameraSheet.zoomLabel(2.36), "2.4")
     }
 }
+
+/// Holds searches and chat replies until the test lets them through, so it can start
+/// over while one is still on its way.
+private final class HeldAPI: AisleAPI, @unchecked Sendable {
+    let base = StubAPI()
+    var holdSearches = false
+    private var held: [CheckedContinuation<Void, Never>] = []
+    var heldCount: Int { held.count }
+
+    func release() {
+        held.forEach { $0.resume() }
+        held = []
+    }
+
+    private func hold() async { await withCheckedContinuation { held.append($0) } }
+
+    func searchItem(query: String, storeID: String?) async throws -> ItemSearchResult {
+        if holdSearches { await hold() }
+        return try await base.searchItem(query: query, storeID: storeID)
+    }
+
+    func chat(storeID: String, messages: [ChatMessage]) async throws -> ChatReply {
+        await hold()
+        return try await base.chat(storeID: storeID, messages: messages)
+    }
+
+    func health() async throws -> HealthResponse { try await base.health() }
+    func nearbyStores(latitude: Double, longitude: Double, limit: Int?) async throws -> [Store] {
+        try await base.nearbyStores(latitude: latitude, longitude: longitude, limit: limit)
+    }
+    func searchStores(query: String, near: Coordinate?) async throws -> [Store] {
+        try await base.searchStores(query: query, near: near)
+    }
+    func store(id: String) async throws -> Store { try await base.store(id: id) }
+    func identify(photo: Data, note: String?, storeID: String?) async throws -> String? {
+        try await base.identify(photo: photo, note: note, storeID: storeID)
+    }
+    func zones(storeID: String) async throws -> [StoreZone] { try await base.zones(storeID: storeID) }
+    func storeLayout(storeID: String) async throws -> StoreLayout { try await base.storeLayout(storeID: storeID) }
+    func sendFeedback(_ body: FeedbackBody) async throws -> FeedbackReceipt { try await base.sendFeedback(body) }
+    func parseList(text: String) async throws -> [ParsedListItem] { try await base.parseList(text: text) }
+    func scanList(photo: Data) async throws -> [ParsedListItem] { try await base.scanList(photo: photo) }
+    func planRoute(storeID: String, items: [ListItem]) async throws -> RoutePlan {
+        try await base.planRoute(storeID: storeID, items: items)
+    }
+    func planMultiRoute(storeIDs: [String], items: [ListItem]) async throws -> MultiRoutePlan {
+        try await base.planMultiRoute(storeIDs: storeIDs, items: items)
+    }
+    func sendEvents(_ events: [AnalyticsEvent]) async throws { try await base.sendEvents(events) }
+}
+
+/// Tapping Find mid-conversation clears it; answers still on their way mustn't bring it back.
+@MainActor
+final class StartOverTests: XCTestCase {
+    private func waitUntilHeld(_ api: HeldAPI) async {
+        while api.heldCount == 0 { await Task.yield() }
+    }
+
+    func testAReplyArrivingAfterStartingOverIsDropped() async {
+        let api = HeldAPI()
+        let model = FindModel(api: api)
+        model.query = "maple syrup"
+        await model.search(storeID: "2")
+        model.followUp = "is it organic?"
+        let sending = Task { await model.sendFollowUp(storeID: "2", retailer: nil) }
+        await waitUntilHeld(api)
+        XCTAssertTrue(model.isReplying)
+
+        model.clear()
+        api.release()
+        await sending.value
+
+        XCTAssertEqual(model.phase, .idle)
+        XCTAssertTrue(model.turns.isEmpty)
+        XCTAssertFalse(model.isReplying)
+        XCTAssertEqual(model.followUp, "")
+    }
+
+    func testASearchArrivingAfterStartingOverIsDropped() async {
+        let api = HeldAPI()
+        api.holdSearches = true
+        let model = FindModel(api: api)
+        model.query = "maple syrup"
+        let searching = Task { await model.search(storeID: "2") }
+        await waitUntilHeld(api)
+        XCTAssertEqual(model.phase, .loading)
+
+        model.clear()
+        api.release()
+        await searching.value
+
+        XCTAssertEqual(model.phase, .idle)
+    }
+}

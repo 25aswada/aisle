@@ -30,6 +30,9 @@ final class FindModel {
     /// The photo the current result was searched from, shown in the question bubble.
     private(set) var searchPhoto: Data?
     private(set) var phase: Phase = .idle
+    /// Bumped by `clear()`, so a search or reply still on its way when the shopper starts
+    /// over is dropped instead of bringing the old conversation back.
+    @ObservationIgnored private var generation = 0
     private(set) var feedback: FeedbackState = .none
 
     /// The follow-up being typed once a result is showing.
@@ -76,6 +79,7 @@ final class FindModel {
         resetConversation()
         searchPhoto = photo
         self.photo = nil
+        let started = generation
         guard let photo else {
             await find(text, storeID: storeID)
             return
@@ -85,6 +89,7 @@ final class FindModel {
         do {
             let item = try await api.identify(photo: photo, note: text.isEmpty ? nil : text, storeID: storeID)
             try Task.checkCancellation()
+            guard generation == started else { return }
             guard let item else {
                 self.photo = photo
                 phase = .failed("Aisle couldn't tell what's in that photo. Try a closer shot, or type what you're looking for.")
@@ -96,6 +101,7 @@ final class FindModel {
         } catch is CancellationError {
             // A newer search replaced this one.
         } catch {
+            guard generation == started else { return }
             self.photo = photo
             fail(with: error)
         }
@@ -109,9 +115,11 @@ final class FindModel {
             return
         }
         phase = .loading
+        let started = generation
         do {
             let result = try await api.searchItem(query: text, storeID: storeID)
             try Task.checkCancellation()
+            guard generation == started else { return }
             cache.store(result, query: text, storeID: storeID)
             recents.record(text, result: result, storeID: storeID)
             ShopperStats.recordSearch(storeID: storeID)
@@ -120,6 +128,7 @@ final class FindModel {
         } catch is CancellationError {
             // A newer search replaced this one.
         } catch {
+            guard generation == started else { return }
             fail(with: error)
         }
     }
@@ -158,6 +167,7 @@ final class FindModel {
     }
 
     func clear() {
+        generation += 1
         query = ""
         photo = nil
         searchPhoto = nil
@@ -184,7 +194,8 @@ final class FindModel {
         let turn = ChatTurn(role: .shopper, text: text, photo: photo)
         turns.append(turn)
         isReplying = true
-        defer { isReplying = false }
+        let started = generation
+        defer { if generation == started { isReplying = false } }
 
         let question = result.query.isEmpty ? result.item : result.query
         var messages = [
@@ -199,6 +210,7 @@ final class FindModel {
         do {
             let answer = try await api.chat(storeID: storeID, messages: messages)
             try Task.checkCancellation()
+            guard generation == started else { return }
             // A new item's search can stand in for a missing reply with the app's own wording.
             let reply = answer.reply.flatMap { $0.isEmpty ? nil : $0 }
                 ?? answer.search.map { String($0.reply(at: retailer).characters) }
@@ -216,6 +228,7 @@ final class FindModel {
         } catch is CancellationError {
             // A new search started; the conversation was reset.
         } catch {
+            guard generation == started else { return }
             turns.removeAll { $0.id == turn.id }
             if followUp.isEmpty { followUp = text }
             if self.photo == nil { self.photo = photo }

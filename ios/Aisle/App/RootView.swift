@@ -10,10 +10,19 @@ struct RootView: View {
 
     @Environment(ShoppingListStore.self) private var list
     @State private var tab: Tab = .find
+    /// Goes up each time Find is tapped while already open, sending it back to its start.
+    @State private var findReselections = 0
 
     var body: some View {
-        TabView(selection: $tab) {
-            FindView(api: api, location: location, analytics: analytics, recents: recents)
+        TabView(selection: Binding(
+            get: { tab },
+            set: { picked in
+                if picked == .find, tab == .find { findReselections += 1 }
+                tab = picked
+            }
+        )) {
+            FindView(api: api, location: location, analytics: analytics, recents: recents,
+                     startOver: findReselections)
                 .tabItem { Label("Find", systemImage: "magnifyingglass") }
                 .tag(Tab.find)
 

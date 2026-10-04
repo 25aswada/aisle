@@ -5,6 +5,8 @@ struct FindView: View {
     let api: AisleAPI
     let location: LocationProviding
     let analytics: AnalyticsTracking
+    /// Changes when the Find tab is tapped while open: back to the empty search.
+    var startOver = 0
 
     @Environment(StoreSelection.self) private var storeSelection
     @Environment(HealthMonitor.self) private var health
@@ -26,10 +28,12 @@ struct FindView: View {
     @State private var isShowingHistory = false
     @Environment(\.requestReview) private var requestReview
 
-    init(api: AisleAPI, location: LocationProviding, analytics: AnalyticsTracking, recents: RecentSearches) {
+    init(api: AisleAPI, location: LocationProviding, analytics: AnalyticsTracking, recents: RecentSearches,
+         startOver: Int = 0) {
         self.api = api
         self.location = location
         self.analytics = analytics
+        self.startOver = startOver
         _model = State(initialValue: FindModel(api: api, analytics: analytics, recents: recents))
     }
 
@@ -82,6 +86,7 @@ struct FindView: View {
                     .padding(.horizontal, 20)
                     .padding(.top, 8)
                     .padding(.bottom, 24)
+                    .id(Self.pageTop)
                     .animation(.easeInOut(duration: 0.25), value: model.phase)
                     .animation(.easeInOut(duration: 0.25), value: model.turns)
                     .animation(.easeInOut(duration: 0.25), value: model.isReplying)
@@ -112,6 +117,7 @@ struct FindView: View {
                 }
                 .onChange(of: model.turns.count) { scrollToEnd(scroller) }
                 .onChange(of: model.isReplying) { scrollToEnd(scroller) }
+                .onChange(of: startOver) { goHome(scroller) }
             }
             .cameraOverlay(isPresented: $isTakingPhoto) { photo in model.photo = photo }
             .onReceive(NotificationCenter.default.publisher(for: .aisleOpenCamera)) { _ in openCamera() }
@@ -233,6 +239,16 @@ extension FindView {
         searchFocused = true
     }
 
+    /// Tapping Find while it's open: leave the conversation for the empty search screen.
+    private func goHome(_ scroller: ScrollViewProxy) {
+        followUpFocused = false
+        searchFocused = false
+        withAnimation(.easeInOut(duration: 0.25)) {
+            model.clear()
+            scroller.scrollTo(Self.pageTop, anchor: .top)
+        }
+    }
+
     private func scrollToEnd(_ scroller: ScrollViewProxy) {
         guard isConversing, !model.turns.isEmpty || model.isReplying else { return }
         withAnimation(.easeOut(duration: 0.3)) {
@@ -241,6 +257,7 @@ extension FindView {
     }
 
     private static let conversationEnd = "conversationEnd"
+    private static let pageTop = "pageTop"
 
     @ViewBuilder
     private func resultSection(store: Store) -> some View {
