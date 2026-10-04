@@ -16,6 +16,7 @@ struct ShoppingListView: View {
     @FocusState private var composerFocused: Bool
     @State private var scrolledUnderStatusBar: CGFloat = 0
     @State private var isScanning = false
+    @State private var confirmingNewList = false
 
     init(api: AisleAPI, analytics: AnalyticsTracking) {
         self.api = api
@@ -105,6 +106,24 @@ struct ShoppingListView: View {
                 AisleWordmark(size: 26)
                 Spacer()
                 if !list.items.isEmpty {
+                    Button { confirmingNewList = true } label: {
+                        Label("New list", systemImage: "square.and.pencil")
+                            .font(Theme.font(14, .semibold, relativeTo: .subheadline))
+                            .foregroundStyle(Theme.ink)
+                            .padding(.horizontal, 14)
+                            .frame(height: 44)
+                            .background(Theme.surface.opacity(0.9), in: Capsule())
+                            .shadow(color: Theme.ink.opacity(0.06), radius: 12, y: 6)
+                    }
+                    .buttonStyle(PressableCardStyle())
+                    .accessibilityIdentifier("newListButton")
+                    .confirmationDialog(
+                        "Start a new list?", isPresented: $confirmingNewList, titleVisibility: .visible
+                    ) {
+                        Button("Start new list", role: .destructive, action: startNewList)
+                    } message: {
+                        Text("This clears all \(list.items.count) \(list.items.count == 1 ? "item" : "items") on your current list.")
+                    }
                     Menu {
                         Button("Clear checked items", systemImage: "checkmark.circle") { list.clearCompleted() }
                             .disabled(done.isEmpty)
@@ -279,6 +298,16 @@ struct ShoppingListView: View {
 
     private func submit() {
         Task { await composer.add(to: list) }
+    }
+
+    /// Clears the list and puts the cursor in the add bar for the first item.
+    private func startNewList() {
+        withAnimation(.spring(response: 0.45, dampingFraction: 0.86)) {
+            list.clearAll()
+            composer.dismissPhotoNotice()
+            showDone = false
+        }
+        composerFocused = true
     }
 
     /// Opens the camera over the list; the overlay slides its own card up.
