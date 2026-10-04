@@ -14,6 +14,9 @@ struct RootView: View {
             ShoppingListView(api: api, analytics: analytics)
                 .tabItem { Label("List", systemImage: "checklist") }
 
+            PlusTabView()
+                .tabItem { Label("Aisle+", systemImage: "sparkles") }
+
             YouView(api: api, location: location)
                 .tabItem { Label("You", systemImage: "person.crop.circle") }
         }

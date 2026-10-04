@@ -7,6 +7,7 @@ struct AisleApp: App {
     @State private var shoppingList: ShoppingListStore
     @State private var recentSearches: RecentSearches
     @State private var accounts: AccountStore
+    @State private var plus: PlusStore
     @AppStorage(OnboardingFlow.completedKey) private var onboardingComplete = false
     @AppStorage(AppearancePreference.defaultsKey) private var appearance = AppearancePreference.system
     @Environment(\.scenePhase) private var scenePhase
@@ -33,6 +34,7 @@ struct AisleApp: App {
         _shoppingList = State(initialValue: ShoppingListStore())
         _recentSearches = State(initialValue: RecentSearches())
         _accounts = State(initialValue: AccountStore())
+        _plus = State(initialValue: PlusStore())
         Theme.applyAppearance()
     }
 
@@ -49,6 +51,7 @@ struct AisleApp: App {
             }
                 .environment(health)
                 .environment(accounts)
+                .environment(plus)
                 .environment(storeSelection)
                 .environment(shoppingList)
                 .environment(recentSearches)
