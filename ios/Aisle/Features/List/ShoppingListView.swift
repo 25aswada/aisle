@@ -1,14 +1,18 @@
 import SwiftUI
 
+/// The shopping list: a progress card with Start Shopping, an add bar that takes whole
+/// lists, items grouped by department, and checked items folded into "Done".
 struct ShoppingListView: View {
     let api: AisleAPI
     let analytics: AnalyticsTracking
 
     @Environment(ShoppingListStore.self) private var list
     @Environment(StoreSelection.self) private var storeSelection
+    @Environment(RecentSearches.self) private var recents
     @State private var composer: ListComposerModel
     @State private var trip: ShoppingTripModel?
     @State private var showNeedsStore = false
+    @State private var showDone = false
     @FocusState private var composerFocused: Bool
 
     init(api: AisleAPI, analytics: AnalyticsTracking) {
@@ -17,55 +21,65 @@ struct ShoppingListView: View {
         _composer = State(initialValue: ListComposerModel(api: api, analytics: analytics))
     }
 
+    private var groups: [(name: String, items: [ListItem])] {
+        var order: [String] = []
+        var byName: [String: [ListItem]] = [:]
+        for item in list.remaining {
+            let name = item.categoryName?.trimmingCharacters(in: .whitespaces).nilIfEmpty ?? "Other"
+            if byName[name] == nil { order.append(name) }
+            byName[name, default: []].append(item)
+        }
+        // "Other" last; everything else keeps the order it was added in.
+        let sorted = order.filter { $0 != "Other" } + order.filter { $0 == "Other" }
+        return sorted.map { ($0, byName[$0] ?? []) }
+    }
+
+    private var done: [ListItem] { list.items.filter(\.isDone) }
+
+    private var suggestions: [String] {
+        let have = Set(list.items.map { $0.text.lowercased() })
+        return Array(recents.queries.filter { !have.contains($0.lowercased()) }.prefix(5))
+    }
+
     var body: some View {
         NavigationStack {
-            List {
-                Section {
-                    ListComposer(composer: composer, focused: $composerFocused) {
-                        Task { await composer.add(to: list) }
-                    }
-                } footer: {
-                    if let notice = composer.notice {
-                        Label(notice, systemImage: "wifi.slash")
-                    } else {
-                        Text("Type or paste several items at once, like “milk eggs bananas toothpaste”.")
-                    }
-                }
-
-                if list.items.isEmpty {
-                    Section {
-                        AisleEmptyState(
-                            title: "Your list is empty",
-                            systemImage: "checklist",
-                            message: "Add items above."
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    header
+                    if !list.items.isEmpty {
+                        ProgressCard(
+                            total: list.items.count, left: list.remaining.count,
+                            departments: groups.count, storeName: storeSelection.current?.name,
+                            onStart: startShopping
                         )
-                        .listRowBackground(Rectangle().fill(Theme.accentWash))
+                        .padding(.top, 20)
+                        .transition(.opacity.combined(with: .offset(y: 10)))
                     }
-                } else {
-                    Section {
-                        ForEach(list.items) { item in
-                            ListItemRow(item: item)
-                        }
-                        .onDelete { list.remove(atOffsets: $0) }
-                        .onMove { list.move(fromOffsets: $0, toOffset: $1) }
-                    } header: {
-                        Text("\(list.remaining.count) of \(list.items.count) left")
+                    composerBar.padding(.top, 18)
+                    if list.items.isEmpty {
+                        EmptyListCard(onTemplate: addText)
+                            .padding(.top, 26)
+                            .transition(.opacity.combined(with: .offset(y: 10)))
+                    }
+                    ForEach(Array(groups.enumerated()), id: \.element.name) { index, group in
+                        DepartmentSection(name: group.name, colorIndex: index, items: group.items)
+                            .padding(.top, 24)
+                    }
+                    if !done.isEmpty {
+                        doneSection.padding(.top, 22)
                     }
                 }
+                .padding(.horizontal, 20)
+                .padding(.top, 8)
+                .padding(.bottom, 32)
+                .animation(.spring(response: 0.45, dampingFraction: 0.86), value: list.items)
+                .animation(.spring(response: 0.45, dampingFraction: 0.86), value: showDone)
             }
-            .aislePage()
-            .tint(Theme.ink)
-            .safeAreaInset(edge: .bottom) {
-                if !list.remaining.isEmpty {
-                    Button(action: startShopping) {
-                        Label("Start Shopping", systemImage: "cart")
-                    }
-                    .buttonStyle(.aisleAccent)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 10)
-                    .accessibilityIdentifier("startShoppingButton")
-                }
-            }
+            .scrollDismissesKeyboard(.interactively)
+            .safeAreaInset(edge: .top, spacing: 0) { StatusBarBackdrop() }
+            .background(AisleBackground())
+            .toolbar(.hidden, for: .navigationBar)
+            .sensoryFeedback(.impact(weight: .light), trigger: list.remaining.count)
             .fullScreenCover(item: $trip) { trip in
                 ShoppingModeView(model: trip)
             }
@@ -74,26 +88,164 @@ struct ShoppingListView: View {
             } message: {
                 Text("Pick your store on the Find tab, then start shopping.")
             }
-            .navigationTitle("List")
-            .toolbar {
+        }
+    }
+
+    // MARK: - Header
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                AisleWordmark(size: 26)
+                Spacer()
                 if !list.items.isEmpty {
-                    ToolbarItem(placement: .topBarLeading) { EditButton() }
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Menu {
-                            Button("Clear checked items", systemImage: "checkmark.circle") { list.clearCompleted() }
-                                .disabled(list.items.allSatisfy { !$0.isDone })
-                            Button("Clear all", systemImage: "trash", role: .destructive) { list.clearAll() }
-                        } label: {
-                            Label("More", systemImage: "ellipsis.circle")
-                        }
+                    Menu {
+                        Button("Clear checked items", systemImage: "checkmark.circle") { list.clearCompleted() }
+                            .disabled(done.isEmpty)
+                        Button("Clear all", systemImage: "trash", role: .destructive) { list.clearAll() }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(Theme.ink)
+                            .frame(width: 44, height: 44)
+                            .background(Theme.surface.opacity(0.9), in: Circle())
+                            .shadow(color: Theme.ink.opacity(0.06), radius: 12, y: 6)
                     }
+                    .accessibilityLabel("List options")
                 }
+            }
+            (Text("Your ") + Text("list").foregroundStyle(Theme.accentInk))
+                .font(Theme.font(34, .bold, relativeTo: .largeTitle))
+                .tracking(-1)
+                .foregroundStyle(Theme.ink)
+                .padding(.top, 20)
+                .accessibilityAddTraits(.isHeader)
+            if let store = storeSelection.current {
+                HStack(spacing: 8) {
+                    RetailerLogo(url: store.retailerLogoURL, size: 22) {
+                        Image(systemName: "storefront").font(.system(size: 11, weight: .semibold))
+                    }
+                    Text("for \(store.name)").lineLimit(1)
+                }
+                .font(Theme.font(14, relativeTo: .subheadline))
+                .foregroundStyle(Theme.secondaryInk)
+                .padding(.top, 6)
             }
         }
     }
-}
 
-extension ShoppingListView {
+    // MARK: - Add bar
+
+    private var composerBar: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                Image(systemName: "plus")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(Theme.ink)
+                    .accessibilityHidden(true)
+                TextField("Add items, like milk, eggs, bread", text: $composer.draft, axis: .vertical)
+                    .lineLimit(1...4)
+                    .font(.aisleBody)
+                    .foregroundStyle(Theme.ink)
+                    .focused($composerFocused)
+                    .submitLabel(.done)
+                    .textInputAutocapitalization(.never)
+                    .onSubmit(submit)
+                    .accessibilityIdentifier("listComposerField")
+                if composer.isAdding {
+                    ProgressView().frame(width: 44, height: 44)
+                } else {
+                    Button(action: submit) {
+                        Image(systemName: "arrow.up")
+                            .font(.system(size: 16, weight: .bold))
+                            .foregroundStyle(Theme.onAccent)
+                            .frame(width: 44, height: 44)
+                            .background(Theme.accent, in: Circle())
+                    }
+                    .disabled(composer.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .accessibilityLabel("Add")
+                    .accessibilityIdentifier("listAddButton")
+                }
+            }
+            .padding(.leading, 18)
+            .padding(.trailing, 7)
+            .padding(.vertical, 7)
+            .frame(minHeight: 58)
+            .background(Theme.surface, in: RoundedRectangle(cornerRadius: 29, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 29, style: .continuous).strokeBorder(Theme.accentRing, lineWidth: 1.5))
+            .shadow(color: Theme.glow.opacity(0.10), radius: 14, y: 8)
+
+            if let notice = composer.notice {
+                Label(notice, systemImage: "wifi.slash")
+                    .font(.aisleFootnote)
+                    .foregroundStyle(Theme.secondaryInk)
+                    .padding(.leading, 6)
+            } else if !suggestions.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(suggestions, id: \.self) { suggestion in
+                            Button { addText(suggestion) } label: {
+                                HStack(spacing: 5) {
+                                    Image(systemName: "plus")
+                                        .font(.system(size: 11, weight: .bold))
+                                        .foregroundStyle(Color(hex: 0xDC6F9C))
+                                    Text(suggestion)
+                                }
+                                .font(Theme.font(13, .semibold, relativeTo: .footnote))
+                                .foregroundStyle(Theme.ink)
+                                .padding(.leading, 10)
+                                .padding(.trailing, 13)
+                                .frame(height: 34)
+                                .background(Theme.fill, in: Capsule())
+                            }
+                            .buttonStyle(PressableCardStyle())
+                            .accessibilityLabel("Add \(suggestion)")
+                        }
+                    }
+                }
+                .scrollClipDisabled()
+            }
+        }
+    }
+
+    // MARK: - Done
+
+    private var doneSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Button { showDone.toggle() } label: {
+                HStack(spacing: 8) {
+                    Text("Done · \(done.count)")
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 11, weight: .bold))
+                        .rotationEffect(.degrees(showDone ? 180 : 0))
+                }
+                .font(Theme.font(13, .semibold, relativeTo: .footnote))
+                .foregroundStyle(Theme.ink)
+                .padding(.horizontal, 14)
+                .frame(height: 36)
+                .background(Theme.fill, in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .accessibilityHint(showDone ? "Hides checked items" : "Shows checked items")
+            if showDone {
+                ItemsCard(items: done)
+                    .opacity(0.8)
+                    .transition(.opacity.combined(with: .offset(y: -6)))
+            }
+        }
+    }
+
+    // MARK: - Actions
+
+    private func submit() {
+        Task { await composer.add(to: list) }
+    }
+
+    private func addText(_ text: String) {
+        composer.draft = text
+        submit()
+    }
+
     private func startShopping() {
         composerFocused = false
         guard let store = storeSelection.current else {
@@ -108,34 +260,121 @@ extension ShoppingTripModel: Identifiable {
     nonisolated var id: ObjectIdentifier { ObjectIdentifier(self) }
 }
 
-private struct ListComposer: View {
-    @Bindable var composer: ListComposerModel
-    var focused: FocusState<Bool>.Binding
-    let onAdd: () -> Void
+private extension String {
+    var nilIfEmpty: String? { isEmpty ? nil : self }
+}
+
+// MARK: - Progress card
+
+private struct ProgressCard: View {
+    let total: Int
+    let left: Int
+    let departments: Int
+    let storeName: String?
+    let onStart: () -> Void
+
+    private var fraction: Double { total == 0 ? 0 : Double(total - left) / Double(total) }
 
     var body: some View {
-        // Centered: a vertical-axis field doesn't report a baseline that lines up with the pill.
-        HStack(alignment: .center, spacing: 8) {
-            TextField("Add items", text: $composer.draft, axis: .vertical)
-                .lineLimit(1...4)
-                .focused(focused)
-                .submitLabel(.done)
-                .textInputAutocapitalization(.never)
-                .onSubmit(onAdd)
-                .accessibilityIdentifier("listComposerField")
-            if composer.isAdding {
-                ProgressView()
-            } else {
-                Button("Add", action: onAdd)
-                    .buttonStyle(.aisleAccentPill)
-                    .disabled(composer.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                    .accessibilityIdentifier("listAddButton")
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 16) {
+                ZStack {
+                    Circle().stroke(Theme.onAccent.opacity(0.12), lineWidth: 7)
+                    Circle()
+                        .trim(from: 0, to: fraction)
+                        .stroke(Theme.onAccent, style: StrokeStyle(lineWidth: 7, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                        .animation(.spring(response: 0.6, dampingFraction: 0.8), value: fraction)
+                    Text("\(Int((fraction * 100).rounded()))%")
+                        .font(Theme.font(15, .bold, relativeTo: .subheadline))
+                        .contentTransition(.numericText(value: fraction))
+                }
+                .frame(width: 60, height: 60)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(left == 0 ? "All done!" : "\(left) \(left == 1 ? "item" : "items") left")
+                        .font(Theme.font(22, .bold, relativeTo: .title2))
+                        .tracking(-0.4)
+                        .contentTransition(.numericText(value: Double(left)))
+                    Text(summary)
+                        .font(Theme.font(13, relativeTo: .footnote))
+                        .opacity(0.75)
+                        .lineLimit(2)
+                }
             }
+            .accessibilityElement(children: .combine)
+
+            Button(action: onStart) {
+                Label("Start shopping · best route", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
+                    .font(.aisleHeadline)
+                    .foregroundStyle(Color.white)
+                    .frame(maxWidth: .infinity, minHeight: 52)
+                    .background(Color(hex: 0x1F1B24), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+            .buttonStyle(PressableCardStyle())
+            .disabled(left == 0)
+            .opacity(left == 0 ? 0.5 : 1)
+            .accessibilityIdentifier("startShoppingButton")
+        }
+        .foregroundStyle(Theme.onAccent)
+        .padding(18)
+        .background(Theme.accent, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .shadow(color: Theme.glow.opacity(0.22), radius: 18, y: 12)
+    }
+
+    private var summary: String {
+        let depts = "\(departments) \(departments == 1 ? "department" : "departments")"
+        return storeName.map { "\(depts) · sorted for \($0)" } ?? depts
+    }
+}
+
+// MARK: - Sections and rows
+
+private struct DepartmentSection: View {
+    let name: String
+    let colorIndex: Int
+    let items: [ListItem]
+
+    private static let dots: [Color] = [
+        Color(hex: 0xE2CFF9), Color(hex: 0xF9CFE0), Color(hex: 0xFFDDC6),
+        Color(hex: 0xFFEDC2), Color(hex: 0xD9E4F7), Color(hex: 0xD7EFDF),
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Circle().fill(Self.dots[colorIndex % Self.dots.count]).frame(width: 8, height: 8)
+                Text(name.uppercased()).fontWeight(.bold)
+                Text("· \(items.count)")
+            }
+            .font(Theme.font(13, .medium, relativeTo: .footnote))
+            .tracking(0.3)
+            .foregroundStyle(Theme.secondaryInk)
+            .padding(.leading, 4)
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isHeader)
+            ItemsCard(items: items)
         }
     }
 }
 
-/// A list row whose text is edited in place.
+private struct ItemsCard: View {
+    let items: [ListItem]
+
+    var body: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
+                ListItemRow(item: item)
+                if index < items.count - 1 {
+                    Divider().overlay(Theme.hairline).padding(.leading, 54)
+                }
+            }
+        }
+        .background(Theme.surface.opacity(0.92), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .shadow(color: Theme.ink.opacity(0.06), radius: 14, y: 8)
+    }
+}
+
+/// One item: a gradient check, the name (editable in place) and its quantity.
 struct ListItemRow: View {
     let item: ListItem
 
@@ -146,29 +385,67 @@ struct ListItemRow: View {
     var body: some View {
         HStack(spacing: 12) {
             Button {
-                list.setDone(item.id, !item.isDone)
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+                    list.setDone(item.id, !item.isDone)
+                }
             } label: {
-                Image(systemName: item.isDone ? "checkmark.circle.fill" : "circle")
-                    .font(.title3)
-                    .foregroundStyle(item.isDone ? AnyShapeStyle(Theme.accentInk) : AnyShapeStyle(Theme.secondaryInk))
+                ZStack {
+                    Circle()
+                        .strokeBorder(Theme.secondaryInk.opacity(0.45), lineWidth: 2)
+                        .opacity(item.isDone ? 0 : 1)
+                    Circle()
+                        .fill(Theme.accent)
+                        .scaleEffect(item.isDone ? 1.05 : 0.3)
+                        .opacity(item.isDone ? 1 : 0)
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 11, weight: .heavy))
+                        .foregroundStyle(Theme.onAccent)
+                        .scaleEffect(item.isDone ? 1 : 0.4)
+                        .opacity(item.isDone ? 1 : 0)
+                }
+                .frame(width: 26, height: 26)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel(item.isDone ? "Mark \(item.text) as not done" : "Mark \(item.text) as done")
 
-            VStack(alignment: .leading, spacing: 2) {
-                TextField("Item", text: $text)
-                    .focused($editing)
-                    .strikethrough(item.isDone)
-                    .foregroundStyle(item.isDone ? .secondary : .primary)
-                    .submitLabel(.done)
-                    .onSubmit { list.rename(item.id, to: text) }
-                    .accessibilityLabel("Item name")
-                if let detail {
-                    Text(detail)
-                        .font(.aisleCaption)
-                        .foregroundStyle(Theme.secondaryInk)
-                }
+            TextField("Item", text: $text)
+                .font(Theme.font(17, relativeTo: .body))
+                .focused($editing)
+                .strikethrough(item.isDone, color: Color(hex: 0xDC6F9C).opacity(0.7))
+                .foregroundStyle(item.isDone ? Theme.secondaryInk : Theme.ink)
+                .submitLabel(.done)
+                .onSubmit { list.rename(item.id, to: text) }
+                .accessibilityLabel("Item name")
+
+            if let quantity = item.quantity, !quantity.isEmpty {
+                Text(quantity)
+                    .font(Theme.font(13, .semibold, relativeTo: .footnote))
+                    .foregroundStyle(Theme.ink)
+                    .padding(.horizontal, 9)
+                    .frame(minWidth: 28, minHeight: 26)
+                    .background(Theme.fill, in: Capsule())
+                    .accessibilityLabel("Quantity \(quantity)")
             }
+
+            Button {
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) { list.remove(item.id) }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Theme.secondaryInk.opacity(0.7))
+                    .frame(width: 36, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Remove \(item.text)")
+        }
+        .padding(.leading, 4)
+        .padding(.trailing, 6)
+        .frame(minHeight: 56)
+        .contextMenu {
+            Button("Remove", systemImage: "trash", role: .destructive) { list.remove(item.id) }
         }
         .onAppear { text = item.text }
         .onChange(of: item.text) { text = item.text }
@@ -176,11 +453,87 @@ struct ListItemRow: View {
             if !isEditing { list.rename(item.id, to: text) }
         }
     }
+}
 
-    private var detail: String? {
-        // Skip the category when it just repeats the item ("cheese" / "Cheese").
-        let category = item.categoryName.flatMap { $0.caseInsensitiveCompare(item.text) == .orderedSame ? nil : $0 }
-        let parts = [item.quantity.map { "Qty \($0)" }, category].compactMap { $0 }
-        return parts.isEmpty ? nil : parts.joined(separator: " · ")
+// MARK: - Empty
+
+private struct EmptyListCard: View {
+    let onTemplate: (String) -> Void
+
+    private static let templates: [(String, String)] = [
+        ("Weeknight dinner", "chicken, rice, onions, garlic, spinach, lemons"),
+        ("Breakfast basics", "eggs, bread, butter, bananas, oats, coffee"),
+        ("Party supplies", "balloons, candles, plates, napkins, cups, ice cream"),
+    ]
+
+    var body: some View {
+        VStack(spacing: 0) {
+            illustration
+            Text("Start a list")
+                .font(Theme.font(22, .bold, relativeTo: .title2))
+                .foregroundStyle(Theme.ink)
+                .padding(.top, 18)
+            Text("Type or paste a whole list at once. Aisle sorts it by department and plans the shortest walk.")
+                .font(Theme.font(15, relativeTo: .subheadline))
+                .foregroundStyle(Theme.secondaryInk)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.top, 6)
+            Text("Or start from")
+                .font(Theme.font(12, .semibold, relativeTo: .caption))
+                .foregroundStyle(Theme.secondaryInk)
+                .padding(.top, 18)
+            FlowLayout(spacing: 8) {
+                ForEach(Self.templates, id: \.0) { title, items in
+                    Button(title) { onTemplate(items) }
+                        .font(Theme.font(13, .semibold, relativeTo: .footnote))
+                        .foregroundStyle(Theme.ink)
+                        .padding(.horizontal, 14)
+                        .frame(height: 38)
+                        .background(Theme.fill, in: Capsule())
+                        .buttonStyle(PressableCardStyle())
+                }
+            }
+            .padding(.top, 8)
+        }
+        .padding(.horizontal, 22)
+        .padding(.top, 26)
+        .padding(.bottom, 22)
+        .frame(maxWidth: .infinity)
+        .background(Theme.surface.opacity(0.92), in: RoundedRectangle(cornerRadius: 30, style: .continuous))
+        .shadow(color: Theme.ink.opacity(0.06), radius: 16, y: 8)
+    }
+
+    private var illustration: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(Theme.fill)
+                .frame(width: 140, height: 112)
+                .rotationEffect(.degrees(-7))
+                .offset(x: 6, y: 4)
+            VStack(alignment: .leading, spacing: 12) {
+                fakeRow(done: true, width: 70)
+                fakeRow(done: false, width: 90)
+                fakeRow(done: false, width: 56)
+            }
+            .padding(.horizontal, 16)
+            .frame(width: 148, height: 116, alignment: .leading)
+            .background(Theme.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .shadow(color: Theme.glow.opacity(0.18), radius: 15, y: 10)
+            .rotationEffect(.degrees(4))
+        }
+        .frame(height: 128)
+        .accessibilityHidden(true)
+    }
+
+    private func fakeRow(done: Bool, width: CGFloat) -> some View {
+        HStack(spacing: 10) {
+            if done {
+                Circle().fill(Theme.accent).frame(width: 16, height: 16)
+            } else {
+                Circle().strokeBorder(Theme.hairline, lineWidth: 2).frame(width: 16, height: 16)
+            }
+            Capsule().fill(Theme.fill).frame(width: width, height: 8)
+        }
     }
 }
