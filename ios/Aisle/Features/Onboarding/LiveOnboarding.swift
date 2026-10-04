@@ -245,14 +245,8 @@ private struct IntroStage: View {
                     .frame(width: 340, height: 340)
                     .scaleEffect(bloom ? 1 : 0.3)
                     .opacity(bloom ? 1 : 0)
-                AisleMark(size: logoSize)
-                    .mask(alignment: .leading) { Rectangle().frame(width: logoSize / 2) }
-                    .offset(x: assembled ? 0 : -110)
-                    .opacity(assembled ? 1 : 0)
-                AisleMark(size: logoSize)
-                    .mask(alignment: .trailing) { Rectangle().frame(width: logoSize / 2) }
-                    .offset(x: assembled ? 0 : 110)
-                    .opacity(assembled ? 1 : 0)
+                // Shelves stock from the vanishing point outward, then follow the phone's tilt.
+                StockingLogo(size: logoSize, stocked: assembled)
             }
             .frame(height: 220)
             .accessibilityHidden(true)
