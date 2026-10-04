@@ -4,3 +4,6 @@ __pycache__/
 .pytest_cache/
 *.db
 *.egg-info/
+
+# Local previews of the sign-in code email.
+.email_preview.html
