@@ -361,18 +361,19 @@ private struct StepsMode: View {
 
             Spacer(minLength: 12)
 
+            // Back only when there's a step to go back to; otherwise the main button fills the row.
             HStack(spacing: 10) {
-                Button("Back") {
-                    if found { found = false } else if index > 0 { advance(-1) }
+                if index > 0 && !found {
+                    Button("Back") { advance(-1) }
+                        .buttonStyle(.aisleSoftFilled)
+                        .transition(.opacity)
                 }
-                .buttonStyle(.aisleSoftFilled)
-                .disabled(index == 0 && !found)
                 Button(nextLabel) {
                     if !isLast { advance(1) } else if found { onDone() } else { withAnimation(.spring) { found = true } }
                 }
                 .buttonStyle(.aisleAccent)
-                .layoutPriority(1)
             }
+            .animation(.spring(response: 0.35, dampingFraction: 0.85), value: index > 0 && !found)
             .padding(.horizontal, 16)
             .padding(.bottom, 8)
         }

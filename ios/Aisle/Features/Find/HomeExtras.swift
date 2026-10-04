@@ -242,6 +242,7 @@ struct StoreGlanceCard: View {
 struct StoreGlanceMap: View {
     let layout: StoreLayout
     let storeName: String
+    var logoURL: URL? = nil
 
     @State private var tilted = true
     @State private var yaw: Double = 0
@@ -259,9 +260,14 @@ struct StoreGlanceMap: View {
                 }
                 .accessibilityLabel("Close")
                 Spacer()
-                Text(storeName)
-                    .font(Theme.font(17, .bold, relativeTo: .headline))
-                    .lineLimit(1)
+                HStack(spacing: 8) {
+                    RetailerLogo(url: logoURL, size: 26) { EmptyView() }
+                        .accessibilityHidden(true)
+                    Text(storeName)
+                        .font(Theme.font(17, .bold, relativeTo: .headline))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
                 Spacer()
                 Color.clear.frame(width: 44, height: 44)
             }

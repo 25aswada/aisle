@@ -233,7 +233,7 @@ extension FindView {
                 )
                 .padding(.top, 8)
                 .fullScreenCover(isPresented: $isShowingStoreMap) {
-                    StoreGlanceMap(layout: layout, storeName: store.name)
+                    StoreGlanceMap(layout: layout, storeName: store.name, logoURL: store.retailerLogoURL)
                 }
             }
         case .loading:
