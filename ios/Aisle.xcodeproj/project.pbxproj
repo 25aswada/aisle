@@ -161,6 +161,7 @@
 		D013BA53FADF2AB56FCA7D95 /* Feedback.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Feedback.swift; sourceTree = "<group>"; };
 		DBAA09BB87453751AED5AF8A /* FindModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FindModel.swift; sourceTree = "<group>"; };
 		DDE7419EB2F6E6940BFF3E1A /* ShoppingTripModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShoppingTripModel.swift; sourceTree = "<group>"; };
+		DEEB1DAAB2673235DF50AE20 /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 		DF43A2FC5DB139B6419BA211 /* Geist-Bold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Geist-Bold.ttf"; sourceTree = "<group>"; };
 		E01BF4868F5ACAD524393D32 /* FindView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FindView.swift; sourceTree = "<group>"; };
 		E2710CE8DFA4696F6750EE7A /* ItemSearchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ItemSearchTests.swift; sourceTree = "<group>"; };
@@ -274,6 +275,14 @@
 			path = Stores;
 			sourceTree = "<group>";
 		};
+		2E5D1970AF683D13E640669D /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				DEEB1DAAB2673235DF50AE20 /* Debug.xcconfig */,
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
 		4389A27BB43485694561B574 /* List */ = {
 			isa = PBXGroup;
 			children = (
@@ -287,6 +296,7 @@
 			children = (
 				09157068C0BD81B4BBFB1A62 /* Aisle */,
 				79254B9D677FD2C68CEF0D9C /* AisleTests */,
+				2E5D1970AF683D13E640669D /* Config */,
 				8B407815DB2988C767A002DC /* Products */,
 			);
 			sourceTree = "<group>";
@@ -791,6 +801,7 @@
 		};
 		6F474F6DD2C890AE9BEB5F3A /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = DEEB1DAAB2673235DF50AE20 /* Debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;

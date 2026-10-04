@@ -23,6 +23,8 @@ targets:
       # Local StoreKit testing only; referenced by the scheme, never shipped in the app.
       - path: Aisle/Aisle.storekit
         buildPhase: none
+    configFiles:
+      Debug: Config/Debug.xcconfig
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.shopaisle.aisle

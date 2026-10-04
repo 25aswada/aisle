@@ -1,0 +1,4 @@
+// Debug builds of the Aisle target. Machine-specific overrides, such as the server
+// address a phone run from Xcode should use, go in Local.xcconfig (git-ignored):
+//   AISLE_API_BASE_URL = http:/$()/192.168.1.20:8002
+#include? "Local.xcconfig"
