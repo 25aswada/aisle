@@ -68,6 +68,7 @@ private struct PlusMemberView: View {
     @State private var savedMaps = 0
     @State private var managing = false
     @State private var restoreMessage: String?
+    @State private var cancelling = false
 
     static let supportEmail = "support@shopaisle.app"
 
@@ -90,6 +91,10 @@ private struct PlusMemberView: View {
                 HStack(spacing: 22) {
                     Button("Restore purchases") { Task { await restore() } }
                     Button("Help") { mail(subject: "Aisle+ help") }
+                    if membership?.willRenew ?? true {
+                        Button("Cancel Aisle+") { cancelling = true }
+                            .accessibilityIdentifier("cancelPlusButton")
+                    }
                 }
                 .font(Theme.font(13, .semibold, relativeTo: .footnote))
                 .foregroundStyle(Theme.secondaryInk)
@@ -101,6 +106,13 @@ private struct PlusMemberView: View {
             .padding(.bottom, 32)
         }
         .task { await refresh() }
+        .sheet(isPresented: $cancelling, onDismiss: { Task { membership = await plus.membership() } }) {
+            CancelPlusFlow(
+                extraPhotoSearches: days.reduce(0) { $0 + $1.extra },
+                sharedLists: sharedLists.count
+            )
+            .presentationDetents([.large])
+        }
         .manageSubscriptionsSheet(isPresented: $managing)
         .onChange(of: managing) { _, open in
             if !open { Task { membership = await plus.membership() } }
