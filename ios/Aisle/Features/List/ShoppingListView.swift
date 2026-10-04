@@ -14,6 +14,7 @@ struct ShoppingListView: View {
     @State private var showNeedsStore = false
     @State private var showDone = false
     @FocusState private var composerFocused: Bool
+    @State private var scrolledUnderStatusBar: CGFloat = 0
 
     init(api: AisleAPI, analytics: AnalyticsTracking) {
         self.api = api
@@ -46,6 +47,7 @@ struct ShoppingListView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     header
+                        .trackingScrollUnderStatusBar($scrolledUnderStatusBar)
                     if !list.items.isEmpty {
                         ProgressCard(
                             total: list.items.count, left: list.remaining.count,
@@ -76,7 +78,7 @@ struct ShoppingListView: View {
                 .animation(.spring(response: 0.45, dampingFraction: 0.86), value: showDone)
             }
             .scrollDismissesKeyboard(.interactively)
-            .safeAreaInset(edge: .top, spacing: 0) { StatusBarBackdrop() }
+            .safeAreaInset(edge: .top, spacing: 0) { StatusBarBackdrop(scrolled: scrolledUnderStatusBar) }
             .background(AisleBackground())
             .toolbar(.hidden, for: .navigationBar)
             .sensoryFeedback(.impact(weight: .light), trigger: list.remaining.count)

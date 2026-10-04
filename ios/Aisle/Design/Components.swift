@@ -144,10 +144,19 @@ struct ConfidenceBars: View {
 
 /// Covers the status bar on screens that hide the navigation bar, so content
 /// scrolling up doesn't run under the clock. Use as a top `safeAreaInset`.
+///
+/// It stays clear while the page is at rest, so the background's glow runs up behind the
+/// clock uncut, and fades in as content scrolls under it. Pair it with
+/// `trackingScrollUnderStatusBar` on the first view in the scroll content.
 struct StatusBarBackdrop: View {
+    /// How far the page has scrolled up under the status bar, in points.
+    var scrolled: CGFloat
+
+    private var opacity: Double { min(1, scrolled / 30) }
+
     var body: some View {
         // Sits at the top of the safe area and draws upward over the status bar.
-        // Solid behind the clock, fading out so the page's glows show through at rest.
+        // Solid behind the clock, fading out at its bottom edge.
         GeometryReader { proxy in
             LinearGradient(
                 stops: [
@@ -159,10 +168,36 @@ struct StatusBarBackdrop: View {
             )
             .frame(height: proxy.safeAreaInsets.top)
             .offset(y: -proxy.safeAreaInsets.top)
+            .opacity(opacity)
         }
         .frame(height: 0)
         .allowsHitTesting(false)
         .accessibilityHidden(true)
+    }
+}
+
+extension View {
+    /// Reports how far this view (the first in a scroll view's content) has scrolled up
+    /// under the status bar, measured from where it rests. `topPadding` is the page's top
+    /// padding: the gap before content reaches the clock.
+    func trackingScrollUnderStatusBar(_ scrolled: Binding<CGFloat>, topPadding: CGFloat = 8) -> some View {
+        modifier(StatusBarScrollTracker(scrolled: scrolled, topPadding: topPadding))
+    }
+}
+
+private struct StatusBarScrollTracker: ViewModifier {
+    @Binding var scrolled: CGFloat
+    let topPadding: CGFloat
+    @State private var restTop: CGFloat?
+
+    func body(content: Content) -> some View {
+        content.onGeometryChange(for: CGFloat.self) { proxy in
+            proxy.frame(in: .scrollView).minY
+        } action: { top in
+            let rest = restTop ?? top
+            restTop = rest
+            scrolled = max(0, rest - topPadding - top)
+        }
     }
 }
 

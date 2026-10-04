@@ -18,6 +18,8 @@ struct FindView: View {
     @FocusState private var searchFocused: Bool
     @FocusState private var followUpFocused: Bool
     @State private var isTakingPhoto = false
+    /// How far the page has scrolled up under the status bar, in points.
+    @State private var scrolledUnderStatusBar: CGFloat = 0
     @State private var isShowingStoreMap = false
 
     init(api: AisleAPI, location: LocationProviding, analytics: AnalyticsTracking, recents: RecentSearches) {
@@ -33,6 +35,7 @@ struct FindView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
                         AisleWordmark()
+                            .trackingScrollUnderStatusBar($scrolledUnderStatusBar)
 
                         CurrentStoreCard(store: storeSelection.current) {
                             isPickingStore = true
@@ -65,7 +68,7 @@ struct FindView: View {
                     .animation(.easeInOut(duration: 0.25), value: model.turns)
                     .animation(.easeInOut(duration: 0.25), value: model.isReplying)
                 }
-                .safeAreaInset(edge: .top, spacing: 0) { StatusBarBackdrop() }
+                .safeAreaInset(edge: .top, spacing: 0) { StatusBarBackdrop(scrolled: scrolledUnderStatusBar) }
                 .background(AisleBackground())
                 .scrollDismissesKeyboard(.interactively)
                 .safeAreaInset(edge: .bottom, spacing: 0) {
