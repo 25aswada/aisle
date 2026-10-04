@@ -4,6 +4,8 @@
 <dict>
 	<key>AisleAPIBaseURL</key>
 	<string>$(AISLE_API_BASE_URL)</string>
+	<key>AisleGoogleClientID</key>
+	<string>$(AISLE_GOOGLE_CLIENT_ID)</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
@@ -29,6 +31,8 @@
 	</dict>
 	<key>NSCameraUsageDescription</key>
 	<string>Aisle uses the camera when you take a photo of something you want to find, so it can tell what it is and where it is in the store.</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Aisle connects to its server on your local network while it's in development.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Aisle uses your location only to show stores near you. This is optional: you can always search for a store by name or address instead.</string>
 	<key>UIAppFonts</key>

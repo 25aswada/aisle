@@ -23,6 +23,7 @@
 		3618C647CD0C6133C13684DE /* StorePickerModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6216022D79B9DE1C089A661 /* StorePickerModel.swift */; };
 		364F5C4162973E8B889D6E76 /* WalkInLogo.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4843D865E1C542A02A4E7B3E /* WalkInLogo.swift */; };
 		38054A86D7E1D70C636BF4A8 /* StoreSelection.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9C41E6EC7BC762F86774E2C /* StoreSelection.swift */; };
+		481CF8857F601AA3BCD03D8E /* RemoteAuthService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F1FAAA21BC068E13516AE78 /* RemoteAuthService.swift */; };
 		4B3D8C22EEAF139C4D6A57DE /* SearchResultCard.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE4F13834561189FFE9147DE /* SearchResultCard.swift */; };
 		4F6CC080E74E25FE089AF249 /* ShoppingTripTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5145D20DA405E1996DD1F3D /* ShoppingTripTests.swift */; };
 		5ACE4B9EC16AA2E5AD7434D4 /* DeviceIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = C6B6020C56B5DF292D6E7D4E /* DeviceIdentity.swift */; };
@@ -47,6 +48,8 @@
 		89959A26C4D55B8332E66A29 /* ShoppingListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4295092DC67F0FAF0166F7DA /* ShoppingListView.swift */; };
 		8AA15C7072003E418933C59E /* StoreWayView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBCF27CF84FED0318884960D /* StoreWayView.swift */; };
 		8E84D080A6FBED7E78D05D50 /* StoreLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9F46A2180D9CDDF7F1BF5B3 /* StoreLayout.swift */; };
+		9123D3FA51940A018E770562 /* AccountAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = C191B72489E41A4FAC046896 /* AccountAPI.swift */; };
+		92EC0E9101DF99A6BCD7CF92 /* TokenStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF3EB0DBCA680EB6C9E92331 /* TokenStore.swift */; };
 		97794A08EF311AE5CCB6C4C1 /* LocationProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDA028F2F6A589486F37BCD /* LocationProvider.swift */; };
 		9D2E919CE99A27853EB7AADD /* Chat.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB9E64F0AE164ADA01052D9F /* Chat.swift */; };
 		A7B8720D41ED741D3BB76D31 /* ShoppingListStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F551FDCD24FEF4163ED9E8A /* ShoppingListStore.swift */; };
@@ -72,6 +75,7 @@
 		FD061C1F726001F4D851AE4C /* ItemSearch.swift in Sources */ = {isa = PBXBuildFile; fileRef = FB59E9020541E01FE841D412 /* ItemSearch.swift */; };
 		FD73A0DB5B9B81EF956C1442 /* FindView.swift in Sources */ = {isa = PBXBuildFile; fileRef = E01BF4868F5ACAD524393D32 /* FindView.swift */; };
 		FDD5013560706C1ABEF85881 /* FeedbackTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8C1FC1D0092199083C278E19 /* FeedbackTests.swift */; };
+		FE32297B9491CD09365C4F0D /* AccountFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = F24864019C6AC609101CD5EE /* AccountFlow.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -100,6 +104,7 @@
 		27AD420D9DA4F00D8D2F8E95 /* Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Components.swift; sourceTree = "<group>"; };
 		327AC850D80060DC07A58341 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		3DEE7D5DBFF5496EA378A386 /* StorePickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorePickerView.swift; sourceTree = "<group>"; };
+		3F1FAAA21BC068E13516AE78 /* RemoteAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteAuthService.swift; sourceTree = "<group>"; };
 		3F873B2DA2F116E6B4541BEC /* AppConfigTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfigTests.swift; sourceTree = "<group>"; };
 		4295092DC67F0FAF0166F7DA /* ShoppingListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShoppingListView.swift; sourceTree = "<group>"; };
 		4843D865E1C542A02A4E7B3E /* WalkInLogo.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WalkInLogo.swift; sourceTree = "<group>"; };
@@ -125,6 +130,7 @@
 		ABB2DBC3C15E5E57C3A76464 /* TestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestSupport.swift; sourceTree = "<group>"; };
 		ADDA028F2F6A589486F37BCD /* LocationProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationProvider.swift; sourceTree = "<group>"; };
 		AEA7188DFFF4134CEB8270FC /* DecodingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecodingTests.swift; sourceTree = "<group>"; };
+		AF3EB0DBCA680EB6C9E92331 /* TokenStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenStore.swift; sourceTree = "<group>"; };
 		B32D78E8C418750BEB4D5633 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		B4675725F0CCE03110D782AB /* Route.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Route.swift; sourceTree = "<group>"; };
 		B5145D20DA405E1996DD1F3D /* ShoppingTripTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShoppingTripTests.swift; sourceTree = "<group>"; };
@@ -132,11 +138,13 @@
 		B99C6CB8AF8BD5464965C162 /* OnboardingFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OnboardingFlow.swift; sourceTree = "<group>"; };
 		BABBC9C1CA447BB929731BDC /* HealthMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthMonitor.swift; sourceTree = "<group>"; };
 		BB9E64F0AE164ADA01052D9F /* Chat.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Chat.swift; sourceTree = "<group>"; };
+		C191B72489E41A4FAC046896 /* AccountAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountAPI.swift; sourceTree = "<group>"; };
 		C6216022D79B9DE1C089A661 /* StorePickerModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorePickerModel.swift; sourceTree = "<group>"; };
 		C6B6020C56B5DF292D6E7D4E /* DeviceIdentity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeviceIdentity.swift; sourceTree = "<group>"; };
 		C86E6E8C381F6BDBCA9E0805 /* FeedbackViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedbackViews.swift; sourceTree = "<group>"; };
 		C9C41E6EC7BC762F86774E2C /* StoreSelection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreSelection.swift; sourceTree = "<group>"; };
 		C9F46A2180D9CDDF7F1BF5B3 /* StoreLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreLayout.swift; sourceTree = "<group>"; };
+		CA697C063F5ED62EF84BDB3C /* Aisle.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Aisle.entitlements; sourceTree = "<group>"; };
 		CA92FEBC6C187376090D1B60 /* ShoppingListTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShoppingListTests.swift; sourceTree = "<group>"; };
 		CAE10BD9BB063D1B70E12C65 /* HealthResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthResponse.swift; sourceTree = "<group>"; };
 		CE4F13834561189FFE9147DE /* SearchResultCard.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchResultCard.swift; sourceTree = "<group>"; };
@@ -148,6 +156,7 @@
 		E2710CE8DFA4696F6750EE7A /* ItemSearchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ItemSearchTests.swift; sourceTree = "<group>"; };
 		EBCF27CF84FED0318884960D /* StoreWayView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreWayView.swift; sourceTree = "<group>"; };
 		F0805416F4A0EBB255FFB627 /* Store.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Store.swift; sourceTree = "<group>"; };
+		F24864019C6AC609101CD5EE /* AccountFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountFlow.swift; sourceTree = "<group>"; };
 		F4C6125E1AC53F27D7DB3122 /* Geist-Medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Geist-Medium.ttf"; sourceTree = "<group>"; };
 		F5A3B0C2147E6BCCE122221E /* CameraSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraSheet.swift; sourceTree = "<group>"; };
 		FB59E9020541E01FE841D412 /* ItemSearch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ItemSearch.swift; sourceTree = "<group>"; };
@@ -160,6 +169,7 @@
 		078A76FCF37C12CD9C30D916 /* Networking */ = {
 			isa = PBXGroup;
 			children = (
+				C191B72489E41A4FAC046896 /* AccountAPI.swift */,
 				1EA8A8BFF660474A635C93F4 /* APIClient.swift */,
 			);
 			path = Networking;
@@ -168,6 +178,7 @@
 		09157068C0BD81B4BBFB1A62 /* Aisle */ = {
 			isa = PBXGroup;
 			children = (
+				CA697C063F5ED62EF84BDB3C /* Aisle.entitlements */,
 				02E7A088040A8D4C88097DFB /* Aisle.storekit */,
 				8072BF40B6C9F9F2B7B7E9AD /* Assets.xcassets */,
 				B32D78E8C418750BEB4D5633 /* Info.plist */,
@@ -208,6 +219,7 @@
 		0F9E0A14F29071222142CC12 /* Onboarding */ = {
 			isa = PBXGroup;
 			children = (
+				F24864019C6AC609101CD5EE /* AccountFlow.swift */,
 				496BBC47AF11D1538DE838C7 /* LiveOnboarding.swift */,
 				B99C6CB8AF8BD5464965C162 /* OnboardingFlow.swift */,
 				48FE9F68E0B7552531D0D01B /* SignUpSteps.swift */,
@@ -349,7 +361,9 @@
 			children = (
 				4E28133ACF05710EB0935DF3 /* Account.swift */,
 				9F15E3A9B2B74D695D67A224 /* PlusStore.swift */,
+				3F1FAAA21BC068E13516AE78 /* RemoteAuthService.swift */,
 				0B6177DDB775035FB051DAD6 /* ShopperStats.swift */,
+				AF3EB0DBCA680EB6C9E92331 /* TokenStore.swift */,
 			);
 			path = Account;
 			sourceTree = "<group>";
@@ -472,6 +486,10 @@
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
+					617A58382A1E92704C1E14FC = {
+						DevelopmentTeam = 983N58VUTZ;
+						ProvisioningStyle = Automatic;
+					};
 				};
 			};
 			buildConfigurationList = ED725FCBE5B6C4A71C0AEA8E /* Build configuration list for PBXProject "Aisle" */;
@@ -517,6 +535,8 @@
 			files = (
 				1FBC1F5288442ABEF0433DED /* APIClient.swift in Sources */,
 				159DB262AB1B4E9FC1376D5E /* Account.swift in Sources */,
+				9123D3FA51940A018E770562 /* AccountAPI.swift in Sources */,
+				FE32297B9491CD09365C4F0D /* AccountFlow.swift in Sources */,
 				700677C23C091E32EBFABB43 /* AdaptiveStack.swift in Sources */,
 				7279D46DDD29BC46B14AD3AF /* AisleApp.swift in Sources */,
 				D07C52F967B4E3907957F9F5 /* Analytics.swift in Sources */,
@@ -540,6 +560,7 @@
 				790E90D0AC7C2C3848D3A993 /* PlusStore.swift in Sources */,
 				5EBED4D197E5A4EBAD9DC51C /* PlusViews.swift in Sources */,
 				CA6DA4E9F57439A98861270D /* RecentSearches.swift in Sources */,
+				481CF8857F601AA3BCD03D8E /* RemoteAuthService.swift in Sources */,
 				B3946AE5F2A4078DA484597D /* RootView.swift in Sources */,
 				FCC5FF0150AE423C10419E01 /* Route.swift in Sources */,
 				4B3D8C22EEAF139C4D6A57DE /* SearchResultCard.swift in Sources */,
@@ -560,6 +581,7 @@
 				38054A86D7E1D70C636BF4A8 /* StoreSelection.swift in Sources */,
 				8AA15C7072003E418933C59E /* StoreWayView.swift in Sources */,
 				738E7DD65402B6F914B1110D /* Theme.swift in Sources */,
+				92EC0E9101DF99A6BCD7CF92 /* TokenStore.swift in Sources */,
 				364F5C4162973E8B889D6E76 /* WalkInLogo.swift in Sources */,
 				763D77EA551898D70D72C44A /* YouView.swift in Sources */,
 			);
@@ -599,6 +621,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				AISLE_API_BASE_URL = "http://127.0.0.1:8000";
+				AISLE_GOOGLE_CLIENT_ID = "192788314882-d6e46f6nv0nc8b00iaomfv57pgr65js9.apps.googleusercontent.com";
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
@@ -664,7 +687,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.aisle.AisleTests;
+				PRODUCT_BUNDLE_IDENTIFIER = app.shopaisle.aisleTests;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Aisle.app/Aisle";
@@ -675,6 +698,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				AISLE_API_BASE_URL = "http://127.0.0.1:8000";
+				AISLE_GOOGLE_CLIENT_ID = "192788314882-d6e46f6nv0nc8b00iaomfv57pgr65js9.apps.googleusercontent.com";
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
@@ -742,14 +766,17 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Aisle/Aisle.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 983N58VUTZ;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Aisle/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.aisle.Aisle;
+				PRODUCT_BUNDLE_IDENTIFIER = app.shopaisle.aisle;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = 1;
 			};
@@ -760,14 +787,17 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Aisle/Aisle.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 983N58VUTZ;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Aisle/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.aisle.Aisle;
+				PRODUCT_BUNDLE_IDENTIFIER = app.shopaisle.aisle;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = 1;
 			};
@@ -783,7 +813,7 @@
 					"@executable_path/Frameworks",
 					"@loader_path/Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.aisle.AisleTests;
+				PRODUCT_BUNDLE_IDENTIFIER = app.shopaisle.aisleTests;
 				SDKROOT = iphoneos;
 				TARGETED_DEVICE_FAMILY = "1,2";
 				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Aisle.app/Aisle";

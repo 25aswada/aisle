@@ -22,6 +22,9 @@ struct YouView: View {
     @State private var isPickingStore = false
     @State private var showHowItWorks = false
     @State private var confirmSignOut = false
+    @State private var isSigningIn = false
+    @State private var confirmDelete = false
+    @State private var deleteError: String?
     @State private var scrolledUnderStatusBar: CGFloat = 0
 
     var body: some View {
@@ -34,7 +37,7 @@ struct YouView: View {
                         ProfileHeader(account: account)
                             .padding(.top, 26)
                     } else {
-                        SignedOutCard { onboardingComplete = false }
+                        SignedOutCard { isSigningIn = true }
                             .padding(.top, 22)
                     }
                     if searches > 0 {
@@ -90,6 +93,31 @@ struct YouView: View {
             }
             .sheet(isPresented: $showHowItWorks) {
                 HowAisleWorksSheet().presentationDetents([.medium, .large])
+            }
+            .sheet(isPresented: $isSigningIn) {
+                if let auth = accounts.auth {
+                    AccountSheet(auth: auth)
+                }
+            }
+            .confirmationDialog("Delete your account?", isPresented: $confirmDelete, titleVisibility: .visible) {
+                Button("Delete account", role: .destructive) {
+                    Task {
+                        do {
+                            try await accounts.deleteAccount()
+                        } catch {
+                            deleteError = (error as? LocalizedError)?.errorDescription ?? "Couldn't delete your account. Try again."
+                        }
+                    }
+                }
+            } message: {
+                Text("This permanently deletes your Aisle account and how you sign in. Your list and recent searches stay on this phone.")
+            }
+            .alert("Couldn't delete your account", isPresented: Binding(
+                get: { deleteError != nil }, set: { if !$0 { deleteError = nil } }
+            )) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(deleteError ?? "")
             }
             .confirmationDialog("Sign out of Aisle?", isPresented: $confirmSignOut, titleVisibility: .visible) {
                 Button("Sign out", role: .destructive) { accounts.signOut() }
@@ -236,6 +264,13 @@ struct YouView: View {
             ActionRow(systemImage: "sparkles", title: "Replay the intro") {
                 onboardingComplete = false
             }
+            if accounts.isSignedIn {
+                RowDivider()
+                ActionRow(systemImage: "person.crop.circle.badge.xmark", title: "Delete account", destructive: true) {
+                    confirmDelete = true
+                }
+                .accessibilityIdentifier("deleteAccountButton")
+            }
         }
     }
 
@@ -300,8 +335,8 @@ private struct ProfileHeader: View {
                 .foregroundStyle(Theme.ink)
                 .padding(.top, 16)
                 .accessibilityAddTraits(.isHeader)
-            if let email = account.email {
-                Text(email)
+            if let contact = account.email ?? account.phone.map(Self.formatted) {
+                Text(contact)
                     .font(Theme.font(14, relativeTo: .subheadline))
                     .foregroundStyle(Theme.secondaryInk)
                     .padding(.top, 4)
@@ -321,8 +356,17 @@ private struct ProfileHeader: View {
         switch account.provider {
         case .apple: return "apple.logo"
         case .google: return "g.circle"
+        case .phone: return "phone"
         case .email: return "envelope"
         }
+    }
+
+    /// "+12155550123" as "(215) 555-0123"; other countries as stored.
+    static func formatted(_ phone: String) -> String {
+        let digits = phone.filter(\.isNumber)
+        guard phone.hasPrefix("+1"), digits.count == 11 else { return phone }
+        let d = Array(digits.dropFirst())
+        return "(\(String(d[0..<3]))) \(String(d[3..<6]))-\(String(d[6..<10]))"
     }
 }
 

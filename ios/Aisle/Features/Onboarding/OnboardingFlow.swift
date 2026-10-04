@@ -1,9 +1,5 @@
 import SwiftUI
 
-enum OnboardingStep: Hashable {
-    case signUp, email, code, name
-}
-
 /// First launch: the animated walkthrough, then an optional account.
 struct OnboardingFlow: View {
     static let completedKey = "aisle.onboardingComplete"
@@ -13,7 +9,7 @@ struct OnboardingFlow: View {
     let onFinish: () -> Void
 
     @Environment(AccountStore.self) private var accounts
-    @State private var path: [OnboardingStep] = []
+    @State private var path: [AccountFlowStep] = []
     @State private var signUp: SignUpModel
 
     init(api: AisleAPI, location: LocationProviding, auth: AuthService, onFinish: @escaping () -> Void) {
@@ -28,48 +24,26 @@ struct OnboardingFlow: View {
             LiveOnboarding(
                 api: api,
                 location: location,
-                onCreateAccount: { path.append(.signUp) },
-                onSignIn: { path.append(.signUp) },
+                onCreateAccount: { path.append(.method(returning: false)) },
+                onSignIn: { path.append(.method(returning: true)) },
                 onFinish: onFinish
             )
             .toolbar(.hidden, for: .navigationBar)
-            .navigationDestination(for: OnboardingStep.self) { step in
-                destination(step)
-                    .toolbar(.hidden, for: .navigationBar)
-                    .navigationBarBackButtonHidden(true)
+            .navigationDestination(for: AccountFlowStep.self) { step in
+                AccountFlowScreen(
+                    step: step, model: signUp, path: $path,
+                    onLeave: {}, onSkip: onFinish,
+                    onSignedIn: { session in
+                        accounts.signIn(session)
+                        onFinish()
+                    }
+                )
+                .toolbar(.hidden, for: .navigationBar)
+                .navigationBarBackButtonHidden(true)
             }
         }
         .tint(Theme.ink)
         .font(.aisleBody)
-    }
-
-    @ViewBuilder
-    private func destination(_ step: OnboardingStep) -> some View {
-        switch step {
-        case .signUp:
-            SignUpMethodStep(
-                model: signUp,
-                onBack: back,
-                onEmail: { path.append(.email) },
-                onProviderSuccess: { path.append(.name) },
-                onSkip: onFinish
-            )
-        case .email:
-            EmailStep(model: signUp, onBack: back) { path.append(.code) }
-        case .code:
-            CodeStep(model: signUp, onBack: back) { path.append(.name) }
-        case .name:
-            NameStep(model: signUp, onBack: back) {
-                if let account = signUp.makeAccount() {
-                    accounts.signIn(account)
-                }
-                onFinish()
-            }
-        }
-    }
-
-    private func back() {
-        if !path.isEmpty { path.removeLast() }
     }
 }
 

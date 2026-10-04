@@ -14,8 +14,7 @@ struct AisleApp: App {
     private let api: AisleAPI
     private let location: LocationProvider
     private let analytics: AnalyticsClient
-    /// Development stand-in until the server has account endpoints.
-    private let auth: AuthService = LocalAuthService()
+    private let auth: AuthService
 
     init() {
         let configuration = URLSessionConfiguration.default
@@ -27,13 +26,15 @@ struct AisleApp: App {
             deviceID: DeviceIdentity.current()
         )
         self.api = api
+        let auth = RemoteAuthService(client: api, googleClientID: AppConfig.current.googleClientID)
+        self.auth = auth
         self.location = LocationProvider()
         self.analytics = AnalyticsClient(api: api)
         _health = State(initialValue: HealthMonitor(api: api))
         _storeSelection = State(initialValue: StoreSelection())
         _shoppingList = State(initialValue: ShoppingListStore())
         _recentSearches = State(initialValue: RecentSearches())
-        _accounts = State(initialValue: AccountStore())
+        _accounts = State(initialValue: AccountStore(auth: auth))
         _plus = State(initialValue: PlusStore())
         Theme.applyAppearance()
     }
@@ -56,6 +57,9 @@ struct AisleApp: App {
                 .environment(shoppingList)
                 .environment(recentSearches)
                 .preferredColorScheme(appearance.colorScheme)
+                .task {
+                    await accounts.refresh()
+                }
                 .task {
                     analytics.track(.appOpened)
                     await health.check()

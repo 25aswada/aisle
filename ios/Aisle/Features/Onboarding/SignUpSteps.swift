@@ -2,7 +2,10 @@ import SwiftUI
 
 struct SignUpMethodStep: View {
     @Bindable var model: SignUpModel
+    /// "Sign in" from the intro shows a welcome-back headline; the steps are the same.
+    var isReturning = false
     let onBack: () -> Void
+    let onPhone: () -> Void
     let onEmail: () -> Void
     let onProviderSuccess: () -> Void
     let onSkip: () -> Void
@@ -12,8 +15,13 @@ struct SignUpMethodStep: View {
             VStack(alignment: .leading, spacing: 12) {
                 AisleMark(size: 44)
                     .padding(.bottom, 10)
-                GradientHeadline(lead: "Your lists, ", accent: "on every device.")
-                OnboardingBody(text: "Create a free account to keep your shopping lists, usual stores and recent searches in sync.")
+                if isReturning {
+                    GradientHeadline(lead: "Welcome ", accent: "back.")
+                    OnboardingBody(text: "Sign in the way you signed up. New here? Any of these makes a free account.")
+                } else {
+                    GradientHeadline(lead: "Your lists, ", accent: "on every device.")
+                    OnboardingBody(text: "Create a free account to keep your shopping lists, usual stores and recent searches in sync.")
+                }
                 VStack(alignment: .leading, spacing: 12) {
                     Benefit(symbol: "checklist", text: "Lists that follow you to any phone")
                     Benefit(symbol: "mappin.and.ellipse", text: "Your usual stores, remembered")
@@ -48,11 +56,21 @@ struct SignUpMethodStep: View {
             }
             .buttonStyle(.aisleSoft)
             .accessibilityIdentifier("googleSignUpButton")
-            Button("Continue with email") {
-                model.clearError()
-                onEmail()
+            Button {
+                model.choose(.phone)
+                onPhone()
+            } label: {
+                Label("Continue with phone", systemImage: "phone.fill")
             }
             .buttonStyle(.aisleAccent)
+            .accessibilityIdentifier("phoneSignUpButton")
+            Button("Use email instead") {
+                model.choose(.email)
+                onEmail()
+            }
+            .font(.aisleSubheadline.weight(.semibold))
+            .foregroundStyle(Theme.ink)
+            .frame(maxWidth: .infinity, minHeight: 40)
             .accessibilityIdentifier("emailSignUpButton")
             Text("By continuing you agree to the Terms and Privacy Policy.")
                 .font(.aisleCaption)
@@ -83,6 +101,62 @@ private struct Benefit: View {
             Text(text)
                 .font(.aisleSubheadline)
                 .foregroundStyle(Theme.ink)
+        }
+    }
+}
+
+struct PhoneStep: View {
+    @Bindable var model: SignUpModel
+    let onBack: () -> Void
+    let onSent: () -> Void
+
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        OnboardingPage(onBack: onBack, progress: "Step 1 of 3") {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("What's your number?")
+                    .font(Theme.font(34, .bold, relativeTo: .largeTitle))
+                    .tracking(-1)
+                    .foregroundStyle(Theme.ink)
+                    .accessibilityAddTraits(.isHeader)
+                OnboardingBody(text: "We'll text you a 6-digit code. No password to remember.")
+                Text("Mobile number")
+                    .font(Theme.font(13, .semibold, relativeTo: .footnote))
+                    .foregroundStyle(Theme.secondaryInk)
+                    .padding(.top, 20)
+                TextField("(215) 555-0123", text: $model.phone)
+                    .keyboardType(.phonePad)
+                    .textContentType(.telephoneNumber)
+                    .focused($focused)
+                    .modifier(OnboardingFieldStyle())
+                    .accessibilityLabel("Mobile number")
+                    .accessibilityIdentifier("phoneField")
+                Text("US numbers work as is. For others, start with + and the country code. Message and data rates may apply.")
+                    .font(.aisleFootnote)
+                    .foregroundStyle(Theme.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let error = model.errorMessage {
+                    Text(error)
+                        .font(.aisleFootnote)
+                        .foregroundStyle(Theme.warning)
+                }
+            }
+        } footer: {
+            Button(action: send) {
+                if model.isWorking { ProgressView() } else { Text("Text me a code") }
+            }
+            .buttonStyle(.aisleAccent)
+            .disabled(!model.isPhoneValid || model.isWorking)
+            .accessibilityIdentifier("sendCodeButton")
+        }
+        .onAppear { focused = true }
+    }
+
+    private func send() {
+        guard model.isPhoneValid, !model.isWorking else { return }
+        Task {
+            if await model.sendCode() { onSent() }
         }
     }
 }
@@ -154,13 +228,13 @@ struct CodeStep: View {
     var body: some View {
         OnboardingPage(onBack: onBack, progress: "Step 2 of 3") {
             VStack(alignment: .leading, spacing: 12) {
-                Text("Check your email")
+                Text(model.channel == .phone ? "Check your texts" : "Check your email")
                     .font(Theme.font(34, .bold, relativeTo: .largeTitle))
                     .tracking(-1)
                     .foregroundStyle(Theme.ink)
                     .accessibilityAddTraits(.isHeader)
                 (Text("Enter the 6-digit code we sent to ")
-                    + Text(model.trimmedEmail).font(Theme.font(17, .semibold)).foregroundStyle(Theme.ink)
+                    + Text(model.sentToLabel).font(Theme.font(17, .semibold)).foregroundStyle(Theme.ink)
                     + Text("."))
                     .font(Theme.font(17, relativeTo: .body))
                     .foregroundStyle(Theme.secondaryInk)
@@ -258,7 +332,7 @@ struct CodeStep: View {
     private func resend() {
         model.code = ""
         Task {
-            if await model.sendCode() { secondsLeft = 30 }
+            if await model.sendCode() { secondsLeft = model.codeSent?.retryAfter ?? 30 }
         }
     }
 }
@@ -266,7 +340,8 @@ struct CodeStep: View {
 struct NameStep: View {
     @Bindable var model: SignUpModel
     let onBack: () -> Void
-    let onCreate: () -> Void
+    /// Called with the finished session once the name is saved.
+    let onCreate: (AuthSession) -> Void
 
     @FocusState private var focused: Bool
 
@@ -297,7 +372,7 @@ struct NameStep: View {
                     .autocorrectionDisabled()
                     .submitLabel(.done)
                     .focused($focused)
-                    .onSubmit { if model.canFinish { onCreate() } }
+                    .onSubmit(create)
                     .modifier(OnboardingFieldStyle())
                     .accessibilityIdentifier("firstNameField")
                 Toggle(isOn: $model.wantsTips) {
@@ -314,13 +389,27 @@ struct NameStep: View {
                 .padding(16)
                 .background(Theme.surface.opacity(0.7), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
                 .padding(.top, 8)
+                if let error = model.errorMessage {
+                    Text(error)
+                        .font(.aisleFootnote)
+                        .foregroundStyle(Theme.warning)
+                }
             }
         } footer: {
-            Button("Create account", action: onCreate)
-                .buttonStyle(.aisleAccent)
-                .disabled(!model.canFinish)
-                .accessibilityIdentifier("createAccountButton")
+            Button(action: create) {
+                if model.isWorking { ProgressView() } else { Text("Create account") }
+            }
+            .buttonStyle(.aisleAccent)
+            .disabled(!model.canFinish || model.isWorking)
+            .accessibilityIdentifier("createAccountButton")
         }
         .onAppear { focused = true }
+    }
+
+    private func create() {
+        guard model.canFinish, !model.isWorking else { return }
+        Task {
+            if let session = await model.finish() { onCreate(session) }
+        }
     }
 }

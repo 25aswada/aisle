@@ -3,19 +3,43 @@ import XCTest
 
 @MainActor
 private final class FakeAuth: AuthService {
-    var sentTo: [String] = []
-    var providerResult: Result<VerifiedIdentity, AuthError> = .failure(.providerUnavailable(.apple))
+    var sent: [(CodeChannel, String)] = []
+    var providerResult: Result<AuthSession, Error> = .failure(AuthError.providerUnavailable(.apple))
+    var returning = false
+    var profileUpdates: [(String?, Bool?)] = []
+    var signedOutTokens: [String] = []
+    var deleted: [String] = []
+    var meResult: Result<Account, Error> = .failure(AuthError.network)
 
-    func sendCode(to email: String) async throws { sentTo.append(email) }
+    static func account(_ name: String = "", providers: [AuthProvider] = [.phone]) -> Account {
+        Account(id: "7", firstName: name, email: nil, phone: "+12155550123", wantsTips: false, providers: providers)
+    }
 
-    func verify(email: String, code: String) async throws -> VerifiedIdentity {
+    func sendCode(_ channel: CodeChannel, to target: String) async throws -> CodeSent {
+        sent.append((channel, target))
+        if target.contains("busy") { throw AuthError.server("Too many codes for this one. Try again in an hour.") }
+        return CodeSent(sentTo: channel == .phone ? "+1 •••• 0123" : target, retryAfter: 30)
+    }
+
+    func verifyCode(_ channel: CodeChannel, target: String, code: String) async throws -> AuthSession {
         guard code == "123456" else { throw AuthError.invalidCode }
-        return VerifiedIdentity(id: "u1", provider: .email, email: email, suggestedFirstName: nil)
+        return AuthSession(token: "tok", account: Self.account(returning ? "Sam" : ""), isNew: !returning)
     }
 
-    func signIn(with provider: AuthProvider) async throws -> VerifiedIdentity {
-        try providerResult.get()
+    func signIn(with provider: AuthProvider) async throws -> AuthSession { try providerResult.get() }
+
+    func currentAccount(token: String) async throws -> Account { try meResult.get() }
+
+    func updateProfile(token: String, firstName: String?, wantsTips: Bool?) async throws -> Account {
+        profileUpdates.append((firstName, wantsTips))
+        var account = Self.account(firstName ?? "Sam")
+        account.wantsTips = wantsTips ?? false
+        return account
     }
+
+    func signOut(token: String) async { signedOutTokens.append(token) }
+
+    func deleteAccount(token: String) async throws { deleted.append(token) }
 }
 
 @MainActor
@@ -31,6 +55,18 @@ final class SignUpTests: XCTestCase {
         XCTAssertEqual(model.trimmedEmail, "sam@example.com")
     }
 
+    func testPhoneValidation() {
+        let model = SignUpModel(auth: FakeAuth())
+        for good in ["(215) 555-0123", "2155550123", "1 215 555 0123", "+44 20 7946 0958"] {
+            model.phone = good
+            XCTAssertTrue(model.isPhoneValid, good)
+        }
+        for bad in ["", "555-0123", "+123", "21555501234"] {
+            model.phone = bad
+            XCTAssertFalse(model.isPhoneValid, bad)
+        }
+    }
+
     func testCodeKeepsOnlySixDigits() {
         let model = SignUpModel(auth: FakeAuth())
         model.code = "12a3-45678"
@@ -38,48 +74,139 @@ final class SignUpTests: XCTestCase {
         XCTAssertTrue(model.isCodeComplete)
     }
 
-    func testEmailFlowCreatesAccount() async {
+    func testNewPhoneAccountAsksForANameAndSavesIt() async {
         let auth = FakeAuth()
         let model = SignUpModel(auth: auth)
-        model.email = "sam@example.com"
+        model.choose(.phone)
+        model.phone = "(215) 555-0123"
         let sent = await model.sendCode()
         XCTAssertTrue(sent)
-        XCTAssertEqual(auth.sentTo, ["sam@example.com"])
+        XCTAssertEqual(auth.sent.first?.0, .phone)
+        XCTAssertEqual(auth.sent.first?.1, "(215) 555-0123")
+        XCTAssertEqual(model.sentToLabel, "+1 •••• 0123")
 
         model.code = "000000"
         let rejected = await model.verifyCode()
         XCTAssertFalse(rejected)
-        XCTAssertNotNil(model.errorMessage)
+        XCTAssertEqual(model.errorMessage, AuthError.invalidCode.errorDescription)
 
         model.code = "123456"
         let verified = await model.verifyCode()
         XCTAssertTrue(verified)
-        XCTAssertNil(model.makeAccount(), "needs a name first")
+        XCTAssertTrue(model.needsName)
+        XCTAssertFalse(model.canFinish, "needs a name first")
 
         model.firstName = "  Sam "
         model.wantsTips = true
-        let account = model.makeAccount()
-        XCTAssertEqual(account?.firstName, "Sam")
-        XCTAssertEqual(account?.email, "sam@example.com")
-        XCTAssertEqual(account?.provider, .email)
-        XCTAssertEqual(account?.wantsTips, true)
+        let session = await model.finish()
+        XCTAssertEqual(session?.account.firstName, "Sam")
+        XCTAssertEqual(session?.account.wantsTips, true)
+        XCTAssertEqual(auth.profileUpdates.first?.0, "Sam")
+        XCTAssertEqual(auth.profileUpdates.first?.1, true)
     }
 
-    func testUnavailableProviderShowsMessage() async {
+    func testReturningAccountSkipsTheNameStep() async {
+        let auth = FakeAuth()
+        auth.returning = true
+        let model = SignUpModel(auth: auth)
+        model.choose(.email)
+        model.email = "sam@example.com"
+        _ = await model.sendCode()
+        model.code = "123456"
+        _ = await model.verifyCode()
+        XCTAssertFalse(model.needsName)
+        let session = await model.finish()
+        XCTAssertEqual(session?.account.firstName, "Sam")
+        XCTAssertTrue(auth.profileUpdates.isEmpty)
+    }
+
+    func testServerMessagesAreShown() async {
         let model = SignUpModel(auth: FakeAuth())
-        let ok = await model.continueWith(.apple)
-        XCTAssertFalse(ok)
-        XCTAssertEqual(model.errorMessage, AuthError.providerUnavailable(.apple).errorDescription)
+        model.choose(.email)
+        model.email = "busy@example.com"
+        let sent = await model.sendCode()
+        XCTAssertFalse(sent)
+        XCTAssertEqual(model.errorMessage, "Too many codes for this one. Try again in an hour.")
     }
 
-    func testAccountPersistsAndSignsOut() {
-        let defaults = UserDefaults(suiteName: "SignUpTests")!
-        defaults.removePersistentDomain(forName: "SignUpTests")
-        let store = AccountStore(defaults: defaults)
+    func testProviderPrefillsTheNameAndCancellingIsQuiet() async {
+        let auth = FakeAuth()
+        let model = SignUpModel(auth: auth)
+
+        auth.providerResult = .failure(CancellationError())
+        let cancelled = await model.continueWith(.apple)
+        XCTAssertFalse(cancelled)
+        XCTAssertNil(model.errorMessage, "backing out of Apple's sheet isn't an error")
+
+        auth.providerResult = .success(AuthSession(token: "t", account: FakeAuth.account("Sam", providers: [.google]), isNew: true))
+        let ok = await model.continueWith(.google)
+        XCTAssertTrue(ok)
+        XCTAssertEqual(model.firstName, "Sam")
+        XCTAssertTrue(model.needsName, "new accounts confirm their name")
+    }
+
+    func testAccountStoreKeepsTokenSyncsAndSignsOut() async throws {
+        let defaults = UserDefaults.fresh("SignUpTests.Store")
+        let tokens = InMemoryTokenStore()
+        let auth = FakeAuth()
+        let store = AccountStore(defaults: defaults, tokens: tokens, auth: auth)
         XCTAssertFalse(store.isSignedIn)
-        store.signIn(Account(id: "u1", provider: .email, email: "sam@example.com", firstName: "Sam", wantsTips: false))
-        XCTAssertEqual(AccountStore(defaults: defaults).account?.firstName, "Sam")
+
+        store.signIn(AuthSession(token: "tok", account: FakeAuth.account("Sam"), isNew: false))
+        XCTAssertEqual(tokens.token, "tok")
+        XCTAssertEqual(AccountStore(defaults: defaults, tokens: tokens).account?.firstName, "Sam")
+
+        store.update { $0.wantsTips = true }
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertEqual(auth.profileUpdates.last?.0, nil, "only what changed is sent")
+        XCTAssertEqual(auth.profileUpdates.last?.1, true)
+
+        auth.meResult = .failure(AuthError.signedOut)
+        await store.refresh()
+        XCTAssertFalse(store.isSignedIn, "a session ended elsewhere signs out here")
+        XCTAssertNil(tokens.token)
+
+        store.signIn(AuthSession(token: "tok2", account: FakeAuth.account("Sam"), isNew: false))
         store.signOut()
-        XCTAssertNil(AccountStore(defaults: defaults).account)
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertEqual(auth.signedOutTokens, ["tok2"])
+        XCTAssertNil(AccountStore(defaults: defaults, tokens: tokens).account)
+    }
+
+    func testDeleteAccount() async throws {
+        let auth = FakeAuth()
+        let store = AccountStore(defaults: .fresh("SignUpTests.Delete"), tokens: InMemoryTokenStore(), auth: auth)
+        store.signIn(AuthSession(token: "tok", account: FakeAuth.account("Sam"), isNew: false))
+        try await store.deleteAccount()
+        XCTAssertEqual(auth.deleted, ["tok"])
+        XCTAssertFalse(store.isSignedIn)
+    }
+
+    func testAnAccountWithoutASessionIsSignedOut() {
+        let defaults = UserDefaults.fresh("SignUpTests.Legacy")
+        let account = FakeAuth.account("Sam")
+        defaults.set(try? JSONEncoder().encode(account), forKey: AccountStore.defaultsKey)
+        let store = AccountStore(defaults: defaults, tokens: InMemoryTokenStore())
+        XCTAssertFalse(store.isSignedIn)
+    }
+
+    func testGoogleRedirectSchemeAndChallenge() {
+        let google = GoogleSignIn(clientID: "1234-abc.apps.googleusercontent.com")
+        XCTAssertEqual(google.redirectScheme, "com.googleusercontent.apps.1234-abc")
+        XCTAssertEqual(google.redirectURI, "com.googleusercontent.apps.1234-abc:/oauth2redirect")
+        // RFC 7636 appendix B test vector.
+        XCTAssertEqual(GoogleSignIn.codeChallenge(for: "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"),
+                       "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM")
+        let url = google.authorizationURL(state: "s", nonce: "n", codeChallenge: "c")
+        let items = Dictionary(uniqueKeysWithValues: URLComponents(url: url, resolvingAgainstBaseURL: false)!
+            .queryItems!.map { ($0.name, $0.value ?? "") })
+        XCTAssertEqual(items["scope"], "openid email profile")
+        XCTAssertEqual(items["code_challenge_method"], "S256")
+        XCTAssertEqual(items["nonce"], "n")
+    }
+
+    func testNonceHash() {
+        XCTAssertEqual(Nonce.sha256("abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+        XCTAssertEqual(Nonce.make().count, 32)
     }
 }
