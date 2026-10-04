@@ -1,11 +1,11 @@
 import SwiftUI
 
 /// The sign-in screens, in a navigation path: method, then phone or email, the code,
-/// and a first name for new accounts. Apple and Google skip straight to the name step
+/// and for new accounts the terms and a first name. Apple and Google skip straight to the name step
 /// (or finish, for an account that already has one).
 enum AccountFlowStep: Hashable {
     case method(returning: Bool)
-    case phone, email, code, name
+    case phone, email, code, terms, name
 }
 
 /// One sign-in screen, wired to push the next. Shared by onboarding and the You tab.
@@ -34,15 +34,20 @@ struct AccountFlowScreen: View {
             EmailStep(model: model, onBack: back) { path.append(.code) }
         case .code:
             CodeStep(model: model, onBack: back, onVerified: signedIn)
+        case .terms:
+            TermsStep(onBack: back) {
+                Legal.recordAcceptance()
+                path.append(.name)
+            }
         case .name:
             NameStep(model: model, onBack: back, onCreate: onSignedIn)
         }
     }
 
-    /// New accounts pick a name; returning ones are done.
+    /// New accounts agree to the terms and pick a name; returning ones are done.
     private func signedIn() {
         if model.needsName {
-            path.append(.name)
+            path.append(.terms)
         } else if let session = model.session {
             onSignedIn(session)
         }

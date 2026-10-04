@@ -21,6 +21,7 @@ struct YouView: View {
     @State private var isEditing = false
     @State private var isPickingStore = false
     @State private var showHowItWorks = false
+    @State private var showLegal = false
     @State private var confirmSignOut = false
     @State private var isSigningIn = false
     @State private var confirmDelete = false
@@ -91,6 +92,7 @@ struct YouView: View {
                     isPickingStore = false
                 }
             }
+            .sheet(isPresented: $showLegal) { LegalDocumentSheet() }
             .sheet(isPresented: $showHowItWorks) {
                 HowAisleWorksSheet().presentationDetents([.medium, .large])
             }
@@ -281,6 +283,11 @@ struct YouView: View {
             ActionRow(systemImage: "info.circle", title: "How Aisle finds things",
                       subtitle: "Estimates unless confirmed. Never a made-up aisle.") {
                 showHowItWorks = true
+            }
+            RowDivider()
+            ActionRow(systemImage: "doc.text", title: "Terms & Privacy",
+                      subtitle: "What you agreed to, in plain English") {
+                showLegal = true
             }
             RowDivider()
             SettingRow(systemImage: "number", title: "Version", subtitle: nil) {
