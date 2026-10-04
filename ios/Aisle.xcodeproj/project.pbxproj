@@ -69,6 +69,7 @@
 		9123D3FA51940A018E770562 /* AccountAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = C191B72489E41A4FAC046896 /* AccountAPI.swift */; };
 		92EC0E9101DF99A6BCD7CF92 /* TokenStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF3EB0DBCA680EB6C9E92331 /* TokenStore.swift */; };
 		97794A08EF311AE5CCB6C4C1 /* LocationProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDA028F2F6A589486F37BCD /* LocationProvider.swift */; };
+		9995CC947BCA38F3B1208522 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = FC94A83254DE48CCF567602C /* PrivacyInfo.xcprivacy */; };
 		9D2E919CE99A27853EB7AADD /* Chat.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB9E64F0AE164ADA01052D9F /* Chat.swift */; };
 		A7B8720D41ED741D3BB76D31 /* ShoppingListStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F551FDCD24FEF4163ED9E8A /* ShoppingListStore.swift */; };
 		A7E1151289987C158655821A /* HomeExtras.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E7DF89169128F720E6B0665 /* HomeExtras.swift */; };
@@ -204,6 +205,7 @@
 		F5A3B0C2147E6BCCE122221E /* CameraSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraSheet.swift; sourceTree = "<group>"; };
 		FB59E9020541E01FE841D412 /* ItemSearch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ItemSearch.swift; sourceTree = "<group>"; };
 		FC67A4D579579373CED54185 /* PlusViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlusViews.swift; sourceTree = "<group>"; };
+		FC94A83254DE48CCF567602C /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		FDC36B0007068675A9412E92 /* Geist-SemiBold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Geist-SemiBold.ttf"; sourceTree = "<group>"; };
 		FE9FE08311669988290AB5A0 /* AdaptiveStack.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdaptiveStack.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -225,6 +227,7 @@
 				02E7A088040A8D4C88097DFB /* Aisle.storekit */,
 				8072BF40B6C9F9F2B7B7E9AD /* Assets.xcassets */,
 				B32D78E8C418750BEB4D5633 /* Info.plist */,
+				FC94A83254DE48CCF567602C /* PrivacyInfo.xcprivacy */,
 				A54E00E85B30F2DF6EB8C34A /* Account */,
 				633BDF30001D967F2DE33C70 /* Analytics */,
 				CED852A2506E430267926D14 /* App */,
@@ -612,6 +615,7 @@
 				CB34D035D4275BBC8D5B9689 /* Geist-OFL.txt in Resources */,
 				B0F19623F2B12E54076048F2 /* Geist-Regular.ttf in Resources */,
 				AE8870295D3EBF53057C8ABC /* Geist-SemiBold.ttf in Resources */,
+				9995CC947BCA38F3B1208522 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

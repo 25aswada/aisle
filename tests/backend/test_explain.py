@@ -134,11 +134,11 @@ CONVERSATION = [
 ]
 
 
-def test_chat_sends_the_conversation_and_store(seeded_client):
+def test_chat_sends_the_conversation_and_store(signed_in_client):
     fake = FakeExplainer("Check the tables in front of the ovens, by the muffins.")
     app.dependency_overrides[get_explainer] = lambda: fake
-    store_id = store_id_for(seeded_client, "Costco")
-    response = seeded_client.post("/chat", json={"store_id": int(store_id), "messages": CONVERSATION})
+    store_id = store_id_for(signed_in_client, "Costco")
+    response = signed_in_client.post("/chat", json={"store_id": int(store_id), "messages": CONVERSATION})
     assert response.status_code == 200
     assert response.json() == {"reply": fake.text, "search": None}
     system, messages = fake.chats[0]
@@ -146,40 +146,40 @@ def test_chat_sends_the_conversation_and_store(seeded_client):
     assert "follow-up" in system and "Costco" in system
 
 
-def test_chat_without_a_provider_or_on_failure_has_no_reply(seeded_client):
-    store_id = int(store_id_for(seeded_client, "Costco"))
-    assert seeded_client.post("/chat", json={"store_id": store_id, "messages": CONVERSATION}).json() == {"reply": None, "search": None}
+def test_chat_without_a_provider_or_on_failure_has_no_reply(signed_in_client):
+    store_id = int(store_id_for(signed_in_client, "Costco"))
+    assert signed_in_client.post("/chat", json={"store_id": store_id, "messages": CONVERSATION}).json() == {"reply": None, "search": None}
 
     class Broken(FakeExplainer):
         def chat(self, system, messages):
             raise RuntimeError("provider down")
 
     app.dependency_overrides[get_explainer] = lambda: Broken("")
-    assert seeded_client.post("/chat", json={"store_id": store_id, "messages": CONVERSATION}).json() == {"reply": None, "search": None}
+    assert signed_in_client.post("/chat", json={"store_id": store_id, "messages": CONVERSATION}).json() == {"reply": None, "search": None}
 
 
-def test_chat_validates_the_conversation(seeded_client):
-    store_id = int(store_id_for(seeded_client, "Costco"))
+def test_chat_validates_the_conversation(signed_in_client):
+    store_id = int(store_id_for(signed_in_client, "Costco"))
     ends_with_aisle = CONVERSATION[:2]
-    assert seeded_client.post("/chat", json={"store_id": store_id, "messages": ends_with_aisle}).status_code == 422
-    assert seeded_client.post("/chat", json={"store_id": store_id, "messages": []}).status_code == 422
-    assert seeded_client.post("/chat", json={"store_id": 999999, "messages": CONVERSATION}).status_code == 404
+    assert signed_in_client.post("/chat", json={"store_id": store_id, "messages": ends_with_aisle}).status_code == 422
+    assert signed_in_client.post("/chat", json={"store_id": store_id, "messages": []}).status_code == 422
+    assert signed_in_client.post("/chat", json={"store_id": 999999, "messages": CONVERSATION}).status_code == 404
 
 
 JPEG = base64.b64encode(b"\xff\xd8\xff\xe0 a tiny jpeg").decode()
 
 
-def test_chat_passes_a_photo_with_the_shoppers_message(seeded_client):
+def test_chat_passes_a_photo_with_the_shoppers_message(signed_in_client):
     fake = FakeExplainer("That's the Kirkland tray; it's the right one.")
     app.dependency_overrides[get_explainer] = lambda: fake
-    store_id = int(store_id_for(seeded_client, "Costco"))
+    store_id = int(store_id_for(signed_in_client, "Costco"))
     messages = CONVERSATION[:2] + [{"role": "user", "content": "", "image": JPEG}]
-    assert seeded_client.post("/chat", json={"store_id": store_id, "messages": messages}).json()["reply"] == fake.text
+    assert signed_in_client.post("/chat", json={"store_id": store_id, "messages": messages}).json()["reply"] == fake.text
     assert fake.chats[0][1][-1] == {"role": "user", "content": "", "image": JPEG}
 
 
-def test_chat_rejects_bad_photos(seeded_client):
-    store_id = int(store_id_for(seeded_client, "Costco"))
+def test_chat_rejects_bad_photos(signed_in_client):
+    store_id = int(store_id_for(signed_in_client, "Costco"))
     not_a_photo = base64.b64encode(b"hello").decode()
     for messages in (
         CONVERSATION[:2] + [{"role": "user", "content": "this?", "image": not_a_photo}],
@@ -188,27 +188,27 @@ def test_chat_rejects_bad_photos(seeded_client):
          {"role": "user", "content": "this?"}],
         CONVERSATION[:2] + [{"role": "user", "content": "  "}],
     ):
-        assert seeded_client.post("/chat", json={"store_id": store_id, "messages": messages}).status_code == 422
+        assert signed_in_client.post("/chat", json={"store_id": store_id, "messages": messages}).status_code == 422
 
 
-def test_identify_names_the_photo(seeded_client):
+def test_identify_names_the_photo(signed_in_client):
     fake = FakeExplainer(' "Chocolate chip cookies." ')
     app.dependency_overrides[get_explainer] = lambda: fake
-    store_id = int(store_id_for(seeded_client, "Costco"))
+    store_id = int(store_id_for(signed_in_client, "Costco"))
     body = {"store_id": store_id, "image": JPEG, "note": "where are these"}
-    assert seeded_client.post("/identify", json=body).json() == {"item": "Chocolate chip cookies"}
+    assert signed_in_client.post("/identify", json=body).json() == {"item": "Chocolate chip cookies"}
     system, messages = fake.chats[0]
     assert "search phrase" in system
     assert messages == [{"role": "user", "content": "where are these", "image": JPEG}]
 
     fake.text = "NONE"
-    assert seeded_client.post("/identify", json=body).json() == {"item": None}
-    assert seeded_client.post("/identify", json={**body, "store_id": 999999}).status_code == 404
-    assert seeded_client.post("/identify", json={**body, "image": "nope"}).status_code == 422
+    assert signed_in_client.post("/identify", json=body).json() == {"item": None}
+    assert signed_in_client.post("/identify", json={**body, "store_id": 999999}).status_code == 404
+    assert signed_in_client.post("/identify", json={**body, "image": "nope"}).status_code == 422
 
 
-def test_identify_without_a_provider_has_no_item(seeded_client):
-    assert seeded_client.post("/identify", json={"image": JPEG}).json() == {"item": None}
+def test_identify_without_a_provider_has_no_item(signed_in_client):
+    assert signed_in_client.post("/identify", json={"image": JPEG}).json() == {"item": None}
 
 
 def test_clean_item_phrase():
@@ -230,12 +230,12 @@ def test_providers_format_photos():
     assert openai[1]["image_url"]["url"] == f"data:image/jpeg;base64,{JPEG}"
 
 
-def test_follow_up_asking_for_a_new_item_brings_its_search(seeded_client):
+def test_follow_up_asking_for_a_new_item_brings_its_search(signed_in_client):
     fake = FakeExplainer("Maple syrup is usually in the center aisles by the pancake mix.", find="maple syrup")
     app.dependency_overrides[get_explainer] = lambda: fake
-    store_id = int(store_id_for(seeded_client, "Costco"))
+    store_id = int(store_id_for(signed_in_client, "Costco"))
     messages = CONVERSATION[:2] + [{"role": "user", "content": "ok where's the maple syrup?"}]
-    data = seeded_client.post("/chat", json={"store_id": store_id, "messages": messages}).json()
+    data = signed_in_client.post("/chat", json={"store_id": store_id, "messages": messages}).json()
     assert data["reply"] == fake.text
     search = data["search"]
     assert search["item"] == "maple syrup"
@@ -245,9 +245,9 @@ def test_follow_up_asking_for_a_new_item_brings_its_search(seeded_client):
     assert search["search_id"]
 
 
-def test_conversational_follow_up_has_no_search(seeded_client):
+def test_conversational_follow_up_has_no_search(signed_in_client):
     fake = FakeExplainer("Usually around $20 for a 24-pack.")
     app.dependency_overrides[get_explainer] = lambda: fake
-    store_id = int(store_id_for(seeded_client, "Costco"))
+    store_id = int(store_id_for(signed_in_client, "Costco"))
     messages = CONVERSATION[:2] + [{"role": "user", "content": "how much are they?"}]
-    assert seeded_client.post("/chat", json={"store_id": store_id, "messages": messages}).json()["search"] is None
+    assert signed_in_client.post("/chat", json={"store_id": store_id, "messages": messages}).json()["search"] is None

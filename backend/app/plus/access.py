@@ -4,7 +4,8 @@ Aisle+ comes from a verified App Store subscription that belongs to an account: 
 one it was bought for, or one it was restored to. Signed out, nobody has Aisle+, and
 deleting the account ends it. Free shoppers get a few photo searches and
 follow-ups a day, counted per account when signed in (so reinstalling doesn't reset
-them) and otherwise per device.
+them) and otherwise per network. A use is counted before the AI runs, in one atomic
+step, and handed back if nothing came of it.
 """
 from __future__ import annotations
 
@@ -16,6 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
+from ..limits import bump, day_window
 from ..models import PlusEntitlement, UsageCounter, User
 
 PHOTO_SEARCH = "photo_search"
@@ -36,10 +38,10 @@ class Caller:
 
     @property
     def subject(self) -> str:
+        """Who limits apply to: the account, or signed out the network (the device id is
+        whatever the client says, so it can't be trusted for limits)."""
         if self.user is not None:
             return f"user:{self.user.id}"
-        if self.device_id:
-            return f"device:{self.device_id}"
         return f"ip:{self.ip or 'unknown'}"
 
 
@@ -54,7 +56,8 @@ def active_entitlement(db: Session, caller: Caller, now: datetime | None = None)
     for entitlement in db.scalars(select(PlusEntitlement).where(
             PlusEntitlement.user_id == caller.user.id, PlusEntitlement.revoked_at.is_(None))):
         expires = _aware(entitlement.expires_at)
-        if expires is None or expires > now:
+        # Subscriptions always expire; one without a date isn't trusted.
+        if expires is not None and expires > now:
             return entitlement
     return None
 
@@ -69,7 +72,7 @@ def limit_for(feature: str) -> int:
 
 
 def today() -> str:
-    return datetime.now(timezone.utc).date().isoformat()
+    return day_window()
 
 
 def used_today(db: Session, caller: Caller, feature: str) -> int:
@@ -86,25 +89,39 @@ def plus_required(feature: str, message: str, limit: int | None = None) -> HTTPE
     return HTTPException(status_code=402, detail=detail)
 
 
-def check_allowance(db: Session, caller: Caller, feature: str) -> bool:
-    """Raises 402 when a free shopper is out for today. Returns True for Aisle+ (no counting)."""
+@dataclass
+class Allowance:
+    """One use of a limited feature, already counted (unless it's Aisle+). Refund it when
+    the feature gave nothing back, so failures don't use up the day's free tries."""
+    db: Session
+    caller: Caller
+    feature: str
+    counted: bool
+
+    @property
+    def unlimited(self) -> bool:
+        return not self.counted
+
+    def refund(self) -> None:
+        if self.counted:
+            bump(self.db, self.caller.subject, self.feature, today(), -1)
+            self.counted = False
+
+
+def reserve_allowance(db: Session, caller: Caller, feature: str) -> Allowance:
+    """Counts one use now, or raises 402 when a free shopper is out for today."""
     if is_plus(db, caller):
-        return True
+        return Allowance(db, caller, feature, counted=False)
     limit = limit_for(feature)
-    if used_today(db, caller, feature) >= limit:
+    if bump(db, caller.subject, feature, today()) > limit:
+        bump(db, caller.subject, feature, today(), -1)
         raise plus_required(feature, UPGRADE_MESSAGES[feature].format(limit=limit), limit)
-    return False
+    return Allowance(db, caller, feature, counted=True)
 
 
-def count_use(db: Session, caller: Caller, feature: str) -> None:
-    """Counts one use of a limited feature, once it actually went through."""
-    counter = db.scalar(select(UsageCounter).where(
-        UsageCounter.subject == caller.subject, UsageCounter.feature == feature, UsageCounter.day == today()))
-    if counter is None:
-        counter = UsageCounter(subject=caller.subject, feature=feature, day=today(), count=0)
-        db.add(counter)
-    counter.count += 1
-    db.commit()
+def require_signed_in(caller: Caller, what: str) -> None:
+    if caller.user is None:
+        raise HTTPException(status_code=401, detail=f"Sign in to use {what}.")
 
 
 def require_plus(db: Session, caller: Caller, feature: str, message: str) -> None:

@@ -98,3 +98,22 @@ def seeded_client(seeded_engine):
 def store_id_for(client, retailer):
     stores = client.get("/stores/search", params={"q": retailer}).json()
     return next(s["id"] for s in stores if s["retailer_name"] == retailer)
+
+
+def signed_in_headers(engine, device_id="test-phone"):
+    """Headers for a new signed-in shopper (the app requires an account)."""
+    from backend.app.auth.accounts import create_session
+    from backend.app.models import User
+
+    with Session(engine) as db:
+        user = User(first_name="Sam")
+        db.add(user)
+        db.commit()
+        return {"Authorization": f"Bearer {create_session(db, user, device_id)}", "X-Aisle-Device": device_id}
+
+
+@pytest.fixture
+def signed_in_client(seeded_client, seeded_engine):
+    """seeded_client, signed in."""
+    seeded_client.headers.update(signed_in_headers(seeded_engine))
+    yield seeded_client

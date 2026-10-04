@@ -1,40 +1,6 @@
 import StoreKit
 import SwiftUI
 
-/// What Aisle+ adds. Keep this list to things the app actually does.
-enum PlusFeature: CaseIterable, Identifiable {
-    case photos, sharedLists, multiStore, offlineMaps
-
-    var id: Self { self }
-
-    var title: String {
-        switch self {
-        case .photos: return "Unlimited photo search"
-        case .sharedLists: return "Shared family lists"
-        case .multiStore: return "Multi-store trips"
-        case .offlineMaps: return "Offline store maps"
-        }
-    }
-
-    var detail: String {
-        switch self {
-        case .photos: return "Snap any item or a whole paper list."
-        case .sharedLists: return "Everyone adds, everyone sees it checked off."
-        case .multiStore: return "One plan across several stores."
-        case .offlineMaps: return "Works in the back corner with no signal."
-        }
-    }
-
-    var symbol: String {
-        switch self {
-        case .photos: return "camera"
-        case .sharedLists: return "person.2"
-        case .multiStore: return "point.topleft.down.to.point.bottomright.curvepath"
-        case .offlineMaps: return "map"
-        }
-    }
-}
-
 // MARK: - Tab
 
 /// The Aisle+ tab: the upgrade offer itself, or, for subscribers, what they have.
@@ -744,67 +710,6 @@ struct PlusWordmark: View {
     }
 }
 
-/// The big card: a slowly flowing gradient with a few sparkles.
-private struct HeroCard: View {
-    let isPlus: Bool
-    let yearlyPrice: String
-    let onTry: () -> Void
-
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Label("Aisle+", systemImage: "sparkles")
-                .font(Theme.font(12, .bold, relativeTo: .caption))
-                .padding(.horizontal, 12)
-                .frame(height: 28)
-                .background(.white.opacity(0.55), in: Capsule())
-            Text(isPlus ? "You're on\nAisle+." : "Find it faster,\neverywhere.")
-                .font(Theme.font(34, .bold, relativeTo: .largeTitle))
-                .tracking(-1.2)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 16)
-                .accessibilityAddTraits(.isHeader)
-            Text(isPlus
-                 ? "Unlimited lists and photo search, shared lists and trips across stores are on. Thanks for supporting Aisle."
-                 : "Unlimited lists and photo search, shared lists and trips across stores. Aisle stays honest either way.")
-                .font(Theme.font(15, relativeTo: .subheadline))
-                .opacity(0.8)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.top, 10)
-            if !isPlus {
-                Button(action: onTry) {
-                    Text("Try 7 days free")
-                        .font(.aisleHeadline)
-                        .foregroundStyle(.white)
-                        .frame(maxWidth: .infinity, minHeight: 54)
-                        .background(Color(hex: 0x1F1B24), in: RoundedRectangle(cornerRadius: 17, style: .continuous))
-                }
-                .buttonStyle(PressableCardStyle())
-                .padding(.top, 20)
-                Text("Then \(yearlyPrice) a year · cancel anytime")
-                    .font(Theme.font(12, relativeTo: .caption))
-                    .opacity(0.7)
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 10)
-            }
-        }
-        .foregroundStyle(Theme.onAccent)
-        .padding(.horizontal, 22)
-        .padding(.top, 24)
-        .padding(.bottom, 22)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background {
-            TimelineView(.animation(minimumInterval: 1 / 20, paused: reduceMotion)) { timeline in
-                let t = reduceMotion ? 0 : timeline.date.timeIntervalSinceReferenceDate
-                FlowingGradient(time: t)
-            }
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
-        .shadow(color: Theme.glow.opacity(0.25), radius: 22, y: 14)
-    }
-}
-
 /// The accent gradient drifting slowly, with three twinkling sparkles.
 struct FlowingGradient: View {
     let time: TimeInterval
@@ -832,34 +737,6 @@ struct FlowingGradient: View {
             }
         }
         .accessibilityHidden(true)
-    }
-}
-
-private struct FeatureTile: View {
-    let feature: PlusFeature
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Image(systemName: feature.symbol)
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(Theme.onAccent)
-                .frame(width: 40, height: 40)
-                .background(Theme.accent, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-            Text(feature.title)
-                .font(Theme.font(15, .bold, relativeTo: .subheadline))
-                .foregroundStyle(Theme.ink)
-                .fixedSize(horizontal: false, vertical: true)
-            Text(feature.detail)
-                .font(Theme.font(12, relativeTo: .caption))
-                .foregroundStyle(Theme.secondaryInk)
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 0)
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, minHeight: 170, alignment: .topLeading)
-        .background(Theme.surface.opacity(0.92), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .shadow(color: Theme.ink.opacity(0.06), radius: 14, y: 8)
-        .accessibilityElement(children: .combine)
     }
 }
 
@@ -895,8 +772,8 @@ struct PaywallView: View {
     @State private var welcomed = false
     @State private var errorMessage: String?
 
-    /// Your privacy policy page. Apple requires one before Aisle+ can ship; the link hides until it's set.
-    static let privacyURL: URL? = nil
+    static let privacyURL = Legal.privacyURL
+    /// Subscriptions use Apple's standard license agreement.
     static let termsURL = URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!
 
     private static let table: [(String, Bool)] = [
@@ -1035,10 +912,8 @@ struct PaywallView: View {
                     .padding(.top, 10)
 
                 HStack(spacing: 16) {
-                    Button("Terms") { openURL(Self.termsURL) }
-                    if let privacy = Self.privacyURL {
-                        Button("Privacy") { openURL(privacy) }
-                    }
+                    Button("Terms of Use") { openURL(Self.termsURL) }
+                    Button("Privacy Policy") { openURL(Self.privacyURL) }
                 }
                 .font(Theme.font(12, .semibold, relativeTo: .caption))
                 .foregroundStyle(Theme.secondaryInk)
@@ -1106,7 +981,7 @@ struct PaywallView: View {
         if let error = plus.loadError, !plus.canPurchase { return error }
         switch plan {
         case .yearly:
-            let start = trial.map { "\($0.replacingOccurrences(of: "-", with: " ")) free, then " } ?? ""
+            let start = trial.map { "\($0) free trial, then " } ?? ""
             return "\(start)\(plus.price(.yearly))/year. Renews automatically. Cancel anytime."
         case .monthly:
             return "\(plus.price(.monthly))/month. Renews automatically. Cancel anytime."

@@ -36,9 +36,9 @@ class ProviderIdentity:
 
 
 class IdentityVerifier(Protocol):
-    def apple(self, identity_token: str, nonce: str | None) -> ProviderIdentity: ...
+    def apple(self, identity_token: str, nonce: str) -> ProviderIdentity: ...
 
-    def google(self, id_token: str, nonce: str | None) -> ProviderIdentity: ...
+    def google(self, id_token: str, nonce: str) -> ProviderIdentity: ...
 
 
 @lru_cache(maxsize=4)
@@ -73,10 +73,10 @@ class JWKSIdentityVerifier:
         self.apple_bundle_id = apple_bundle_id
         self.google_client_id = google_client_id
 
-    def apple(self, identity_token: str, nonce: str | None) -> ProviderIdentity:
+    def apple(self, identity_token: str, nonce: str) -> ProviderIdentity:
         claims = _decode(identity_token, APPLE_KEYS_URL, self.apple_bundle_id, APPLE_ISSUER)
         # The app sends Apple the SHA-256 of its nonce and us the nonce itself.
-        if nonce is not None and claims.get("nonce") != hashlib.sha256(nonce.encode()).hexdigest():
+        if not nonce or claims.get("nonce") != hashlib.sha256(nonce.encode()).hexdigest():
             raise InvalidToken("nonce mismatch")
         return ProviderIdentity(
             subject=claims["sub"],
@@ -84,11 +84,11 @@ class JWKSIdentityVerifier:
             email_verified=_truthy(claims.get("email_verified")),
         )
 
-    def google(self, id_token: str, nonce: str | None) -> ProviderIdentity:
+    def google(self, id_token: str, nonce: str) -> ProviderIdentity:
         if not self.google_client_id:
             raise InvalidToken("Google sign-in isn't configured")
         claims = _decode(id_token, GOOGLE_KEYS_URL, self.google_client_id, GOOGLE_ISSUERS)
-        if nonce is not None and claims.get("nonce") != nonce:
+        if not nonce or claims.get("nonce") != nonce:
             raise InvalidToken("nonce mismatch")
         return ProviderIdentity(
             subject=claims["sub"],

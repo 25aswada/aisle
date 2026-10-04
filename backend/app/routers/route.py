@@ -4,7 +4,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from ..ai.providers import LocationModel, get_location_model
+from ..config import get_settings
 from ..database import get_db
+from ..limits import rate_limit
 from ..plus.access import require_plus
 from ..routing import Route, plan_multi_store, plan_route
 from ..schemas import (
@@ -20,7 +22,8 @@ Model = Annotated[LocationModel | None, Depends(get_location_model)]
 
 
 @router.post("/route", response_model=RouteResponse)
-def route(body: RouteRequest, db: Database, model: Model):
+def route(body: RouteRequest, db: Database, model: Model, caller: CallerDep):
+    rate_limit(db, caller.subject, "route", get_settings().aisle_routes_per_hour)
     store = get_store(db, body.store_id)
     if store is None:
         raise HTTPException(status_code=404, detail="Store not found")
@@ -33,6 +36,7 @@ def multi_route(body: MultiRouteRequest, db: Database, model: Model, caller: Cal
     """One trip across several stores (Aisle+): each item goes to the first store likely
     to carry it, and each store gets its own walking route."""
     require_plus(db, caller, "multi_store", "Shopping more than one store in a trip is part of Aisle+.")
+    rate_limit(db, caller.subject, "route", get_settings().aisle_routes_per_hour)
     if len(set(body.store_ids)) != len(body.store_ids):
         raise HTTPException(status_code=422, detail="Each store can only be in the trip once.")
     stores = [get_store(db, store_id) for store_id in body.store_ids]

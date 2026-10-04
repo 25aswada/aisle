@@ -33,7 +33,8 @@ class Consensus:
 
 
 def _reporter(observation: LocationObservation) -> str:
-    # Anonymous device ids dedupe repeat taps; reports without one count separately.
+    # device_id holds who reported it (the account, or the network); repeat reports from
+    # one reporter count once. Old reports without one count separately.
     return observation.device_id or f"report-{observation.id}"
 
 

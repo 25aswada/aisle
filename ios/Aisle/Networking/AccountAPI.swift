@@ -70,9 +70,10 @@ struct AccountAPI {
         return body.session
     }
 
-    func apple(identityToken: String, nonce: String, firstName: String?) async throws -> AuthSession {
+    func apple(identityToken: String, nonce: String, firstName: String?, authorizationCode: String? = nil) async throws -> AuthSession {
         var body = ["identity_token": identityToken, "nonce": nonce]
         if let firstName, !firstName.isEmpty { body["first_name"] = firstName }
+        if let authorizationCode, !authorizationCode.isEmpty { body["authorization_code"] = authorizationCode }
         let session: SessionBody = try await send("POST", "auth/apple", body: body)
         return session.session
     }

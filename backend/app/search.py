@@ -74,7 +74,9 @@ def search(
     intent = parse_intent(query)
     result = resolve(db, intent, store, model)
     search_id = record_search_event(db, query, intent, store, result, device_id)
-    explanation = explain_safely(explainer, explain_facts(db, intent, store, result)) if store else None
+    facts = explain_facts(db, intent, store, result) if store else None
+    db.commit()  # Hand the connection back while the AI writes (it can take seconds).
+    explanation = explain_safely(explainer, facts) if facts else None
     return SearchResponse(
         search_id=search_id,
         query=query,

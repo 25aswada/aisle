@@ -1,7 +1,8 @@
 """Accounts: sign in with Apple, Google, an SMS code or an email code, then manage the account.
 
 Every sign-in returns a session token; the app sends it as "Authorization: Bearer ..."
-to /me and /auth/signout. Accounts stay optional: nothing else in the API needs one.
+to /me and /auth/signout. The app requires an account; in the API, photo search,
+follow-ups and sharing need one, and everything else also works signed out.
 """
 from typing import Annotated
 
@@ -9,12 +10,14 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
 from ..auth.accounts import PhoneTaken, add_phone, create_session, delete_user, revoke, sign_in, user_for_token
+from ..auth.apple_tokens import AppleTokens, AppleTokenService
 from ..auth.codes import (
     RESEND_COOLDOWN, CodeProblem, EmailSender, PhoneVerifier, ResendEmailSender, TwilioPhoneVerifier,
-    check_email_code, check_rate_limits, issue_email_code, normalize_email, normalize_phone,
-    record_code_request,
+    check_email_code, check_sms_country, issue_email_code, normalize_email, normalize_phone,
+    reserve_code_request,
 )
 from ..auth.identity import IdentityVerifier, InvalidToken, JWKSIdentityVerifier
+from ..limits import client_ip
 from ..plus.access import Caller
 from ..config import get_settings
 from ..database import get_db
@@ -46,6 +49,13 @@ def get_email_sender() -> EmailSender | None:
     return ResendEmailSender(s.resend_api_key, s.aisle_email_from) if s.resend_api_key else None
 
 
+def get_apple_tokens() -> AppleTokens | None:
+    s = get_settings()
+    if not (s.apple_team_id and s.apple_signin_key_id and s.apple_signin_private_key):
+        return None
+    return AppleTokenService(s.apple_bundle_id, s.apple_team_id, s.apple_signin_key_id, s.apple_signin_private_key)
+
+
 def get_identity_verifier() -> IdentityVerifier:
     s = get_settings()
     return JWKSIdentityVerifier(s.apple_bundle_id, s.google_ios_client_id)
@@ -54,6 +64,7 @@ def get_identity_verifier() -> IdentityVerifier:
 Phones = Annotated[PhoneVerifier | None, Depends(get_phone_verifier)]
 Emails = Annotated[EmailSender | None, Depends(get_email_sender)]
 Identities = Annotated[IdentityVerifier, Depends(get_identity_verifier)]
+AppleTokensDep = Annotated[AppleTokens | None, Depends(get_apple_tokens)]
 
 
 def current_session(
@@ -102,8 +113,10 @@ def problem(error: CodeProblem) -> HTTPException:
     return HTTPException(status_code=error.status, detail=error.message)
 
 
-def client_ip(request: Request) -> str | None:
-    return request.client.host if request.client else None
+def reserve(db: Session, channel: str, target: str, device_id: str | None, request: Request) -> None:
+    s = get_settings()
+    reserve_code_request(db, channel, target, device_id, client_ip(request),
+                         per_hour=s.aisle_codes_per_hour, per_day=s.aisle_codes_per_day)
 
 
 # MARK: - SMS codes
@@ -114,13 +127,13 @@ def phone_start(body: PhoneStart, db: Database, phones: Phones, request: Request
         raise HTTPException(status_code=503, detail=UNAVAILABLE)
     try:
         phone = normalize_phone(body.phone)
-        check_rate_limits(db, "sms", phone, device_id, client_ip(request))
+        check_sms_country(phone, get_settings().sms_country_codes)
+        reserve(db, "sms", phone, device_id, request)
         phones.send(phone)
     except CodeProblem as error:
         raise problem(error)
     except ConnectionError:
         raise HTTPException(status_code=503, detail=UNAVAILABLE)
-    record_code_request(db, "sms", phone, device_id, client_ip(request))
     return CodeSent(sent_to=mask_phone(phone), retry_after=int(RESEND_COOLDOWN.total_seconds()))
 
 
@@ -153,13 +166,12 @@ def email_start(body: EmailStart, db: Database, emails: Emails, request: Request
         raise HTTPException(status_code=503, detail=UNAVAILABLE)
     try:
         email = normalize_email(body.email)
-        check_rate_limits(db, "email", email, device_id, client_ip(request))
+        reserve(db, "email", email, device_id, request)
         issue_email_code(db, email, emails)
     except CodeProblem as error:
         raise problem(error)
     except ConnectionError:
         raise HTTPException(status_code=503, detail=UNAVAILABLE)
-    record_code_request(db, "email", email, device_id, client_ip(request))
     return CodeSent(sent_to=email, retry_after=int(RESEND_COOLDOWN.total_seconds()))
 
 
@@ -180,7 +192,8 @@ def email_verify(body: EmailVerify, db: Database, device_id: DeviceID = None):
 # MARK: - Apple and Google
 
 @router.post("/auth/apple", response_model=AuthOut)
-def apple(body: AppleSignIn, db: Database, identities: Identities, device_id: DeviceID = None):
+def apple(body: AppleSignIn, db: Database, identities: Identities, apple_tokens: AppleTokensDep,
+          device_id: DeviceID = None):
     try:
         who = identities.apple(body.identity_token, body.nonce)
     except InvalidToken:
@@ -189,6 +202,14 @@ def apple(body: AppleSignIn, db: Database, identities: Identities, device_id: De
         raise HTTPException(status_code=503, detail="Couldn't reach Apple. Try again in a moment.")
     user, is_new = sign_in(db, "apple", who.subject, email=who.email, email_verified=who.email_verified,
                            given_name=body.first_name)
+    if apple_tokens is not None and body.authorization_code:
+        # Kept so deleting the account can revoke this Apple sign-in. Best effort: a
+        # failure here never stops the sign-in.
+        refresh = apple_tokens.refresh_token(body.authorization_code)
+        identity = next((i for i in user.identities if i.provider == "apple" and i.subject == who.subject), None)
+        if refresh and identity is not None:
+            identity.apple_refresh_token = refresh
+            db.commit()
     return signed_in(db, user, is_new, device_id)
 
 
@@ -239,13 +260,13 @@ def add_phone_start(body: PhoneStart, db: Database, phones: Phones, request: Req
         phone = normalize_phone(body.phone)
         if session[0].phone == phone:
             raise CodeProblem(400, "That number is already on your account.")
-        check_rate_limits(db, "sms", phone, device_id, client_ip(request))
+        check_sms_country(phone, get_settings().sms_country_codes)
+        reserve(db, "sms", phone, device_id, request)
         phones.send(phone)
     except CodeProblem as error:
         raise problem(error)
     except ConnectionError:
         raise HTTPException(status_code=503, detail="Aisle can't send texts right now. Try again later.")
-    record_code_request(db, "sms", phone, device_id, client_ip(request))
     return CodeSent(sent_to=mask_phone(phone), retry_after=int(RESEND_COOLDOWN.total_seconds()))
 
 
@@ -270,7 +291,11 @@ def add_phone_verify(body: PhoneVerify, db: Database, phones: Phones, session: S
 
 
 @router.delete("/me", status_code=204)
-def delete_me(db: Database, session: SignedIn):
+def delete_me(db: Database, session: SignedIn, apple_tokens: AppleTokensDep):
+    if apple_tokens is not None:
+        for identity in session[0].identities:
+            if identity.provider == "apple" and identity.apple_refresh_token:
+                apple_tokens.revoke(identity.apple_refresh_token)
     delete_user(db, session[0])
     return Response(status_code=204)
 

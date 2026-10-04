@@ -1,11 +1,13 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..ai.intent import parse_intent
+from ..config import get_settings
 from ..database import get_db
+from ..limits import rate_limit
 from ..models import LocationObservation, SearchEvent, StoreZone
 from ..observations import counts_by_zone, observations_for
 from ..resolver import find_concept
@@ -13,10 +15,10 @@ from ..schemas import (
     FeedbackRequest, FeedbackResponse, LayoutPoint, LayoutZoneOut, ReportCountsOut, StoreLayoutOut, StoreZoneOut,
 )
 from ..store_zones import get_store
+from .auth import CallerDep
 
 router = APIRouter()
 Database = Annotated[Session, Depends(get_db)]
-DeviceID = Annotated[str | None, Header(alias="X-Aisle-Device", max_length=64)]
 
 
 @router.get("/stores/{store_id}/zones", response_model=list[StoreZoneOut])
@@ -55,7 +57,8 @@ def store_layout(store_id: int, db: Database, response: Response):
 
 
 @router.post("/feedback", response_model=FeedbackResponse, status_code=201)
-def submit_feedback(body: FeedbackRequest, db: Database, device_id: DeviceID = None):
+def submit_feedback(body: FeedbackRequest, db: Database, caller: CallerDep):
+    rate_limit(db, caller.subject, "feedback", get_settings().aisle_writes_per_hour)
     store = get_store(db, body.store_id)
     if store is None:
         raise HTTPException(status_code=404, detail="Store not found")
@@ -75,7 +78,9 @@ def submit_feedback(body: FeedbackRequest, db: Database, device_id: DeviceID = N
         zone_id=body.zone_id,
         aisle_text=body.aisle if body.verdict == "found" else None,
         note=body.note,
-        device_id=device_id,
+        # Who reported it, for counting agreement: the account, or the network when signed
+        # out. Not the device id, which the client can make up.
+        device_id=caller.subject[:64],
     )
     db.add(observation)
     db.commit()

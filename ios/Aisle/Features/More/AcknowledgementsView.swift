@@ -19,6 +19,8 @@ struct AcknowledgementsView: View {
                url: URL(string: "https://developer.apple.com/sf-symbols/")),
         Credit(name: "Store logos", by: "logo.dev", license: "Logos belong to their owners",
                url: URL(string: "https://logo.dev")),
+        Credit(name: "Store locations", by: "© OpenStreetMap contributors", license: "Open Database License (ODbL)",
+               url: URL(string: "https://www.openstreetmap.org/copyright")),
     ]
 
     var body: some View {

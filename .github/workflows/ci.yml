@@ -26,14 +26,16 @@ jobs:
         if: steps.backend.outputs.present == 'true'
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: "3.13"
 
       - name: Install and run pytest
         if: steps.backend.outputs.present == 'true'
         run: |
           set -euo pipefail
           python -m pip install --upgrade pip
-          if [ -f backend/requirements.txt ]; then
+          if [ -f backend/requirements-dev.txt ]; then
+            python -m pip install -r backend/requirements-dev.txt
+          elif [ -f backend/requirements.txt ]; then
             python -m pip install -r backend/requirements.txt
           fi
           if [ -f backend/pyproject.toml ]; then

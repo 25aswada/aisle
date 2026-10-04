@@ -8,12 +8,12 @@ from __future__ import annotations
 
 import hashlib
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
-from ..models import AuthSession, PlusEntitlement, UsageCounter, User, UserIdentity
+from ..models import AuthSession, CodeRequest, EmailCode, PlusEntitlement, UsageCounter, User, UserIdentity
 
 
 def sign_in(
@@ -91,8 +91,11 @@ def user_for_token(db: Session, token: str) -> tuple[User, AuthSession] | None:
     user = db.get(User, session.user_id)
     if user is None:
         return None
-    session.last_used_at = datetime.now(timezone.utc)
-    db.commit()
+    now = datetime.now(timezone.utc)
+    last = session.last_used_at
+    if last is None or (last if last.tzinfo else last.replace(tzinfo=timezone.utc)) < now - timedelta(hours=1):
+        session.last_used_at = now  # At most hourly, not a write on every request.
+        db.commit()
     return user, session
 
 
@@ -104,11 +107,18 @@ def revoke(db: Session, session: AuthSession) -> None:
 def delete_user(db: Session, user: User) -> None:
     """Deletes the account, its identities and sessions, its link to Aisle+ and its
     free-tier counts, so nothing carries over to a new account (SQLite can reuse the
-    id). Searches and reports stay anonymous. Apple keeps billing a subscription
+    id), and the sign-in code records for its phone number and emails. Searches and
+    reports stay anonymous. Apple keeps billing a subscription
     until it's canceled in Settings; "Restore purchases" can move it to a new account."""
     db.execute(update(AuthSession).where(AuthSession.user_id == user.id)
                .values(revoked_at=datetime.now(timezone.utc)))
     db.execute(delete(PlusEntitlement).where(PlusEntitlement.user_id == user.id))
     db.execute(delete(UsageCounter).where(UsageCounter.subject == f"user:{user.id}"))
+    # Sign-in code records hold the phone number or email; they go too.
+    contacts = {c for c in (user.email, user.phone, *(i.email for i in user.identities),
+                            *(i.subject for i in user.identities if i.provider in ("phone", "email"))) if c}
+    if contacts:
+        db.execute(delete(CodeRequest).where(CodeRequest.target.in_(contacts)))
+        db.execute(delete(EmailCode).where(EmailCode.email.in_(contacts)))
     db.delete(user)
     db.commit()

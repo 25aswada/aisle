@@ -24,6 +24,8 @@ from backend.app.main import app
 from backend.app.models import CodeRequest
 from backend.app.routers.auth import get_email_sender, get_identity_verifier, get_phone_verifier
 
+NONCE = "raw-nonce-1234"
+
 DEVICE = {"X-Aisle-Device": "device-1"}
 
 
@@ -197,7 +199,7 @@ def test_google_uses_its_name_and_links_to_the_same_email_account(api, fakes):
     api.post("/auth/email/start", json={"email": "sam@example.com"})
     by_email = api.post("/auth/email/verify", json={"email": "sam@example.com",
                                                      "code": fakes[1].codes["sam@example.com"]}).json()
-    by_google = api.post("/auth/google", json={"id_token": "x" * 40, "nonce": "n"}).json()
+    by_google = api.post("/auth/google", json={"id_token": "x" * 40, "nonce": NONCE}).json()
     assert by_google["is_new"] is False
     assert by_google["user"]["id"] == by_email["user"]["id"]
     assert by_google["user"]["providers"] == ["email", "google"]
@@ -205,16 +207,16 @@ def test_google_uses_its_name_and_links_to_the_same_email_account(api, fakes):
 
 
 def test_apple_first_sign_in_keeps_the_name_the_app_sent(api):
-    body = api.post("/auth/apple", json={"identity_token": "x" * 40, "first_name": "Sam"}).json()
+    body = api.post("/auth/apple", json={"identity_token": "x" * 40, "nonce": NONCE, "first_name": "Sam"}).json()
     assert body["is_new"] is True
     assert body["user"]["first_name"] == "Sam"
     assert body["user"]["providers"] == ["apple"]
-    assert api.post("/auth/apple", json={"identity_token": "x" * 40}).json()["is_new"] is False
+    assert api.post("/auth/apple", json={"identity_token": "x" * 40, "nonce": NONCE}).json()["is_new"] is False
 
 
 def test_rejected_tokens_dont_sign_in(api):
-    assert api.post("/auth/apple", json={"identity_token": "bad" + "x" * 40}).status_code == 401
-    assert api.post("/auth/google", json={"id_token": "bad" + "x" * 40}).status_code == 401
+    assert api.post("/auth/apple", json={"identity_token": "bad" + "x" * 40, "nonce": NONCE}).status_code == 401
+    assert api.post("/auth/google", json={"id_token": "bad" + "x" * 40, "nonce": NONCE}).status_code == 401
 
 
 # MARK: - Sessions, profile, deletion
@@ -254,7 +256,7 @@ def test_deleted_number_can_sign_up_again(api, engine):
 # MARK: - Adding a phone number
 
 def google_sign_in(api):
-    return api.post("/auth/google", json={"id_token": "x" * 40, "nonce": "n"}).json()
+    return api.post("/auth/google", json={"id_token": "x" * 40, "nonce": NONCE}).json()
 
 
 def test_a_phone_added_to_a_google_account_signs_in_to_it(api, fakes):

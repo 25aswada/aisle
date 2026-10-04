@@ -735,7 +735,7 @@ enum ItemIcon {
 struct ItemIconView: View {
     let text: String
     var size: CGFloat = 28
-    /// Puts the icon on a soft gradient tile (for bigger spots like the result card).
+    /// Leaves a little space around the icon in bigger spots (no background).
     var tile = false
 
     var body: some View {
@@ -745,17 +745,10 @@ struct ItemIconView: View {
                 .interpolation(.high)
                 .scaledToFit()
                 .accessibilityHidden(true)
-            if tile {
-                image
-                    .frame(width: size * 0.72, height: size * 0.72)
-                    .frame(width: size, height: size)
-                    .background(
-                        LinearGradient(colors: [Color(hex: 0xFBEAF3), Color(hex: 0xFFF3DC)], startPoint: .topLeading, endPoint: .bottomTrailing),
-                        in: RoundedRectangle(cornerRadius: size * 0.24, style: .continuous)
-                    )
-            } else {
-                image.frame(width: size, height: size)
-            }
+            // No tile or background behind icons; `tile` only adds a little breathing room.
+            image
+                .frame(width: tile ? size * 0.88 : size, height: tile ? size * 0.88 : size)
+                .frame(width: size, height: size)
         }
     }
 }

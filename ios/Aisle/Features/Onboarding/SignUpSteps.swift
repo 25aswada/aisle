@@ -23,12 +23,12 @@ struct SignUpMethodStep: View {
                     GradientHeadline(lead: "Welcome ", accent: "back.")
                     OnboardingBody(text: "Sign in the way you signed up. New here? Any of these makes a free account.")
                 } else {
-                    GradientHeadline(lead: "Your lists, ", accent: "on every device.")
-                    OnboardingBody(text: "Create your free account to start using Aisle. It keeps your shopping lists, usual stores and recent searches in sync.")
+                    GradientHeadline(lead: "One free account, ", accent: "and you're in.")
+                    OnboardingBody(text: "Create your free account to start using Aisle. It's how you share lists with family and keep Aisle+ when you get a new phone.")
                 }
                 VStack(alignment: .leading, spacing: 12) {
-                    Benefit(symbol: "checklist", text: "Lists that follow you to any phone")
-                    Benefit(symbol: "mappin.and.ellipse", text: "Your usual stores, remembered")
+                    Benefit(symbol: "person.2", text: "Share lists with your family")
+                    Benefit(symbol: "sparkles", text: "Aisle+ comes with you to a new phone")
                 }
                 .padding(16)
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -86,7 +86,7 @@ struct SignUpMethodStep: View {
             .foregroundStyle(Theme.ink)
             .frame(maxWidth: .infinity, minHeight: 40)
             .accessibilityIdentifier("emailSignUpButton")
-            Text("By continuing you agree to the Terms and Privacy Policy.")
+            Text(Legal.agreementLine)
                 .font(.aisleCaption)
                 .foregroundStyle(Theme.secondaryInk)
                 .multilineTextAlignment(.center)
@@ -450,20 +450,6 @@ struct NameStep: View {
                     .onSubmit(create)
                     .modifier(OnboardingFieldStyle())
                     .accessibilityIdentifier("firstNameField")
-                Toggle(isOn: $model.wantsTips) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text("Shopping tips by email")
-                            .font(.aisleHeadline)
-                            .foregroundStyle(Theme.ink)
-                        Text("Occasional, never more than monthly")
-                            .font(.aisleFootnote)
-                            .foregroundStyle(Theme.secondaryInk)
-                    }
-                }
-                .tint(Theme.toggleOn)
-                .padding(16)
-                .background(Theme.surface.opacity(0.7), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-                .padding(.top, 8)
                 if let error = model.errorMessage {
                     Text(error)
                         .font(.aisleFootnote)

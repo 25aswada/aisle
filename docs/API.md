@@ -396,6 +396,22 @@ Basic, anonymous product analytics. Status 202.
 - `properties`: at most 12 scalar values (string ≤ 80 chars, number, bool, null). The app
   never sends queries or item text. Users can turn analytics off in the You tab.
 
+### Access and limits
+
+- `/chat`, `/identify` and `/lists/scan` need a signed-in account (401 otherwise). Free
+  accounts get a few a day (402 `plus_required`); a use that returns nothing isn't counted.
+- Fair-use limits per account (per IP when signed out) return 429: searches, photos,
+  follow-ups, routes, and writes (`/feedback`, `/events`, `/lists/parse`). Each network can
+  also only set up so many never-used stores' maps a day.
+- Sign-in codes: SMS only to `AISLE_SMS_COUNTRY_CODES` (US/Canada), per-target, device,
+  IP and global hourly/daily caps. `/auth/apple` and `/auth/google` require `nonce`;
+  `/auth/apple` also takes Apple's `authorization_code` so account deletion can revoke it.
+- The client IP is the last `X-Forwarded-For` entry (the one Heroku's router adds).
+- Request bodies over 8 MB get 413. On Heroku, plain HTTP gets a 308 to HTTPS and
+  `/docs` is off.
+- `POST /plus/notifications`: App Store Server Notifications V2 (signed by Apple).
+- `GET /privacy`, `/terms`, `/support`: public HTML pages for the App Store listing.
+
 ### Errors
 
 - Validation errors: 422 with FastAPI's standard body.

@@ -229,6 +229,8 @@ class UserIdentity(Base):
     provider: Mapped[str] = mapped_column(String(10))  # apple, google, phone, email
     subject: Mapped[str] = mapped_column(String(320))
     email: Mapped[str | None] = mapped_column(String(320))
+    # Apple's refresh token, revoked when the account is deleted (see auth.apple_tokens).
+    apple_refresh_token: Mapped[str | None] = mapped_column(String(500))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     user: Mapped[User] = relationship(back_populates="identities")
 

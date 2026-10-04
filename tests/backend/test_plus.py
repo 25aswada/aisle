@@ -158,6 +158,7 @@ def api(engine, apple):
     app.dependency_overrides[get_db] = override_db
     app.dependency_overrides[get_explainer] = lambda: FakeAI()
     with TestClient(app) as client:
+        client.engine, client.shoppers = engine, {}
         yield client
     app.dependency_overrides.clear()
 
@@ -166,8 +167,15 @@ def device(name):
     return {"X-Aisle-Device": name}
 
 
+def shopper(api, name):
+    """A signed-in shopper's headers, the same for each name within a test."""
+    if name not in api.shoppers:
+        api.shoppers[name] = account(api.engine, name)[0]
+    return api.shoppers[name]
+
+
 def identify(api, who):
-    return api.post("/identify", json={"image": PHOTO}, headers=device(who))
+    return api.post("/identify", json={"image": PHOTO}, headers=shopper(api, who))
 
 
 def test_free_photo_searches_stop_at_the_daily_limit(api):
@@ -178,11 +186,11 @@ def test_free_photo_searches_stop_at_the_daily_limit(api):
     assert blocked.json()["detail"]["code"] == "plus_required"
     assert blocked.json()["detail"]["feature"] == "photo_search"
     assert "5 free photo searches" in blocked.json()["detail"]["message"]
-    # Another device has its own allowance; list scans share the same one.
+    # Another account has its own allowance; list scans share the same one.
     assert identify(api, "phone-b").status_code == 200
-    assert api.post("/lists/scan", json={"image": PHOTO}, headers=device("phone-a")).status_code == 402
+    assert api.post("/lists/scan", json={"image": PHOTO}, headers=shopper(api, "phone-a")).status_code == 402
 
-    status = api.get("/plus/status", headers=device("phone-a")).json()
+    status = api.get("/plus/status", headers=shopper(api, "phone-a")).json()
     assert status["is_plus"] is False
     assert status["photo_search"] == {"used": 5, "limit": 5}
 
@@ -201,11 +209,11 @@ def test_follow_ups_have_their_own_limit_and_photos_count_as_photo_searches(api)
     convo = [{"role": "user", "content": "milk"}, {"role": "assistant", "content": "Dairy."},
              {"role": "user", "content": "and eggs?"}]
     for _ in range(10):
-        assert api.post("/chat", json={"store_id": 1, "messages": convo}, headers=device("p")).status_code == 200
-    assert api.post("/chat", json={"store_id": 1, "messages": convo}, headers=device("p")).status_code == 402
+        assert api.post("/chat", json={"store_id": 1, "messages": convo}, headers=shopper(api, "p")).status_code == 200
+    assert api.post("/chat", json={"store_id": 1, "messages": convo}, headers=shopper(api, "p")).status_code == 402
     with_photo = convo[:2] + [{"role": "user", "content": "this?", "image": PHOTO}]
-    assert api.post("/chat", json={"store_id": 1, "messages": with_photo}, headers=device("p")).status_code == 200
-    status = api.get("/plus/status", headers=device("p")).json()
+    assert api.post("/chat", json={"store_id": 1, "messages": with_photo}, headers=shopper(api, "p")).status_code == 200
+    status = api.get("/plus/status", headers=shopper(api, "p")).json()
     assert status["follow_up"]["used"] == 10 and status["photo_search"]["used"] == 1
 
 
@@ -299,3 +307,42 @@ def test_xcode_purchases_follow_the_setting(api, apple, monkeypatch, engine):
     assert sync(api, headers, xcode).status_code == 400
     monkeypatch.setattr(get_settings(), "aisle_plus_allow_xcode", True)
     assert sync(api, headers, xcode).json()["is_plus"] is True
+
+
+# MARK: - App Store Server Notifications
+
+def notify(api, apple, notification_type, transaction, bundle=BUNDLE):
+    signed = apple.sign(notificationType=notification_type,
+                        data={"bundleId": bundle, "environment": "Sandbox", "signedTransactionInfo": transaction})
+    return api.post("/plus/notifications", json={"signedPayload": signed})
+
+
+def test_a_refund_notification_ends_aisle_plus(api, apple, engine):
+    headers, token, _ = account(engine)
+    bought = apple.sign(appAccountToken=token)
+    assert sync(api, headers, bought).json()["is_plus"] is True
+    past = int(time.time() * 1000) - 1000
+    assert notify(api, apple, "REFUND", apple.sign(appAccountToken=token, revocationDate=past)).status_code == 200
+    assert api.get("/plus/status", headers=headers).json()["is_plus"] is False
+
+
+def test_a_renewal_notification_reaches_an_account_that_never_synced(api, apple, engine):
+    headers, token, _ = account(engine)
+    later = int(time.time() * 1000) + 30 * 86_400_000
+    assert notify(api, apple, "DID_RENEW", apple.sign(appAccountToken=token, expiresDate=later)).status_code == 200
+    assert api.get("/plus/status", headers=headers).json()["is_plus"] is True
+
+
+def test_an_older_transaction_cant_shorten_a_subscription(api, apple, engine):
+    headers, token, _ = account(engine)
+    later = int(time.time() * 1000) + 30 * 86_400_000
+    sync(api, headers, apple.sign(appAccountToken=token, expiresDate=later))
+    sync(api, headers, apple.sign(appAccountToken=token, expiresDate=int(time.time() * 1000) - 1000))
+    assert api.get("/plus/status", headers=headers).json()["is_plus"] is True
+
+
+def test_notifications_must_be_genuine_and_for_this_app(api, apple):
+    assert api.post("/plus/notifications", json={"signedPayload": "a.b.c" + "x" * 20}).status_code == 400
+    assert notify(api, apple, "DID_RENEW", apple.sign(), bundle="com.other.app").status_code == 400
+    forged = FakeApple()  # Signed by someone else's certificates.
+    assert notify(api, forged, "REFUND", forged.sign()).status_code == 400
