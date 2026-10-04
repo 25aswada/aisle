@@ -1,8 +1,10 @@
 import SwiftUI
 
-/// The moment between asking and the answer: a shimmering status line, a mini store
-/// floor with a light sweeping across it, a glowing border and three progress chips.
-/// The chips are paced to the wait for a single request; they don't report server progress.
+/// The moment between asking and the answer: the answer card itself, still blank. A small
+/// status line ticks through what Aisle is doing while the aisle and department lines
+/// shimmer, and the item's picture (when there is one) breathes on the right. It's the
+/// same size as the result card, so nothing jumps when the answer lands.
+/// The status is paced to the wait for a single request; it doesn't report server progress.
 struct SearchingView: View {
     let query: String
     /// The photo being searched from, if any.
@@ -13,6 +15,7 @@ struct SearchingView: View {
 
     @State private var stage = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
 
     private var statuses: [String] {
         [photo == nil ? "Reading “\(query)”" : "Looking at your photo", "Checking \(retailer)’s layout", "Finding the aisle"]
@@ -22,204 +25,114 @@ struct SearchingView: View {
         VStack(alignment: .leading, spacing: 16) {
             QueryBubble(text: query, photo: photo)
             TimelineView(.animation(paused: reduceMotion)) { timeline in
-                let time = reduceMotion ? 0.6 : timeline.date.timeIntervalSinceReferenceDate
-                VStack(alignment: .leading, spacing: 16) {
-                    statusRow(time: time)
-                    card(time: time)
-                }
+                ghostCard(time: reduceMotion ? 0.6 : timeline.date.timeIntervalSinceReferenceDate)
             }
         }
         .task { await pace() }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(photo == nil ? "Finding \(query) in \(storeName)" : "Finding what's in your photo in \(storeName)")
+        .accessibilityValue(statuses[stage])
         .accessibilityAddTraits(.updatesFrequently)
     }
 
-    // MARK: - Status
+    // MARK: - Ghost card
+
+    private func ghostCard(time: TimeInterval) -> some View {
+        let shape = RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous)
+        return HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 10) {
+                statusRow(time: time)
+                SkeletonBar(time: time, delay: 0)
+                    .frame(width: 150, height: 36)
+                SkeletonBar(time: time, delay: 0.12)
+                    .frame(width: 118, height: 12)
+            }
+            Spacer(minLength: 0)
+            if photo == nil, ItemIcon.assetName(for: query) != nil {
+                ItemIconView(text: query, size: 52)
+                    .scaleEffect(reduceMotion ? 1 : 1 + 0.03 * (1 + sin(time * 2 * .pi / 2.2)))
+                    .frame(width: 74, height: 74)
+                    .background(
+                        colorScheme == .dark ? AnyShapeStyle(Color.white.opacity(0.06)) : AnyShapeStyle(Theme.accentSoft),
+                        in: RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    )
+                    .transition(.opacity)
+            }
+        }
+        .padding(.vertical, 16)
+        .padding(.leading, 18)
+        .padding(.trailing, 16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.surface.opacity(0.92), in: shape)
+        .overlay(shape.strokeBorder(Theme.hairline, lineWidth: 1))
+        .shadow(color: Theme.ink.opacity(0.06), radius: 14, y: 8)
+    }
 
     private func statusRow(time: TimeInterval) -> some View {
-        let breathe = reduceMotion ? 1 : 1 + 0.035 * (1 + sin(time * 2 * .pi / 2.2))
-        return HStack(spacing: 10) {
-            AisleMark(size: 24)
-                .shimmer(time: time)
-                .scaleEffect(breathe)
+        HStack(spacing: 8) {
+            Circle()
+                .trim(from: 0, to: 0.72)
+                .stroke(Color(hex: 0xDC6F9C), style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                .frame(width: 12, height: 12)
+                .rotationEffect(.degrees(reduceMotion ? 0 : (time / 0.8).truncatingRemainder(dividingBy: 1) * 360))
             ZStack(alignment: .leading) {
                 ForEach(statuses.indices, id: \.self) { index in
                     if index == stage {
                         Text(statuses[index])
-                            .font(Theme.font(15, .semibold, relativeTo: .subheadline))
+                            .font(Theme.font(13, .semibold, relativeTo: .footnote))
                             .foregroundStyle(Theme.secondaryInk)
                             .lineLimit(1)
                             .shimmer(time: time)
                             .transition(.asymmetric(
-                                insertion: .opacity.combined(with: .offset(y: 8)),
-                                removal: .opacity.combined(with: .offset(y: -8))
+                                insertion: .opacity.combined(with: .offset(y: 6)),
+                                removal: .opacity.combined(with: .offset(y: -6))
                             ))
                     }
                 }
             }
-            .frame(height: 22, alignment: .leading)
+            .frame(height: 18, alignment: .leading)
             .clipped()
         }
     }
 
-    // MARK: - Card
-
-    private func card(time: TimeInterval) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
-            FloorScan(time: time)
-                .frame(height: 164)
-            HStack(spacing: 8) {
-                ForEach(Array(["Item", "Store layout", "Aisle"].enumerated()), id: \.offset) { index, label in
-                    StageChip(label: label, state: index < stage ? .done : (index == stage ? .working : .waiting), time: time)
-                }
-            }
-        }
-        .padding(16)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 30, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 30, style: .continuous)
-                .strokeBorder(
-                    AngularGradient(
-                        stops: [
-                            .init(color: .clear, location: 0),
-                            .init(color: .clear, location: 0.55),
-                            .init(color: Color(hex: 0xE2CFF9), location: 0.72),
-                            .init(color: Theme.glow, location: 0.86),
-                            .init(color: Color(hex: 0xFFDDC6), location: 0.95),
-                            .init(color: .clear, location: 1),
-                        ],
-                        center: .center,
-                        angle: .degrees(reduceMotion ? 0 : (time / 2.6).truncatingRemainder(dividingBy: 1) * 360)
-                    ),
-                    lineWidth: 1.5
-                )
-        }
-        .shadow(color: Theme.glow.opacity(0.12), radius: 22, y: 12)
-    }
-
     private func pace() async {
         for next in 1...2 {
-            do { try await Task.sleep(for: .milliseconds(900)) } catch { return }
+            do { try await Task.sleep(for: .milliseconds(1000)) } catch { return }
             withAnimation(.spring(response: 0.45, dampingFraction: 0.85)) { stage = next }
         }
     }
 }
 
-// MARK: - Floor scan
+// MARK: - Skeleton
 
-/// A tiny store floor; a wave of the accent gradient rolls across the aisles under a soft beam.
-private struct FloorScan: View {
+/// A rounded placeholder with a soft light sweeping across it.
+private struct SkeletonBar: View {
     let time: TimeInterval
-    private let period = 2.4
+    let delay: TimeInterval
+
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        Canvas { context, size in
-            let w = size.width, h = size.height
-            context.fill(Path(roundedRect: CGRect(origin: .zero, size: size), cornerRadius: 22, style: .continuous),
-                         with: .color(Theme.background.opacity(0.6)))
-
-            // Tiles as (rect, wave delay in seconds).
-            var tiles: [(CGRect, Double)] = [
-                (CGRect(x: 14, y: 12, width: w - 28, height: 16), 0.5),
-                (CGRect(x: 14, y: 36, width: 22, height: 92), 0),
-                (CGRect(x: w - 36, y: 36, width: 22, height: 92), 1.05),
-                (CGRect(x: 14, y: 136, width: w * 0.28, height: 16), 0.1),
-                (CGRect(x: w - 14 - w * 0.37, y: 136, width: w * 0.37, height: 16), 0.9),
-            ]
-            let barsLeft = 46.0, barsRight = w - 46
-            let count = 9
-            let step = (barsRight - barsLeft - 14) / Double(count - 1)
-            for index in 0..<count {
-                tiles.append((CGRect(x: barsLeft + Double(index) * step, y: 36, width: 14, height: 92), Double(index) * 0.11))
-            }
-
-            for (rect, delay) in tiles {
-                let phase = ((time - delay) / period).truncatingRemainder(dividingBy: 1)
-                let wave = max(0, sin(max(0, min(phase, 0.5)) * 2 * .pi))   // rises and falls in the first half
-                let lifted = rect.offsetBy(dx: 0, dy: -2 * wave)
-                let radius = min(rect.width, rect.height) / 2
-                let path = Path(roundedRect: lifted, cornerRadius: min(radius, 8), style: .continuous)
-                context.fill(path, with: .color(Theme.fill))
-                if wave > 0.01 {
-                    var layer = context
-                    layer.opacity = wave
-                    layer.fill(path, with: .linearGradient(
-                        Gradient(colors: [Color(hex: 0xEAD9FB), Color(hex: 0xFADCE7), Color(hex: 0xFFE6D2)]),
-                        startPoint: CGPoint(x: lifted.midX, y: lifted.minY),
-                        endPoint: CGPoint(x: lifted.midX, y: lifted.maxY)
-                    ))
+        let shape = RoundedRectangle(cornerRadius: 11, style: .continuous)
+        shape
+            .fill(colorScheme == .dark ? Color(hex: 0x38323F) : Theme.fill)
+            .overlay {
+                if !reduceMotion {
+                    GeometryReader { geo in
+                        let progress = ((time - delay) / 1.6).truncatingRemainder(dividingBy: 1)
+                        let band = geo.size.width * 0.6
+                        LinearGradient(
+                            colors: [.white.opacity(0), .white.opacity(colorScheme == .dark ? 0.07 : 0.75), .white.opacity(0)],
+                            startPoint: .leading, endPoint: .trailing
+                        )
+                        .frame(width: band)
+                        .offset(x: -band + (geo.size.width + band * 2) * progress)
+                    }
                 }
             }
-
-            // The beam.
-            let progress = (time / period).truncatingRemainder(dividingBy: 1)
-            let eased = progress < 0.5 ? 2 * progress * progress : 1 - pow(-2 * progress + 2, 2) / 2
-            let beamX = -80 + (w + 160) * eased
-            context.fill(
-                Path(CGRect(x: beamX - 35, y: 0, width: 70, height: h)),
-                with: .linearGradient(
-                    Gradient(colors: [.white.opacity(0), .white.opacity(0.7), .white.opacity(0)]),
-                    startPoint: CGPoint(x: beamX - 35, y: 0), endPoint: CGPoint(x: beamX + 35, y: 0)
-                )
-            )
-        }
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .accessibilityHidden(true)
-    }
-}
-
-// MARK: - Stage chips
-
-private struct StageChip: View {
-    enum Status { case done, working, waiting }
-
-    let label: String
-    let state: Status
-    let time: TimeInterval
-
-    var body: some View {
-        HStack(spacing: 6) {
-            icon.frame(width: 18, height: 18)
-            Text(label)
-                .font(Theme.font(12, .semibold, relativeTo: .caption))
-                .foregroundStyle(state == .waiting ? Theme.secondaryInk.opacity(0.75) : Theme.ink)
-                .lineLimit(1)
-        }
-        .padding(.leading, 7)
-        .padding(.trailing, 11)
-        .frame(height: 30)
-        .background {
-            switch state {
-            case .done: Capsule().fill(Theme.bubble)
-            case .working:
-                Capsule().fill(Theme.accentSoft)
-                    .overlay(Capsule().strokeBorder(Theme.glow.opacity(0.3), lineWidth: 1))
-            case .waiting: Capsule().fill(Theme.fill)
-            }
-        }
-        .animation(.spring(response: 0.4, dampingFraction: 0.8), value: state)
-    }
-
-    @ViewBuilder
-    private var icon: some View {
-        switch state {
-        case .done:
-            Image(systemName: "checkmark")
-                .font(.system(size: 9, weight: .heavy))
-                .foregroundStyle(Theme.background)
-                .frame(width: 18, height: 18)
-                .background(Theme.ink, in: Circle())
-                .transition(.scale.combined(with: .opacity))
-        case .working:
-            Circle()
-                .trim(from: 0, to: 0.72)
-                .stroke(Color(hex: 0xDC6F9C), style: StrokeStyle(lineWidth: 2, lineCap: .round))
-                .rotationEffect(.degrees((time / 0.8).truncatingRemainder(dividingBy: 1) * 360))
-                .padding(1)
-        case .waiting:
-            Circle().strokeBorder(Theme.hairline, lineWidth: 2)
-        }
+            .clipShape(shape)
+            .accessibilityHidden(true)
     }
 }
 
