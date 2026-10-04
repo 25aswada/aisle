@@ -27,9 +27,10 @@ struct ShoppingListView: View {
 
     /// The list screens' sheets, one at a time.
     enum ListSheet: Identifiable {
-        case share, join(String), rename, signIn, tripStores, pastTrips
+        case share, join(String), rename, signIn, tripStores, pastTrips, allLists
         var id: String {
             switch self {
+            case .allLists: return "allLists"
             case .tripStores: return "tripStores"
             case .pastTrips: return "pastTrips"
             case .share: return "share"
@@ -127,6 +128,9 @@ struct ShoppingListView: View {
                     .presentationDetents([.large])
                 case .pastTrips:
                     PastTripsView()
+                case .allLists:
+                    AllListsSheet(isPlus: plus.isPlus, onNewList: createListFromOverview)
+                        .presentationDetents([.large])
                 }
             }
             .confirmationDialog(deleteTitle, isPresented: $confirmingDelete, titleVisibility: .visible) {
@@ -200,14 +204,15 @@ struct ShoppingListView: View {
                         "Start a new list?", isPresented: $confirmingNewList, titleVisibility: .visible
                     ) {
                         Button("Start over", role: .destructive, action: startNewList)
-                        Button("Keep more lists with Aisle+") {
-                            composer.upgradePrompt = "Keep a list for every store and occasion with Aisle+."
+                        Button("Get unlimited lists with Aisle+") {
+                            composer.upgradePrompt = "Make as many lists as you like with Aisle+: one for every store, week or occasion."
                         }
                     } message: {
-                        Text("Starting over clears all \(list.items.count) \(list.items.count == 1 ? "item" : "items") on your list. With Aisle+ you can keep more than one list.")
+                        Text("The free plan has one list, so starting over clears its \(list.items.count) \(list.items.count == 1 ? "item" : "items"). Aisle+ keeps as many lists as you like.")
                     }
                 }
                 Menu {
+                    Button("All lists", systemImage: "list.bullet.rectangle") { sheet = .allLists }
                     if list.current.shared != nil {
                         Button("Sharing…", systemImage: "person.2") { sheet = .share }
                     } else {
@@ -255,7 +260,7 @@ struct ShoppingListView: View {
                     RetailerLogo(url: store.retailerLogoURL, size: 22) {
                         Image(systemName: "storefront").font(.system(size: 11, weight: .semibold))
                     }
-                    Text("for \(store.name)").lineLimit(1)
+                    Text("Shopping at \(store.name)").lineLimit(1)
                 }
                 .font(Theme.font(14, relativeTo: .subheadline))
                 .foregroundStyle(Theme.secondaryInk)
@@ -406,31 +411,10 @@ struct ShoppingListView: View {
     }
 
     /// Clears the list and puts the cursor in the add bar for the first item.
-    /// "Your list" for a single list of your own; otherwise the list's name, which switches lists.
-    @ViewBuilder
+    /// The open list's name; tapping it shows every list.
     private var listTitle: some View {
-        if list.lists.count == 1 && list.current.shared == nil {
-            (Text("Your ") + Text("list").foregroundStyle(Theme.accentInk))
-                .font(Theme.font(34, .bold, relativeTo: .largeTitle))
-                .tracking(-1)
-                .foregroundStyle(Theme.ink)
-                .accessibilityAddTraits(.isHeader)
-        } else {
-            Menu {
-                ForEach(list.lists) { item in
-                    Button {
-                        withAnimation(.spring(response: 0.4, dampingFraction: 0.86)) { list.select(item.id) }
-                    } label: {
-                        if item.id == list.currentID {
-                            Label(item.name, systemImage: "checkmark")
-                        } else {
-                            Label(item.name, systemImage: item.shared == nil ? "list.bullet" : "person.2")
-                        }
-                    }
-                }
-                Divider()
-                Button("New list", systemImage: "plus", action: newListTapped)
-            } label: {
+        Button { sheet = .allLists } label: {
+            VStack(alignment: .leading, spacing: 2) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text(list.current.name)
                         .font(Theme.font(34, .bold, relativeTo: .largeTitle))
@@ -442,15 +426,43 @@ struct ShoppingListView: View {
                         .font(.system(size: 17, weight: .bold))
                         .foregroundStyle(Theme.ink)
                 }
+                Text(listPosition)
+                    .font(Theme.font(14, .semibold, relativeTo: .subheadline))
+                    .foregroundStyle(Theme.secondaryInk)
             }
-            .accessibilityLabel("List: \(list.current.name). Switch lists")
-            .accessibilityAddTraits(.isHeader)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("List: \(list.current.name). \(listPosition)")
+        .accessibilityHint("Shows all your lists")
+        .accessibilityAddTraits(.isHeader)
+        .accessibilityIdentifier("listTitleButton")
+    }
+
+    /// "List 2 of 3 · See all", or "See all lists" when there's just one.
+    private var listPosition: String {
+        guard list.lists.count > 1, let index = list.lists.firstIndex(where: { $0.id == list.currentID }) else {
+            return "See all lists"
+        }
+        return "List \(index + 1) of \(list.lists.count) · See all"
+    }
+
+    /// A new list from the All lists page, ready to add to once the page closes.
+    private func createListFromOverview() {
+        withAnimation(.spring(response: 0.45, dampingFraction: 0.86)) {
+            list.createList()
+            composer.dismissPhotoNotice()
+            showDone = false
+        }
+        Task {
+            try? await Task.sleep(for: .milliseconds(450))
+            composerFocused = true
         }
     }
 
     /// Aisle+ adds another list; the free tier has one, so it's start over or upgrade.
     private func newListTapped() {
-        if plus.isPlus {
+        if list.canCreateList(isPlus: plus.isPlus) {
             withAnimation(.spring(response: 0.45, dampingFraction: 0.86)) {
                 list.createList()
                 composer.dismissPhotoNotice()

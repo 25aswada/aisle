@@ -287,6 +287,30 @@ final class MultipleListsTests: XCTestCase {
         XCTAssertEqual(ShoppingListStore.nextName(after: ["My list", "List 3"]), "List 4")
     }
 
+    func testTheFreePlanHasOneListAndAislePlusHasNoLimit() {
+        let store = ShoppingListStore(defaults: .fresh("AisleTests.ListLimit"))
+        XCTAssertFalse(store.canCreateList(isPlus: false))
+        XCTAssertTrue(store.canCreateList(isPlus: true))
+        for _ in 0..<5 { store.createList() }
+        XCTAssertEqual(store.lists.count, 6)
+        XCTAssertTrue(store.canCreateList(isPlus: true))
+        // Lists made on Aisle+ stay if it ends; only making more needs it.
+        XCTAssertFalse(store.canCreateList(isPlus: false))
+    }
+
+    func testListsCanBeRenamedAndDeletedWithoutOpeningThem() async throws {
+        let store = ShoppingListStore(defaults: .fresh("AisleTests.ListByID"))
+        let first = store.current.id
+        let second = store.createList()
+        store.select(first)
+        store.renameList(second, to: "  Costco run  ")
+        XCTAssertEqual(store.lists.first { $0.id == second }?.name, "Costco run")
+        XCTAssertEqual(store.current.id, first)
+        try await store.deleteList(second)
+        XCTAssertEqual(store.lists.map(\.id), [first])
+        XCTAssertEqual(store.current.id, first)
+    }
+
     func testDeletingTheLastListLeavesAnEmptyOne() async throws {
         let store = ShoppingListStore(defaults: .fresh("AisleTests.DeleteLast"))
         store.add([ParsedListItem(text: "milk", quantity: nil, category: nil)])
