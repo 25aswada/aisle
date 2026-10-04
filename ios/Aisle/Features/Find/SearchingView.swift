@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// The moment between asking and the answer: the answer card itself, still blank. A small
-/// status line ticks through what Aisle is doing while the aisle and department lines
+/// status line with the shimmering Aisle mark ticks through what Aisle is doing while the aisle and department lines
 /// shimmer, and the item's picture (when there is one) breathes on the right. It's the
 /// same size as the result card, so nothing jumps when the answer lands.
 /// The status is paced to the wait for a single request; it doesn't report server progress.
@@ -70,11 +70,9 @@ struct SearchingView: View {
 
     private func statusRow(time: TimeInterval) -> some View {
         HStack(spacing: 8) {
-            Circle()
-                .trim(from: 0, to: 0.72)
-                .stroke(Color(hex: 0xDC6F9C), style: StrokeStyle(lineWidth: 2, lineCap: .round))
-                .frame(width: 12, height: 12)
-                .rotationEffect(.degrees(reduceMotion ? 0 : (time / 0.8).truncatingRemainder(dividingBy: 1) * 360))
+            AisleMark(size: 16)
+                .shimmer(time: time)
+                .scaleEffect(reduceMotion ? 1 : 1 + 0.04 * (1 + sin(time * 2 * .pi / 2.2)))
             ZStack(alignment: .leading) {
                 ForEach(statuses.indices, id: \.self) { index in
                     if index == stage {
