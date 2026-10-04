@@ -108,6 +108,7 @@ final class FindModel {
             try Task.checkCancellation()
             cache.store(result, query: text, storeID: storeID)
             recents.record(text, result: result, storeID: storeID)
+            ShopperStats.recordSearch(storeID: storeID)
             phase = .loaded(result)
             trackResult(result, storeID: storeID, cached: false)
         } catch is CancellationError {
@@ -272,6 +273,7 @@ final class FindModel {
         do {
             _ = try await api.sendFeedback(body)
             feedback = onSuccess()
+            if verdict == .found { ShopperStats.recordConfirmation() }
             // The next search for this item should show the updated report counts.
             cache.invalidate(item: result.item, storeID: storeID)
             analytics.track(.feedbackSent, [

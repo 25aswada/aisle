@@ -109,6 +109,13 @@ final class AccountStore {
         account = nil
     }
 
+    /// Changes the signed-in account in place, e.g. a new first name or email preference.
+    func update(_ change: (inout Account) -> Void) {
+        guard var current = account else { return }
+        change(&current)
+        account = current
+    }
+
     private func save() {
         if let account, let data = try? JSONEncoder().encode(account) {
             defaults.set(data, forKey: Self.defaultsKey)
