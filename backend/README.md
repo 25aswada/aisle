@@ -36,6 +36,22 @@ python -m backend.app.seed
 uvicorn backend.app.main:app --reload
 ```
 
+## Deploying (Heroku)
+
+The Heroku app `aisle-api` runs this folder on its own, with Heroku Postgres as
+`DATABASE_URL` (its `postgres://` form is normalized to psycopg 3 in `config.py`).
+From the repo root:
+
+```bash
+git subtree push --prefix backend heroku main
+```
+
+`Procfile` runs `alembic upgrade head` as the release step and serves `app.main:app`
+with uvicorn; `.python-version` pins Python 3.13. Inside the deployed folder the
+package is `app`, not `backend.app` (`alembic/env.py` handles both). Seed a new
+database once with `heroku run python -m app.seed -a aisle-api`. Secrets are set with
+`heroku config:set`, never committed.
+
 ## API
 
 Interactive API documentation: <http://127.0.0.1:8000/docs>.

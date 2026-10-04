@@ -2,6 +2,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -46,6 +47,14 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=Path(__file__).resolve().parents[1] / ".env", extra="ignore"
     )
+
+    @field_validator("database_url")
+    @classmethod
+    def use_psycopg(cls, url: str) -> str:
+        """Heroku's DATABASE_URL is postgres://...; SQLAlchemy and Alembic here use psycopg 3."""
+        if url.startswith(("postgres://", "postgresql://")):
+            return "postgresql+psycopg://" + url.split("://", 1)[1]
+        return url
 
 
 @lru_cache
