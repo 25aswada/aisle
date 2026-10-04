@@ -1,0 +1,110 @@
+import SwiftUI
+
+/// The sign-in screens, in a navigation path: method, then phone or email, the code,
+/// and for new accounts a check that they don't already have one, the terms and a first name. Apple and Google skip straight to the name step
+/// (or finish, for an account that already has one).
+enum AccountFlowStep: Hashable {
+    case method(returning: Bool)
+    case phone, email, code, newAccount, terms, name
+}
+
+/// One sign-in screen, wired to push the next. Shared by onboarding and the You tab.
+struct AccountFlowScreen: View {
+    let step: AccountFlowStep
+    let model: SignUpModel
+    @Binding var path: [AccountFlowStep]
+    /// Leaving the method screen when it's the root (the You tab sheet). Nil hides Back there.
+    let onLeave: (() -> Void)?
+    /// "Not now" on the method screen. Nil (onboarding) means an account is required.
+    let onSkip: (() -> Void)?
+    let onSignedIn: (AuthSession) -> Void
+
+    var body: some View {
+        switch step {
+        case .method(let returning):
+            SignUpMethodStep(
+                model: model, isReturning: returning, onBack: path.isEmpty && onLeave == nil ? nil : back,
+                onPhone: { path.append(.phone) },
+                onEmail: { path.append(.email) },
+                onProviderSuccess: signedIn,
+                onSkip: onSkip
+            )
+        case .phone:
+            PhoneStep(model: model, onBack: back) { path.append(.code) }
+        case .email:
+            EmailStep(model: model, onBack: back) { path.append(.code) }
+        case .code:
+            CodeStep(model: model, onBack: back, onVerified: signedIn)
+        case .newAccount:
+            NewAccountStep(model: model, onBack: back, onCreate: { path.append(.terms) }, onUseExisting: backToMethods)
+        case .terms:
+            TermsStep(onBack: back) {
+                Legal.recordAcceptance()
+                path.append(.name)
+            }
+        case .name:
+            NameStep(model: model, onBack: back, onCreate: onSignedIn)
+        }
+    }
+
+    /// New accounts agree to the terms and pick a name; returning ones are done. A code
+    /// that made a new account first checks the shopper doesn't already have one.
+    private func signedIn() {
+        if model.shouldConfirmNewAccount {
+            path.append(.newAccount)
+        } else if model.needsName {
+            path.append(.terms)
+        } else if let session = model.session {
+            onSignedIn(session)
+        }
+    }
+
+    /// Back to choosing how to sign in, wherever that screen sits in the path.
+    private func backToMethods() {
+        if let index = path.firstIndex(where: { if case .method = $0 { true } else { false } }) {
+            path = Array(path[...index])
+        } else {
+            path.removeAll()
+        }
+    }
+
+    private func back() {
+        if path.isEmpty { onLeave?() } else { path.removeLast() }
+    }
+}
+
+/// Sign in or create an account from the You tab, without replaying the intro.
+struct AccountSheet: View {
+    @Environment(AccountStore.self) private var accounts
+    @Environment(\.dismiss) private var dismiss
+    @State private var model: SignUpModel
+    @State private var path: [AccountFlowStep] = []
+
+    init(auth: AuthService) {
+        _model = State(initialValue: SignUpModel(auth: auth))
+    }
+
+    var body: some View {
+        NavigationStack(path: $path) {
+            screen(.method(returning: false))
+                .navigationDestination(for: AccountFlowStep.self) { step in
+                    screen(step)
+                }
+        }
+        .tint(Theme.ink)
+        .font(.aisleBody)
+    }
+
+    private func screen(_ step: AccountFlowStep) -> some View {
+        AccountFlowScreen(
+            step: step, model: model, path: $path,
+            onLeave: { dismiss() }, onSkip: { dismiss() },
+            onSignedIn: { session in
+                accounts.signIn(session)
+                dismiss()
+            }
+        )
+        .toolbar(.hidden, for: .navigationBar)
+        .navigationBarBackButtonHidden(true)
+    }
+}

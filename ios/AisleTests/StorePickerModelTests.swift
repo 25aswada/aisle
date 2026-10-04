@@ -22,7 +22,16 @@ final class StorePickerModelTests: XCTestCase {
 
         await model.search("target")
         XCTAssertEqual(api.searchQueries, ["target"])
+        XCTAssertEqual(api.searchCoordinates, [nil])
         XCTAssertEqual(model.searchResults, .loaded([Fixtures.store]))
+    }
+
+    func testSearchListsClosestStoresFirstOnceLocationIsKnown() async {
+        let api = StubAPI()
+        let model = StorePickerModel(api: api, location: FakeLocationProvider(.authorized))
+        await model.start()
+        await model.search("walmart")
+        XCTAssertNotNil(api.searchCoordinates.last ?? nil)
     }
 
     func testRestrictedIsTreatedAsBlocked() async {

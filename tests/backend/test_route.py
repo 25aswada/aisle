@@ -30,28 +30,36 @@ def test_zone_coordinates_seeded(seeded_engine):
         assert (store.entrance_x, store.entrance_y) == layout_for_retailer("Trader Joe's").entrance
 
 
-def test_seed_backfills_missing_coordinates_without_touching_verified(seeded_engine):
+def test_seed_syncs_template_zones_without_touching_verified(seeded_engine):
+    layout = layout_for_retailer("Trader Joe's")
+    frozen = next(z for z in layout.zones if z.name == "Frozen Foods")
     with Session(seeded_engine) as session:
         store = session.scalar(select(Store).where(Store.name.like("Trader Joe's%")))
-        template = session.scalar(select(StoreZone).where(StoreZone.store_id == store.id, StoreZone.name == "Frozen"))
-        template.x = template.y = None
+        template = session.scalar(select(StoreZone).where(StoreZone.store_id == store.id, StoreZone.name == "Frozen Foods"))
+        template.x, template.y = 0.01, 0.01                      # drifted from the layout
+        session.add(StoreZone(store_id=store.id, name="Old Template Aisle", source="template", sort_order=60))
         session.add(StoreZone(store_id=store.id, name="Front Endcap", source="verified", sort_order=50))
         session.commit()
         seed_store_zones(session)
+        names = set(session.scalars(select(StoreZone.name).where(StoreZone.store_id == store.id)))
         session.refresh(template)
-        assert (template.x, template.y) == (0.88, 0.60)
+        assert (template.x, template.y) == (frozen.x, frozen.y)  # moved back to the layout
+        assert "Old Template Aisle" not in names                 # removed: not in the layout
         verified = session.scalar(select(StoreZone).where(StoreZone.name == "Front Endcap"))
-        assert verified.x is None
+        assert verified is not None and verified.x is None       # verified zones untouched
+        assert {z.name for z in layout.zones} <= names
 
 
 def test_route_groups_items_by_zone_and_orders_stops(seeded_client):
     data = _route(seeded_client, "Trader Joe's", LIST)
     departments = [s["department"] for s in data["stops"]]
+    # Trader Joe's: in the right-hand door, produce, through frozen and the pantry aisles,
+    # dairy at the back, round to health and household, wine by the checkout.
     assert departments == [
-        "Flowers & Produce", "Dairy & Eggs", "Breakfast/Pantry", "Frozen", "Wine & Beer", "Health & Household",
+        "Produce", "Frozen Foods", "Pantry Aisles", "Dairy & Eggs", "Health & Household", "Wine & Beer",
     ]
     assert [s["order"] for s in data["stops"]] == list(range(1, 7))
-    dairy = data["stops"][1]
+    dairy = data["stops"][3]
     assert [i["text"] for i in dairy["items"]] == ["milk", "eggs"]
     assert dairy["x"] is not None and dairy["zone_id"] is not None
     assert {(u["text"], u["reason"]) for u in data["unplaced"]} == {
@@ -90,11 +98,11 @@ def test_database_aisles_show_in_route(seeded_client, seeded_engine):
 def test_zones_without_coordinates_go_last(seeded_client, seeded_engine):
     store_id = store_id_for(seeded_client, "Trader Joe's")
     with Session(seeded_engine) as session:
-        zone = session.scalar(select(StoreZone).where(StoreZone.store_id == store_id, StoreZone.name == "Flowers & Produce"))
+        zone = session.scalar(select(StoreZone).where(StoreZone.store_id == store_id, StoreZone.name == "Produce"))
         zone.x = zone.y = None
         session.commit()
     data = _route(seeded_client, "Trader Joe's", ["bananas", "milk", "maple syrup"])
-    assert data["stops"][-1]["department"] == "Flowers & Produce"
+    assert data["stops"][-1]["department"] == "Produce"
     assert data["stops"][-1]["x"] is None
 
 

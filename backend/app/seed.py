@@ -2,10 +2,21 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .ai.catalog import CATEGORIES, layout_for_retailer
+from .ai.catalog import CATEGORIES
 from .ai.intent import normalize
 from .database import get_engine
 from .models import Category, ProductAlias, ProductConcept, Retailer, Store, StoreZone
+from .store_zones import sync_template_zones
+
+# Retailer website domains, used for logos.
+RETAILER_DOMAINS = {
+    "Costco": "costco.com",
+    "Trader Joe's": "traderjoes.com",
+    "Walmart": "walmart.com",
+    "Target": "target.com",
+    "CVS": "cvs.com",
+    "Home Depot": "homedepot.com",
+}
 
 # Leave provider IDs and store numbers null rather than inventing identifiers.
 STORES = (
@@ -25,6 +36,8 @@ def seed_stores(session: Session) -> None:
             retailer = Retailer(name=retailer_name)
             session.add(retailer)
             session.flush()
+        if retailer.domain is None:  # Backfill only; never overwrite an edited domain.
+            retailer.domain = RETAILER_DOMAINS.get(retailer_name)
         existing = session.scalar(select(Store).where(
             Store.retailer_id == retailer.id, Store.name == name, Store.address == address
         ))
@@ -58,32 +71,17 @@ def seed_catalog(session: Session) -> None:
 
 
 def seed_store_zones(session: Session) -> None:
-    """Give each store the generic layout for its store format.
+    """Keep laid-out stores' template zones in step with their chain's layout.
 
-    Stores without zones get template zones (department names only, no aisle labels).
-    Template zones and store anchors missing coordinates are backfilled from the
-    layout. Verified data is never overwritten.
+    Hand-added stores (no external place ID) are always laid out. Imported stores are
+    laid out the first time they're used (store_zones.ensure_zones), so only those
+    already in use are synced here.
     """
     categories = {c.slug: c for c in session.scalars(select(Category))}
+    in_use = set(session.scalars(select(StoreZone.store_id).where(StoreZone.source == "template").distinct()))
     for store in session.scalars(select(Store)):
-        layout = layout_for_retailer(store.retailer_name)
-        if store.entrance_x is None or store.entrance_y is None:
-            store.entrance_x, store.entrance_y = layout.entrance
-        if store.checkout_x is None or store.checkout_y is None:
-            store.checkout_x, store.checkout_y = layout.checkout
-        existing = {z.name: z for z in session.scalars(select(StoreZone).where(StoreZone.store_id == store.id))}
-        if not existing:
-            for order, zone in enumerate(layout.zones):
-                session.add(StoreZone(
-                    store_id=store.id, name=zone.name, source="template", sort_order=order,
-                    x=zone.x, y=zone.y,
-                    categories=[categories[slug] for slug in zone.categories if slug in categories],
-                ))
-            continue
-        for zone in layout.zones:
-            row = existing.get(zone.name)
-            if row is not None and row.source == "template" and (row.x is None or row.y is None):
-                row.x, row.y = zone.x, zone.y
+        if store.external_place_id is None or store.id in in_use:
+            sync_template_zones(session, store, categories)
     session.commit()
 
 

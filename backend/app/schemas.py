@@ -1,3 +1,5 @@
+import base64
+import binascii
 from datetime import datetime
 from typing import Literal
 
@@ -8,6 +10,7 @@ class RetailerResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     name: str
+    domain: str | None = None
 
 
 class StoreResponse(BaseModel):
@@ -23,6 +26,8 @@ class StoreResponse(BaseModel):
     retailer: RetailerResponse
     # Flat copy of retailer.name; the iOS client reads this field.
     retailer_name: str
+    # logo.dev image for the retailer, or null without a domain or key.
+    retailer_logo_url: str | None = None
 
 
 class NearbyStoreResponse(StoreResponse):
@@ -50,6 +55,78 @@ class SearchRequest(BaseModel):
         if not value:
             raise ValueError("query must not be blank")
         return value
+
+
+# A photo is base64 JPEG or PNG; the app downsizes to about 1024 px, well under this.
+MAX_PHOTO_BASE64 = 4_000_000
+
+
+def check_photo(value: str | None) -> str | None:
+    """Base64 for a JPEG or PNG, or a ValueError."""
+    if value is None:
+        return None
+    try:
+        data = base64.b64decode(value, validate=True)
+    except (binascii.Error, ValueError):
+        raise ValueError("image must be base64") from None
+    if not (data.startswith(b"\xff\xd8") or data.startswith(b"\x89PNG")):
+        raise ValueError("image must be a JPEG or PNG")
+    return value
+
+
+class ChatMessageIn(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(default="", max_length=4000)
+    # A photo the shopper sent with this message.
+    image: str | None = Field(default=None, max_length=MAX_PHOTO_BASE64)
+
+    @field_validator("image")
+    @classmethod
+    def image_is_a_photo(cls, value: str | None) -> str | None:
+        return check_photo(value)
+
+
+class ChatRequest(BaseModel):
+    """A follow-up: the whole conversation so far, ending with the shopper's new message."""
+    store_id: int
+    messages: list[ChatMessageIn] = Field(min_length=1, max_length=40)
+
+    @field_validator("messages")
+    @classmethod
+    def ends_with_shopper(cls, value: list[ChatMessageIn]) -> list[ChatMessageIn]:
+        last = value[-1]
+        if last.role != "user" or not (last.content.strip() or last.image):
+            raise ValueError("the last message must be the shopper's")
+        if any(m.image and m.role != "user" for m in value):
+            raise ValueError("only the shopper's messages can have photos")
+        if any(not (m.content.strip() or m.image) for m in value):
+            raise ValueError("messages need text or a photo")
+        return value
+
+
+class IdentifyRequest(BaseModel):
+    """A photo of something the shopper wants to find, and anything they typed with it."""
+    store_id: int | None = None
+    image: str = Field(max_length=MAX_PHOTO_BASE64)
+    note: str | None = Field(default=None, max_length=200)
+
+    @field_validator("image")
+    @classmethod
+    def image_is_a_photo(cls, value: str) -> str:
+        return check_photo(value)
+
+
+class IdentifyResponse(BaseModel):
+    # A short search phrase for the item, or null when there's no product to name.
+    item: str | None
+
+
+class ChatResponse(BaseModel):
+    # Null when no AI provider is configured or it couldn't answer.
+    reply: str | None
+    # When the follow-up asks where to find a new item: that item's search, as from
+    # POST /search (its `explanation` is null; `reply` is the answer to show).
+    search: "SearchResponse | None" = None
 
 
 class CategoryOut(BaseModel):
@@ -91,6 +168,9 @@ class SearchResponse(BaseModel):
     source: LocationSource
     # Shopper reports for the suggested zone at this store; null without a store or zone.
     reports: ReportCountsOut | None = None
+    # AI-written "where to find it" text, checked against the facts above; null without a
+    # model or when the text didn't pass checks (the app then writes its own).
+    explanation: str | None = None
 
 
 class FeedbackRequest(BaseModel):
@@ -127,6 +207,29 @@ class FeedbackResponse(BaseModel):
     reports: ReportCountsOut | None
 
 
+class LayoutPoint(BaseModel):
+    x: float
+    y: float
+
+
+class LayoutZoneOut(BaseModel):
+    id: int
+    name: str
+    # Approximate floor-plan position (x 0..1 left to right, y 0..1 front to back).
+    x: float | None
+    y: float | None
+    source: str
+
+
+class StoreLayoutOut(BaseModel):
+    store_id: int
+    entrance: LayoutPoint | None
+    checkout: LayoutPoint | None
+    zones: list[LayoutZoneOut]
+    # True when any position comes from the store format's template, not this store.
+    approximate: bool
+
+
 class StoreZoneOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
@@ -137,6 +240,16 @@ class StoreZoneOut(BaseModel):
 
 class ListParseRequest(BaseModel):
     text: str = Field(max_length=2000)
+
+
+class ListScanRequest(BaseModel):
+    """A photo of a shopping list to read and split into items."""
+    image: str = Field(max_length=MAX_PHOTO_BASE64)
+
+    @field_validator("image")
+    @classmethod
+    def image_is_a_photo(cls, value: str) -> str:
+        return check_photo(value)
 
 
 class ParsedListItem(BaseModel):
@@ -193,11 +306,32 @@ class RouteResponse(BaseModel):
     distance: float
 
 
+class MultiRouteRequest(BaseModel):
+    # Stores in the order the shopper wants to visit them.
+    store_ids: list[int] = Field(min_length=2, max_length=4)
+    items: list[RouteItemIn] = Field(min_length=1, max_length=100)
+
+
+class RouteLeg(BaseModel):
+    store_id: int
+    store_name: str
+    retailer_name: str
+    stops: list[RouteStop]
+    unplaced: list[UnplacedItem]
+    distance: float
+
+
+class MultiRouteResponse(BaseModel):
+    legs: list[RouteLeg]
+    # Items none of the stores is likely to carry.
+    unplaced: list[UnplacedItem]
+
+
 # Event names the app may send. Anything else is rejected so analytics stay a known set.
 ANALYTICS_EVENT_NAMES = (
     "app_opened", "store_selected", "search_submitted", "search_failed", "recent_search_tapped",
     "feedback_sent", "list_items_added", "shopping_started", "shopping_item_found",
-    "shopping_item_skipped", "shopping_finished",
+    "shopping_item_skipped", "shopping_finished", "follow_up_sent",
 )
 AnalyticsValue = str | int | float | bool | None
 
@@ -224,3 +358,164 @@ class AnalyticsBatch(BaseModel):
 
 class AnalyticsAccepted(BaseModel):
     accepted: int
+
+
+ChatResponse.model_rebuild()
+
+
+# --- Accounts ---
+
+class PhoneStart(BaseModel):
+    phone: str = Field(min_length=7, max_length=32)
+
+
+class PhoneVerify(PhoneStart):
+    code: str = Field(pattern=r"^\d{4,10}$")
+
+
+class EmailStart(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+
+
+class EmailVerify(EmailStart):
+    code: str = Field(pattern=r"^\d{6}$")
+
+
+class AppleSignIn(BaseModel):
+    identity_token: str = Field(min_length=20, max_length=8000)
+    # The raw nonce the app hashed into Apple's request.
+    nonce: str | None = Field(default=None, max_length=200)
+    # Apple shares the name only on the very first sign-in, and only with the app.
+    first_name: str | None = Field(default=None, max_length=40)
+
+
+class GoogleSignIn(BaseModel):
+    id_token: str = Field(min_length=20, max_length=8000)
+    nonce: str | None = Field(default=None, max_length=200)
+
+
+class CodeSent(BaseModel):
+    # Where the code went, masked a little for display ("+1 •••• 0123").
+    sent_to: str
+    # Seconds before another code can be sent to the same place.
+    retry_after: int
+
+
+class UserOut(BaseModel):
+    id: int
+    # The app passes this to StoreKit as appAccountToken when buying Aisle+.
+    plus_token: str
+    first_name: str
+    email: str | None
+    phone: str | None
+    wants_tips: bool
+    # How this account can sign in: apple, google, phone, email.
+    providers: list[str]
+
+
+class AuthOut(BaseModel):
+    # Send as "Authorization: Bearer <token>". It doesn't expire; signing out revokes it.
+    token: str
+    user: UserOut
+    # True when this sign-in created the account, so the app asks for a name.
+    is_new: bool
+
+
+class ProfileUpdate(BaseModel):
+    first_name: str | None = Field(default=None, max_length=40)
+    wants_tips: bool | None = None
+
+    @field_validator("first_name")
+    @classmethod
+    def name_not_blank(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
+            raise ValueError("first_name must not be blank")
+        return value.strip() if value else value
+
+
+# --- Aisle+ ---
+
+class PlusSync(BaseModel):
+    # StoreKit 2 `jwsRepresentation` of each current Aisle+ entitlement.
+    transactions: list[str] = Field(default_factory=list, max_length=20)
+    # "Restore purchases": also take over subscriptions bought for an account that has
+    # since been deleted (still billed by Apple), not just ones bought for this account.
+    claim: bool = False
+
+
+class UsageOut(BaseModel):
+    used: int
+    limit: int
+
+
+class PlusStatus(BaseModel):
+    is_plus: bool
+    expires_at: datetime | None = None
+    product_id: str | None = None
+    # Today's use of the free tier's limited features (not counted for Aisle+).
+    photo_search: UsageOut
+    follow_up: UsageOut
+
+
+# --- Shared lists ---
+
+class SharedItemIn(BaseModel):
+    # The phone's own id for the item (a UUID string), kept on every device.
+    id: str = Field(min_length=1, max_length=36)
+    text: str = Field(min_length=1, max_length=200)
+    quantity: str | None = Field(default=None, max_length=40)
+    category_name: str | None = Field(default=None, max_length=80)
+    is_done: bool = False
+    position: float = 0
+
+
+class SharedItemOut(SharedItemIn):
+    pass
+
+
+class SharedListCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
+    items: list[SharedItemIn] = Field(default_factory=list, max_length=500)
+
+
+class SharedListRename(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
+
+
+class SharedListChange(BaseModel):
+    op: Literal["upsert", "delete"]
+    item: SharedItemIn | None = None
+    id: str | None = Field(default=None, max_length=36)
+
+
+class SharedListChanges(BaseModel):
+    changes: list[SharedListChange] = Field(max_length=500)
+
+
+class JoinSharedList(BaseModel):
+    code: str = Field(min_length=4, max_length=20)
+
+
+class SharedMemberOut(BaseModel):
+    first_name: str
+    is_owner: bool
+    is_you: bool
+
+
+class SharedListOut(BaseModel):
+    id: str
+    name: str
+    invite_code: str
+    version: int
+    is_owner: bool
+    members: list[SharedMemberOut]
+    items: list[SharedItemOut]
+
+
+class SharedListSummary(BaseModel):
+    id: str
+    name: str
+    version: int
+    is_owner: bool
+    item_count: int
+    members: list[SharedMemberOut]

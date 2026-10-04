@@ -21,6 +21,26 @@ final class DecodingTests: XCTestCase {
         XCTAssertEqual(store.retailerName, "Whole Foods Market")
     }
 
+    func testDecodesRetailerLogoURL() throws {
+        let json = """
+        [{"id":1,"name":"Target Center City","address":"1128 Chestnut St","latitude":39.95,
+        "longitude":-75.16,"retailer_name":"Target",
+        "retailer_logo_url":"https://img.logo.dev/target.com?token=pk_test"}]
+        """
+        let store = try XCTUnwrap(try JSONDecoder().decode(StoresResponse.self, from: Data(json.utf8)).stores.first)
+        XCTAssertEqual(store.retailerLogoURL, URL(string: "https://img.logo.dev/target.com?token=pk_test"))
+    }
+
+    func testMissingOrNullLogoURLDecodesAsNil() throws {
+        let json = """
+        [{"id":1,"name":"A","address":"B","latitude":1,"longitude":2,"retailer_logo_url":null},
+         {"id":2,"name":"C","address":"D","latitude":1,"longitude":2}]
+        """
+        let stores = try JSONDecoder().decode(StoresResponse.self, from: Data(json.utf8)).stores
+        XCTAssertEqual(stores.count, 2)
+        XCTAssertTrue(stores.allSatisfy { $0.retailerLogoURL == nil })
+    }
+
     func testDecodesSearchStoresWithoutDistance() throws {
         let json = """
         {"stores":[{"id":"abc","name":"Whole Foods","address":"929 South St","latitude":39.94,

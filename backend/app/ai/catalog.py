@@ -343,33 +343,8 @@ LAYOUTS: dict[str, LayoutDef] = {
             _z("Kitchen & Seasonal", 0.90, 0.20, ["kitchenware", "office-school", "toys"]),
         ),
     ),
-    "trader_joes": LayoutDef(
-        key="trader_joes", label="Trader Joe's",
-        entrance=(0.05, 0.0), checkout=(0.55, 0.05),
-        zones=(
-            _z("Flowers & Produce", 0.10, 0.20, ["flowers", "produce-fruit", "produce-veg"]),
-            _z("Bread", 0.25, 0.30, ["bakery"]),
-            _z("Snacks, Nuts & Dried Fruit", 0.40, 0.40, ["snacks", "nuts-dried-fruit"]),
-            _z("Breakfast/Pantry", 0.50, 0.50, [
-                "breakfast", "syrups-sweeteners", "spreads", "baking", "spices",
-                "oils-vinegar", "condiments", "pasta-sauce", "rice-grains", "canned-goods",
-                "international", "coffee-tea",
-            ]),
-            _z("Cookies & Candy", 0.60, 0.40, ["sweets"]),
-            _z("Beverages", 0.70, 0.50, ["beverages"]),
-            _z("Cheese", 0.30, 0.85, ["cheese"]),
-            _z("Dairy & Eggs", 0.15, 0.90, ["dairy", "eggs"]),
-            _z("Meat & Seafood", 0.50, 0.92, ["meat", "seafood"]),
-            _z("Deli & Prepared Foods", 0.70, 0.88, ["deli"]),
-            _z("Frozen", 0.88, 0.60, ["frozen", "ice-cream"]),
-            _z("Wine & Beer", 0.92, 0.30, ["beer-wine"]),
-            _z("Health & Household", 0.85, 0.15, [
-                "oral-care", "hair-care", "body-care", "vitamins", "paper-goods", "cleaning",
-            ]),
-        ),
-    ),
-    "costco": LayoutDef(
-        key="costco", label="Warehouse club",
+    "warehouse_club": LayoutDef(
+        key="warehouse_club", label="Warehouse club",
         entrance=(0.10, 0.0), checkout=(0.60, 0.05),
         zones=(
             _z("Electronics", 0.15, 0.15, ["electronics", "batteries-bulbs"]),
@@ -440,20 +415,24 @@ LAYOUTS: dict[str, LayoutDef] = {
     ),
 }
 
+# Researched chain layouts (see chain_layouts.py) replace the generic Trader Joe's one
+# and add chain-specific layouts; other retailers fall back to their store format.
+from .chain_layouts import CHAIN_HINTS, CHAIN_LAYOUTS  # noqa: E402  (needs the classes above)
+
+LAYOUTS.update(CHAIN_LAYOUTS)
+
+# Grocery chains whose names contain another chain's hint are checked first.
 _RETAILER_LAYOUT_HINTS = (
-    ("trader joe", "trader_joes"),
-    ("costco", "costco"),
-    ("sam's club", "costco"),
-    ("bj's", "costco"),
-    ("walmart", "supercenter"),
-    ("target", "supercenter"),
+    ("walmart neighborhood market", "grocery"),
+    ("lowes foods", "grocery"),
+    ("lowe's market", "grocery"),
+) + CHAIN_HINTS + (
+    ("bj's", "warehouse_club"),
     ("meijer", "supercenter"),
-    ("cvs", "pharmacy"),
-    ("walgreens", "pharmacy"),
+    ("fred meyer", "supercenter"),
     ("rite aid", "pharmacy"),
-    ("home depot", "home_improvement"),
-    ("lowe", "home_improvement"),
     ("ace hardware", "home_improvement"),
+    ("menards", "home_improvement"),
 )
 
 

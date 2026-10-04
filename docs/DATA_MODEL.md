@@ -5,9 +5,12 @@ SQLAlchemy models live in `backend/app/models.py`; Alembic migrations in
 
 ## retailers, stores (Milestone 1)
 
-- `retailers(id, name unique)`
+- `retailers(id, name unique, domain null)`: `domain` is the website (`target.com`), used
+  for logos (migration 0006). Seeding fills it for known retailers but never overwrites it.
 - `stores(id, retailer_id → retailers, name, address, latitude, longitude,
-  external_place_id null, store_number null)`
+  external_place_id null unique, store_number null)`: `latitude` is indexed for nearby
+  search, and `external_place_id` (`osm:node/…`, `osm:way/…`) identifies stores imported
+  from OpenStreetMap (migration 0011).
 
 ## Catalog and locations (Milestone 3)
 
@@ -32,19 +35,64 @@ SQLAlchemy models live in `backend/app/models.py`; Alembic migrations in
 - `store_zones.x`, `store_zones.y`: approximate floor-plan position (0..1), null when unknown.
 - `stores.entrance_x/_y`, `stores.checkout_x/_y`: route start and end anchors.
 
-Seeding fills these from the store format's layout template and backfills missing
-values on template zones. It never changes `verified` zones.
+These come from the store's layout (`backend/app/store_zones.py`), which also keeps
+`template` zones in sync with it (positions, categories, order; template zones the layout
+dropped are removed). It never changes `verified` zones. Imported stores have no zones
+until first used: the zones, layout, search, route and feedback endpoints copy the
+chain's template then. Seeding syncs hand-added stores and stores already in use.
+
+Layouts are per chain where researched (`backend/app/ai/chain_layouts.py`: Costco, Sam's
+Club, Trader Joe's, Aldi, Walmart, Target, Whole Foods, Kroger, CVS, Walgreens, Home Depot,
+Lowe's), built from public descriptions of each chain's usual pattern with sources noted
+inline. Other retailers use a generic store-format layout from `catalog.py`. None are real
+per-store floor plans, so the app labels maps "Typical <store> layout".
 
 ## Analytics (Milestone 7)
 
 `analytics_events(id, name, device_id null, properties json, occurred_at, received_at)`.
 Names come from a fixed list; properties are small scalars with no user text.
 
+## Accounts
+
+- `users(id, first_name, email null, phone null, wants_tips, created_at)`: email and phone
+  are the first verified ones seen, used for display and for linking sign-in methods.
+- `user_identities(id, user_id, provider, subject, email null, created_at)`, unique on
+  `(provider, subject)`. `provider` is apple, google, phone or email; `subject` is the
+  provider's stable id or the normalized phone/email.
+- `auth_sessions(id, user_id, token_hash unique, device_id null, created_at, last_used_at,
+  revoked_at null)`: only a SHA-256 of each token.
+- `email_codes(id, email, code_hash, attempts, expires_at, consumed_at null, created_at)`.
+- `code_requests(id, channel, target, device_id null, ip null, created_at)`: every code
+  sent, for rate limits.
+
+Deleting a user deletes its identities and revokes its sessions. Searches, reports and
+analytics stay anonymous and are not linked to users.
+
+## Aisle+
+
+- `plus_entitlements(id, original_transaction_id unique, product_id, environment,
+  expires_at, revoked_at, device_id, user_id null, updated_at)`: subscriptions proved with
+  signed App Store transactions; renewals update the same row.
+- `usage_counters(id, subject, feature, day, count)`, unique on `(subject, feature, day)`:
+  the free tier's daily use. `subject` is `user:<id>`, `device:<install id>` or `ip:<addr>`.
+
+## Shared lists
+
+- `shared_lists(id uuid, owner_id, name, invite_code unique, version, created_at, updated_at)`.
+- `shared_list_members(id, list_id, user_id, joined_at)`, unique on `(list_id, user_id)`.
+- `shared_list_items(id (the phone's UUID), list_id, text, quantity, category_name, is_done,
+  position, updated_at)`.
+
+Deleting the owner's account deletes their lists; deleting a member's removes them.
+
 ### Seeding and imports
 
 `python -m backend.app.seed` loads demo stores, the catalog (categories, concepts,
 aliases) and `template` zones per store. Seeding never writes aisle labels or
 product locations.
+
+Real stores enter through `python -m backend.app.import_stores` (major US chains from
+OpenStreetMap; see the backend README).
 
 Real locations enter through `python -m backend.app.import_locations file.csv`
 (columns `store_id,item,source,department,aisle,section`). That importer is the only

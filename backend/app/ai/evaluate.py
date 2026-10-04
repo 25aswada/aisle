@@ -1,6 +1,6 @@
 """Run the location eval cases against the configured provider.
 
-    python -m backend.app.ai.evaluate            # model if ANTHROPIC_API_KEY is set
+    python -m backend.app.ai.evaluate            # model if an AI provider key is set
     python -m backend.app.ai.evaluate --fallback # deterministic fallback only
 """
 from __future__ import annotations

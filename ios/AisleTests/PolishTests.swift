@@ -18,6 +18,47 @@ final class RecentSearchesTests: XCTestCase {
         recents.clear()
         XCTAssertTrue(RecentSearches(defaults: defaults).queries.isEmpty)
     }
+
+    func testSavesRemovesAndClearsAnswersPerStore() throws {
+        let defaults = UserDefaults.fresh("AisleTests.RecentAnswers")
+        let recents = RecentSearches(defaults: defaults)
+        recents.record("Maple Syrup ", result: Fixtures.mapleSyrup, storeID: "2")
+        recents.record("eggs", result: Fixtures.mapleSyrup, storeID: "2")
+
+        let answer = try XCTUnwrap(recents.answer(for: "maple syrup", storeID: "2"), "Matched ignoring case and spaces")
+        XCTAssertEqual(answer.place, "Breakfast/Pantry")
+        XCTAssertEqual(answer.detail, "Syrups & Sweeteners")
+        XCTAssertEqual(answer.confidence, .medium)
+        XCTAssertNil(recents.answer(for: "maple syrup", storeID: "3"), "Answers are per store")
+        XCTAssertNil(recents.answer(for: "maple syrup", storeID: nil))
+        XCTAssertEqual(RecentSearches(defaults: defaults).answer(for: "maple syrup", storeID: "2"), answer,
+                       "Persists across launches")
+
+        recents.remove("Maple Syrup")
+        XCTAssertNil(recents.answer(for: "maple syrup", storeID: "2"))
+        XCTAssertNotNil(recents.answer(for: "eggs", storeID: "2"), "Removing one keeps the others")
+
+        recents.clear()
+        XCTAssertNil(recents.answer(for: "eggs", storeID: "2"))
+        XCTAssertNil(RecentSearches(defaults: defaults).answer(for: "eggs", storeID: "2"))
+    }
+
+    func testDropsAnswersForSearchesThatFallOffTheList() throws {
+        let recents = RecentSearches(defaults: .fresh("AisleTests.RecentAnswersCap"))
+        recents.record("first", result: Fixtures.mapleSyrup, storeID: "2")
+        for n in 0..<RecentSearches.limit { recents.record("item \(n)", result: Fixtures.mapleSyrup, storeID: "2") }
+        XCTAssertNil(recents.answer(for: "first", storeID: "2"))
+        XCTAssertEqual(recents.answers.count, RecentSearches.limit)
+    }
+
+    func testNoAnswerWithoutAPlaceInTheStore() throws {
+        let json = Fixtures.mapleSyrupJSON.replacingOccurrences(of: #""department":"Breakfast/Pantry""#, with: #""department":null"#)
+        let unplaced = try JSONDecoder().decode(ItemSearchResult.self, from: Data(json.utf8))
+        let recents = RecentSearches(defaults: .fresh("AisleTests.RecentAnswersNone"))
+        recents.record("mystery", result: unplaced, storeID: "2")
+        XCTAssertEqual(recents.queries, ["mystery"])
+        XCTAssertNil(recents.answer(for: "mystery", storeID: "2"))
+    }
 }
 
 @MainActor
@@ -215,7 +256,7 @@ final class AnalyticsNamesContractTests: XCTestCase {
         XCTAssertEqual(Set(AnalyticsEventName.allCases.map(\.rawValue)), [
             "app_opened", "store_selected", "search_submitted", "search_failed", "recent_search_tapped",
             "feedback_sent", "list_items_added", "shopping_started", "shopping_item_found",
-            "shopping_item_skipped", "shopping_finished",
+            "shopping_item_skipped", "shopping_finished", "follow_up_sent",
         ])
     }
 }

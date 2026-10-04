@@ -6,11 +6,16 @@ struct AisleApp: App {
     @State private var storeSelection: StoreSelection
     @State private var shoppingList: ShoppingListStore
     @State private var recentSearches: RecentSearches
+    @State private var accounts: AccountStore
+    @State private var plus: PlusStore
+    @AppStorage(OnboardingFlow.completedKey) private var onboardingComplete = false
     @AppStorage(AppearancePreference.defaultsKey) private var appearance = AppearancePreference.system
     @Environment(\.scenePhase) private var scenePhase
     private let api: AisleAPI
+    private let offlineMaps: OfflineMaps
     private let location: LocationProvider
     private let analytics: AnalyticsClient
+    private let auth: AuthService
 
     init() {
         let configuration = URLSessionConfiguration.default
@@ -19,25 +24,77 @@ struct AisleApp: App {
         let api = APIClient(
             baseURL: AppConfig.current.apiBaseURL,
             session: URLSession(configuration: configuration),
-            deviceID: DeviceIdentity.current()
+            deviceID: DeviceIdentity.current(),
+            authToken: { KeychainTokenStore().token }
         )
-        self.api = api
+        // Aisle+ saves store maps and answers on the phone for when there's no signal.
+        let offlineMaps = OfflineMaps()
+        self.offlineMaps = offlineMaps
+        self.api = OfflineAwareAPI(base: api, maps: offlineMaps)
+        let auth = RemoteAuthService(client: api, googleClientID: AppConfig.current.googleClientID)
+        self.auth = auth
         self.location = LocationProvider()
         self.analytics = AnalyticsClient(api: api)
         _health = State(initialValue: HealthMonitor(api: api))
         _storeSelection = State(initialValue: StoreSelection())
-        _shoppingList = State(initialValue: ShoppingListStore())
+        _shoppingList = State(initialValue: ShoppingListStore(service: RemoteSharedLists(client: api)))
         _recentSearches = State(initialValue: RecentSearches())
+        _accounts = State(initialValue: AccountStore(auth: auth))
+        let plus = PlusStore()
+        plus.client = api
+        _plus = State(initialValue: plus)
+        Theme.applyAppearance()
     }
 
     var body: some Scene {
         WindowGroup {
-            RootView(api: api, location: location, analytics: analytics, recents: recentSearches)
+            Group {
+                // Aisle needs an account: the tabs open only once someone is signed in.
+                if onboardingComplete && accounts.isSignedIn {
+                    RootView(api: api, location: location, analytics: analytics, recents: recentSearches)
+                } else {
+                    // Signed out after the intro (or after "Sign out"): straight to sign-in.
+                    OnboardingFlow(api: api, location: location, auth: auth, signInOnly: onboardingComplete) {
+                        withAnimation(.easeInOut(duration: 0.3)) { onboardingComplete = true }
+                    }
+                    .id(onboardingComplete)
+                }
+            }
                 .environment(health)
+                .environment(accounts)
+                .environment(plus)
                 .environment(storeSelection)
                 .environment(shoppingList)
                 .environment(recentSearches)
+                .environment(\.offlineMaps, offlineMaps)
                 .preferredColorScheme(appearance.colorScheme)
+                .task {
+                    await accounts.refresh()
+                }
+                .onChange(of: plus.isPlus, initial: true) {
+                    offlineMaps.isEnabled = plus.isPlus
+                    // Save the current store's map right away.
+                    if plus.isPlus, let id = storeSelection.current?.id {
+                        Task { _ = try? await api.storeLayout(storeID: id) }
+                    }
+                }
+                .onChange(of: accounts.account?.id, initial: true) { _, id in
+                    // The phone's lists, history and stats belong to one account.
+                    guard let id else { return }
+                    LocalAccountData.adopt(accountID: id, .init(
+                        lists: shoppingList, recents: recentSearches, storeSelection: storeSelection, offlineMaps: offlineMaps
+                    ))
+                }
+                .onChange(of: accounts.account?.plusToken, initial: true) { _, token in
+                    // Aisle+ belongs to the signed-in account; signed out, there's none.
+                    plus.accountToken = token
+                }
+                .onOpenURL { url in
+                    // aisle://join/K7Q2MX from a shared-list invite.
+                    if url.scheme == "aisle", url.host == "join", url.pathComponents.count > 1 {
+                        shoppingList.pendingJoinCode = url.lastPathComponent
+                    }
+                }
                 .task {
                     analytics.track(.appOpened)
                     await health.check()

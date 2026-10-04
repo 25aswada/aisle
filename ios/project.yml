@@ -1,6 +1,6 @@
 name: Aisle
 options:
-  bundleIdPrefix: com.aisle
+  bundleIdPrefix: app.shopaisle
   deploymentTarget:
     iOS: "17.0"
   createIntermediateGroups: true
@@ -11,20 +11,40 @@ settings:
     CURRENT_PROJECT_VERSION: "1"
     # Override per-configuration or on the xcodebuild command line.
     AISLE_API_BASE_URL: "http://127.0.0.1:8000"
+    # Sign in with Google (iOS OAuth client in Cloud project aisle-510605). Not a secret.
+    AISLE_GOOGLE_CLIENT_ID: "192788314882-d6e46f6nv0nc8b00iaomfv57pgr65js9.apps.googleusercontent.com"
+  configs:
+    # Release builds talk to the Heroku app; Debug stays on this Mac (Config/Local.xcconfig).
+    Release:
+      AISLE_API_BASE_URL: "https://aisle-api-db30672cd6aa.herokuapp.com"
 targets:
   Aisle:
     type: application
     platform: iOS
-    sources: [Aisle]
+    sources:
+      - path: Aisle
+        excludes: [Aisle.storekit]
+      # Local StoreKit testing only; referenced by the scheme, never shipped in the app.
+      - path: Aisle/Aisle.storekit
+        buildPhase: none
+    configFiles:
+      Debug: Config/Debug.xcconfig
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.aisle.Aisle
+        PRODUCT_BUNDLE_IDENTIFIER: app.shopaisle.aisle
+        # Akshaj Satyawada's team; Sign in with Apple needs the app ID registered here.
+        DEVELOPMENT_TEAM: 983N58VUTZ
+        CODE_SIGN_STYLE: Automatic
         TARGETED_DEVICE_FAMILY: "1"
-        # Green accent with a lighter variant for dark mode (Assets.xcassets).
+        # Near-black ink accent with a light variant for dark mode (Assets.xcassets).
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         # No app icon until the TestFlight milestone.
-        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         GENERATE_INFOPLIST_FILE: NO
+    entitlements:
+      path: Aisle/Aisle.entitlements
+      properties:
+        com.apple.developer.applesignin: [Default]
     info:
       path: Aisle/Info.plist
       properties:
@@ -32,11 +52,22 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
+        UIAppFonts: [Geist-Regular.ttf, Geist-Medium.ttf, Geist-SemiBold.ttf, Geist-Bold.ttf]
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         AisleAPIBaseURL: $(AISLE_API_BASE_URL)
+        AisleGoogleClientID: $(AISLE_GOOGLE_CLIENT_ID)
+        NSCameraUsageDescription: >-
+          Aisle uses the camera when you take a photo of something you want to find,
+          so it can tell what it is and where it is in the store.
         NSLocationWhenInUseUsageDescription: >-
           Aisle uses your location only to show stores near you. This is
           optional: you can always search for a store by name or address instead.
+        NSLocalNetworkUsageDescription: >-
+          Aisle connects to its server on your local network while it's in development.
+        # aisle://join/CODE opens a shared-list invite.
+        CFBundleURLTypes:
+          - CFBundleURLName: app.shopaisle.aisle
+            CFBundleURLSchemes: [aisle]
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
   AisleTests:
@@ -47,7 +78,7 @@ targets:
       - target: Aisle
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.aisle.AisleTests
+        PRODUCT_BUNDLE_IDENTIFIER: app.shopaisle.aisleTests
         GENERATE_INFOPLIST_FILE: YES
 schemes:
   Aisle:
@@ -55,6 +86,9 @@ schemes:
       targets:
         Aisle: all
         AisleTests: [test]
+    run:
+      # Aisle+ subscriptions without App Store Connect (Xcode-launched runs only).
+      storeKitConfiguration: Aisle/Aisle.storekit
     test:
       targets: [AisleTests]
       gatherCoverageData: false

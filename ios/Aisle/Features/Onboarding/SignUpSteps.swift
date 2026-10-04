@@ -1,0 +1,490 @@
+import SwiftUI
+
+struct SignUpMethodStep: View {
+    @Bindable var model: SignUpModel
+    /// "Sign in" from the intro shows a welcome-back headline; the steps are the same.
+    var isReturning = false
+    let onBack: (() -> Void)?
+    let onPhone: () -> Void
+    let onEmail: () -> Void
+    let onProviderSuccess: () -> Void
+    /// Nil hides "Not now": in onboarding an account is required.
+    let onSkip: (() -> Void)?
+
+    var body: some View {
+        OnboardingPage(onBack: onBack, trailingLabel: onSkip == nil ? nil : "Not now", onTrailing: onSkip) {
+            VStack(alignment: .leading, spacing: 12) {
+                // Without a Back button the top bar already shows the mark.
+                if onBack != nil {
+                    AisleMark(size: 44)
+                        .padding(.bottom, 10)
+                }
+                if isReturning {
+                    GradientHeadline(lead: "Welcome ", accent: "back.")
+                    OnboardingBody(text: "Sign in the way you signed up. New here? Any of these makes a free account.")
+                } else {
+                    GradientHeadline(lead: "Your lists, ", accent: "on every device.")
+                    OnboardingBody(text: "Create your free account to start using Aisle. It keeps your shopping lists, usual stores and recent searches in sync.")
+                }
+                VStack(alignment: .leading, spacing: 12) {
+                    Benefit(symbol: "checklist", text: "Lists that follow you to any phone")
+                    Benefit(symbol: "mappin.and.ellipse", text: "Your usual stores, remembered")
+                }
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Theme.surface.opacity(0.7), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                .padding(.top, 16)
+            }
+        } footer: {
+            if let notice = model.notice {
+                Text(notice)
+                    .font(.aisleFootnote)
+                    .foregroundStyle(Theme.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Theme.accentWash, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .accessibilityIdentifier("signInNotice")
+            }
+            if let error = model.errorMessage {
+                Text(error)
+                    .font(.aisleFootnote)
+                    .foregroundStyle(Theme.warning)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            Button { provider(.apple) } label: {
+                Label("Continue with Apple", systemImage: "apple.logo")
+            }
+            .buttonStyle(InkButtonStyle())
+            .accessibilityIdentifier("appleSignUpButton")
+            Button { provider(.google) } label: {
+                Label {
+                    Text("Continue with Google")
+                } icon: {
+                    // Google's multicolour "G", kept in its own colours as their brand rules require.
+                    Image(decorative: "GoogleG")
+                        .resizable()
+                        .scaledToFit()
+                        .frame(width: 18, height: 18)
+                }
+            }
+            .buttonStyle(.aisleSoft)
+            .accessibilityIdentifier("googleSignUpButton")
+            Button {
+                model.choose(.phone)
+                onPhone()
+            } label: {
+                Label("Continue with phone", systemImage: "phone.fill")
+            }
+            .buttonStyle(.aisleAccent)
+            .accessibilityIdentifier("phoneSignUpButton")
+            Button("Use email instead") {
+                model.choose(.email)
+                onEmail()
+            }
+            .font(.aisleSubheadline.weight(.semibold))
+            .foregroundStyle(Theme.ink)
+            .frame(maxWidth: .infinity, minHeight: 40)
+            .accessibilityIdentifier("emailSignUpButton")
+            Text("By continuing you agree to the Terms and Privacy Policy.")
+                .font(.aisleCaption)
+                .foregroundStyle(Theme.secondaryInk)
+                .multilineTextAlignment(.center)
+                .padding(.top, 4)
+        }
+        .disabled(model.isWorking)
+    }
+
+    private func provider(_ provider: AuthProvider) {
+        Task {
+            if await model.continueWith(provider) { onProviderSuccess() }
+        }
+    }
+}
+
+private struct Benefit: View {
+    let symbol: String
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: symbol)
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(Theme.accentInk)
+                .frame(width: 24)
+            Text(text)
+                .font(.aisleSubheadline)
+                .foregroundStyle(Theme.ink)
+        }
+    }
+}
+
+struct PhoneStep: View {
+    @Bindable var model: SignUpModel
+    let onBack: () -> Void
+    let onSent: () -> Void
+
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        OnboardingPage(onBack: onBack, progress: "Step 1 of 3") {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("What's your number?")
+                    .font(Theme.font(34, .bold, relativeTo: .largeTitle))
+                    .tracking(-1)
+                    .foregroundStyle(Theme.ink)
+                    .accessibilityAddTraits(.isHeader)
+                OnboardingBody(text: "We'll text you a 6-digit code. No password to remember.")
+                Text("Mobile number")
+                    .font(Theme.font(13, .semibold, relativeTo: .footnote))
+                    .foregroundStyle(Theme.secondaryInk)
+                    .padding(.top, 20)
+                TextField("(215) 555-0123", text: $model.phone)
+                    .keyboardType(.phonePad)
+                    .textContentType(.telephoneNumber)
+                    .focused($focused)
+                    .modifier(OnboardingFieldStyle())
+                    .accessibilityLabel("Mobile number")
+                    .accessibilityIdentifier("phoneField")
+                Text("US numbers work as is. For others, start with + and the country code. Message and data rates may apply.")
+                    .font(.aisleFootnote)
+                    .foregroundStyle(Theme.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+                if let error = model.errorMessage {
+                    Text(error)
+                        .font(.aisleFootnote)
+                        .foregroundStyle(Theme.warning)
+                }
+            }
+        } footer: {
+            Button(action: send) {
+                if model.isWorking { ProgressView() } else { Text("Text me a code") }
+            }
+            .buttonStyle(.aisleAccent)
+            .disabled(!model.isPhoneValid || model.isWorking)
+            .accessibilityIdentifier("sendCodeButton")
+        }
+        .onAppear { focused = true }
+    }
+
+    private func send() {
+        guard model.isPhoneValid, !model.isWorking else { return }
+        Task {
+            if await model.sendCode() { onSent() }
+        }
+    }
+}
+
+struct EmailStep: View {
+    @Bindable var model: SignUpModel
+    let onBack: () -> Void
+    let onSent: () -> Void
+
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        OnboardingPage(onBack: onBack, progress: "Step 1 of 3") {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("What's your email?")
+                    .font(Theme.font(34, .bold, relativeTo: .largeTitle))
+                    .tracking(-1)
+                    .foregroundStyle(Theme.ink)
+                    .accessibilityAddTraits(.isHeader)
+                OnboardingBody(text: "We'll send you a 6-digit code. No password to remember.")
+                Text("Email")
+                    .font(Theme.font(13, .semibold, relativeTo: .footnote))
+                    .foregroundStyle(Theme.secondaryInk)
+                    .padding(.top, 20)
+                TextField("you@example.com", text: $model.email)
+                    .keyboardType(.emailAddress)
+                    .textContentType(.emailAddress)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .submitLabel(.continue)
+                    .focused($focused)
+                    .onSubmit(send)
+                    .modifier(OnboardingFieldStyle())
+                    .accessibilityLabel("Email")
+                    .accessibilityIdentifier("emailField")
+                if let error = model.errorMessage {
+                    Text(error)
+                        .font(.aisleFootnote)
+                        .foregroundStyle(Theme.warning)
+                }
+            }
+        } footer: {
+            Button(action: send) {
+                if model.isWorking { ProgressView() } else { Text("Send code") }
+            }
+            .buttonStyle(.aisleAccent)
+            .disabled(!model.isEmailValid || model.isWorking)
+            .accessibilityIdentifier("sendCodeButton")
+        }
+        .onAppear { focused = true }
+    }
+
+    private func send() {
+        guard model.isEmailValid, !model.isWorking else { return }
+        Task {
+            if await model.sendCode() { onSent() }
+        }
+    }
+}
+
+struct CodeStep: View {
+    @Bindable var model: SignUpModel
+    let onBack: () -> Void
+    let onVerified: () -> Void
+
+    @FocusState private var focused: Bool
+    @State private var secondsLeft = 30
+
+    var body: some View {
+        OnboardingPage(onBack: onBack, progress: "Step 2 of 3") {
+            VStack(alignment: .leading, spacing: 12) {
+                Text(model.channel == .phone ? "Check your texts" : "Check your email")
+                    .font(Theme.font(34, .bold, relativeTo: .largeTitle))
+                    .tracking(-1)
+                    .foregroundStyle(Theme.ink)
+                    .accessibilityAddTraits(.isHeader)
+                (Text("Enter the 6-digit code we sent to ")
+                    + Text(model.sentToLabel).font(Theme.font(17, .semibold)).foregroundStyle(Theme.ink)
+                    + Text("."))
+                    .font(Theme.font(17, relativeTo: .body))
+                    .foregroundStyle(Theme.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                codeBoxes
+                    .padding(.top, 20)
+
+                if let error = model.errorMessage {
+                    Text(error)
+                        .font(.aisleFootnote)
+                        .foregroundStyle(Theme.warning)
+                }
+
+                HStack(spacing: 4) {
+                    Text("Didn't get it?")
+                        .foregroundStyle(Theme.secondaryInk)
+                    if secondsLeft > 0 {
+                        Text("Resend in 0:\(String(format: "%02d", secondsLeft))")
+                            .font(Theme.font(15, .semibold, relativeTo: .subheadline))
+                            .foregroundStyle(Theme.ink)
+                            .monospacedDigit()
+                    } else {
+                        Button("Resend code", action: resend)
+                            .font(Theme.font(15, .semibold, relativeTo: .subheadline))
+                            .foregroundStyle(Theme.ink)
+                    }
+                }
+                .font(.aisleSubheadline)
+                .padding(.top, 8)
+            }
+        } footer: {
+            Button(action: verify) {
+                if model.isWorking { ProgressView() } else { Text("Verify") }
+            }
+            .buttonStyle(.aisleAccent)
+            .disabled(!model.isCodeComplete || model.isWorking)
+            .accessibilityIdentifier("verifyCodeButton")
+        }
+        .onAppear { focused = true }
+        .task(id: secondsLeft == 30) {
+            while secondsLeft > 0 {
+                try? await Task.sleep(for: .seconds(1))
+                if Task.isCancelled { return }
+                secondsLeft -= 1
+            }
+        }
+        .onChange(of: model.code) {
+            if model.isCodeComplete { verify() }
+        }
+    }
+
+    /// One hidden field drives six boxes, so paste and the one-time-code keyboard suggestion work.
+    private var codeBoxes: some View {
+        let digits = Array(model.code)
+        return ZStack {
+            TextField("", text: $model.code)
+                .keyboardType(.numberPad)
+                .textContentType(.oneTimeCode)
+                .focused($focused)
+                .foregroundStyle(.clear)
+                .tint(.clear)
+                .accessibilityLabel("Verification code")
+                .accessibilityIdentifier("codeField")
+            HStack(spacing: 8) {
+                ForEach(0..<6, id: \.self) { index in
+                    let isActive = focused && index == min(digits.count, 5)
+                    Text(index < digits.count ? String(digits[index]) : "")
+                        .font(Theme.font(24, .semibold, relativeTo: .title2))
+                        .foregroundStyle(Theme.ink)
+                        .frame(maxWidth: .infinity, minHeight: 60)
+                        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                        .overlay {
+                            if isActive {
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .strokeBorder(Theme.accentRing, lineWidth: 1.5)
+                            }
+                        }
+                }
+            }
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture { focused = true }
+    }
+
+    private func verify() {
+        guard model.isCodeComplete, !model.isWorking else { return }
+        Task {
+            if await model.verifyCode() { onVerified() }
+        }
+    }
+
+    private func resend() {
+        model.code = ""
+        Task {
+            if await model.sendCode() { secondsLeft = model.codeSent?.retryAfter ?? 30 }
+        }
+    }
+}
+
+/// Shown when a phone or email code made a brand-new account. Someone who already uses
+/// Aisle with Apple, Google or another email can back out and sign in that way, so they
+/// don't end up with two accounts.
+struct NewAccountStep: View {
+    @Bindable var model: SignUpModel
+    let onBack: () -> Void
+    let onCreate: () -> Void
+    let onUseExisting: () -> Void
+
+    private var byPhone: Bool { model.method == .phone }
+
+    var body: some View {
+        OnboardingPage(onBack: onBack) {
+            VStack(alignment: .leading, spacing: 12) {
+                AisleMark(size: 44)
+                    .padding(.bottom, 10)
+                GradientHeadline(lead: "New to ", accent: "Aisle?")
+                (Text(model.sentToLabel).font(Theme.font(17, .semibold)).foregroundStyle(Theme.ink)
+                    + Text(" isn't on an Aisle account yet, so this makes a new one."))
+                    .font(Theme.font(17, relativeTo: .body))
+                    .foregroundStyle(Theme.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Already use Aisle?")
+                        .font(.aisleHeadline)
+                    Text(byPhone
+                        ? "If you signed up with Apple, Google or email, sign in that way instead, then add this number in You. Otherwise you'd have two separate accounts."
+                        : "If you signed up with Apple, Google, your phone or another email, sign in that way instead. Otherwise you'd have two separate accounts.")
+                        .font(.aisleSubheadline)
+                        .foregroundStyle(Theme.secondaryInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .foregroundStyle(Theme.ink)
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Theme.accentWash, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                .padding(.top, 12)
+                if let error = model.errorMessage {
+                    Text(error)
+                        .font(.aisleFootnote)
+                        .foregroundStyle(Theme.warning)
+                }
+            }
+        } footer: {
+            Button("Create a new account", action: onCreate)
+                .buttonStyle(.aisleAccent)
+                .accessibilityIdentifier("confirmNewAccountButton")
+            Button {
+                Task {
+                    if await model.useExistingAccount() { onUseExisting() }
+                }
+            } label: {
+                if model.isWorking { ProgressView() } else { Text("I already have an account") }
+            }
+            .buttonStyle(.aisleSoft)
+            .accessibilityIdentifier("useExistingAccountButton")
+        }
+        .disabled(model.isWorking)
+    }
+}
+
+struct NameStep: View {
+    @Bindable var model: SignUpModel
+    let onBack: () -> Void
+    /// Called with the finished session once the name is saved.
+    let onCreate: (AuthSession) -> Void
+
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        OnboardingPage(onBack: onBack, progress: "Step 3 of 3") {
+            VStack(alignment: .leading, spacing: 12) {
+                Text(model.trimmedName.first.map { String($0).uppercased() } ?? "?")
+                    .font(Theme.font(26, .bold, relativeTo: .title))
+                    .foregroundStyle(Theme.onAccent)
+                    .frame(width: 64, height: 64)
+                    .background(Theme.accent, in: Circle())
+                    .accessibilityHidden(true)
+                    .padding(.bottom, 10)
+                Text("What should we call you?")
+                    .font(Theme.font(34, .bold, relativeTo: .largeTitle))
+                    .tracking(-1)
+                    .foregroundStyle(Theme.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilityAddTraits(.isHeader)
+                OnboardingBody(text: "Just a first name is fine.")
+                Text("First name")
+                    .font(Theme.font(13, .semibold, relativeTo: .footnote))
+                    .foregroundStyle(Theme.secondaryInk)
+                    .padding(.top, 16)
+                TextField("First name", text: $model.firstName)
+                    .textContentType(.givenName)
+                    .textInputAutocapitalization(.words)
+                    .autocorrectionDisabled()
+                    .submitLabel(.done)
+                    .focused($focused)
+                    .onSubmit(create)
+                    .modifier(OnboardingFieldStyle())
+                    .accessibilityIdentifier("firstNameField")
+                Toggle(isOn: $model.wantsTips) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Shopping tips by email")
+                            .font(.aisleHeadline)
+                            .foregroundStyle(Theme.ink)
+                        Text("Occasional, never more than monthly")
+                            .font(.aisleFootnote)
+                            .foregroundStyle(Theme.secondaryInk)
+                    }
+                }
+                .tint(Theme.toggleOn)
+                .padding(16)
+                .background(Theme.surface.opacity(0.7), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .padding(.top, 8)
+                if let error = model.errorMessage {
+                    Text(error)
+                        .font(.aisleFootnote)
+                        .foregroundStyle(Theme.warning)
+                }
+            }
+        } footer: {
+            Button(action: create) {
+                if model.isWorking { ProgressView() } else { Text("Create account") }
+            }
+            .buttonStyle(.aisleAccent)
+            .disabled(!model.canFinish || model.isWorking)
+            .accessibilityIdentifier("createAccountButton")
+        }
+        .onAppear { focused = true }
+    }
+
+    private func create() {
+        guard model.canFinish, !model.isWorking else { return }
+        Task {
+            if let session = await model.finish() { onCreate(session) }
+        }
+    }
+}

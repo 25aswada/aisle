@@ -23,15 +23,22 @@ Aisle helps people find items inside physical stores. These documents describe t
 - Find screen search field calls `POST /search` with the query and selected store.
 - `backend/app/ai/intent.py` parses the query (filler words, quantity, modifiers) and
   matches the catalog in `backend/app/ai/catalog.py`.
-- Generic location reasoning maps the category to a department in the store format's
-  layout template (Trader Joe's, warehouse club, supercenter, pharmacy, home improvement,
-  generic grocery).
+- Location reasoning maps the category to a department in the store's layout: a
+  researched chain layout (12 chains, `ai/chain_layouts.py`) or a generic store-format
+  template (warehouse club, supercenter, pharmacy, home improvement, grocery).
 - AI provider (`backend/app/ai/providers.py`): Claude via the Anthropic SDK when
-  `ANTHROPIC_API_KEY` is set. The model must pick a department from the layout's list
+  `ANTHROPIC_API_KEY` is set, or an OpenAI model (default `gpt-6-luna`) when
+  `OPENAI_API_KEY` is set. `AISLE_AI_PROVIDER` (`auto`, `anthropic`, `openai`) picks one when
+  both keys are present; `auto` prefers Anthropic. The model must pick a department from the layout's list
   through a JSON schema, so it cannot invent aisle numbers. Its output is validated again
   server-side. With the default `AISLE_AI_STRATEGY=catalog_first` the model only handles
   queries the catalog can't classify. Without a key, or on any provider error, the
   deterministic fallback answers.
+- With a key, the model also writes each result's "where to find it" reply
+  (`ai/explain.py`), answering in its own words from what it knows about the chain, like a
+  chatbot. Only real data for the store (product data, aisle numbers, shopper reports) goes
+  in with the question; layout guesses don't. The reply is shown as written; the app uses
+  its own wording only when there is none.
 - Eval cases live in `backend/app/ai/eval_cases.json`. Run
   `python -m backend.app.ai.evaluate` (model if a key is set) or `--fallback`.
 
@@ -108,4 +115,34 @@ Pytest discovery is the default: files named `test_*.py` or `*_test.py` under `b
 
 ## Access
 
-All routes are public. Aisle has no accounts, tokens, or sessions; the app sends an anonymous install id in `X-Aisle-Device`. The SwiftUI app is the client, so browser CORS is unused.
+Accounts are optional (`backend/app/auth/`, `routers/auth.py`): SMS codes through Twilio
+Verify, email codes sent with Resend, and Sign in with Apple and Google, whose ID tokens
+are checked against the providers' published keys. Sessions are random bearer tokens
+stored only as SHA-256 hashes; the app keeps its token in the Keychain. Only `/me` and
+`/auth/signout` need one; every other route is public, and the app still sends an
+anonymous install id in `X-Aisle-Device`. The SwiftUI app is the client, so browser CORS is unused.
+
+## Aisle+
+
+The subscription is bought with StoreKit 2 (`ios/Aisle/Account/PlusStore.swift`). The app
+sends each current transaction's signed JWS to `POST /plus/sync`; the server checks it
+against the pinned Apple root (`backend/app/plus/appstore.py`) and only then lifts limits
+(`backend/app/plus/access.py`). What it covers, and where it's enforced:
+
+| Feature | Free | Aisle+ | Enforced |
+| --- | --- | --- | --- |
+| Photo searches (`/identify`, `/lists/scan`, photo `/chat`) | 5 a day | Unlimited | Server, 402 `photo_search` |
+| Follow-up questions (`/chat`) | 10 a day | Unlimited | Server, 402 `follow_up` |
+| Lists | 1 | Unlimited | App |
+| Shared family lists (`/lists`) | Join only | Share | Server, 402 `shared_lists` |
+| Multi-store trips (`/route/multi`) | — | 2–4 stores | Server, 402 `multi_store` |
+| Offline store maps | — | ✓ | App (`ios/Aisle/Offline/`) |
+
+Offline maps are an `AisleAPI` wrapper (`OfflineAwareAPI`). While Aisle+ is on, it saves
+each store's layout, the spot of every item routed or searched there, and search answers
+under Application Support. When a request fails for lack of a connection (offline,
+timeout, transport, 5xx; never a 4xx such as 402), it answers from what's saved; a route
+is then planned on the phone from the saved spots, nearest-first from the entrance.
+
+Every 402 carries `{"code": "plus_required", "feature", "message"}`; the app turns it
+into `APIError.plusRequired` and opens the Aisle+ page with the message.

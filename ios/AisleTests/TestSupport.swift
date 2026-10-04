@@ -95,6 +95,10 @@ final class StubAPI: AisleAPI, @unchecked Sendable {
     var searchResult: Result<[Store], Error> = .success([Fixtures.store])
     var searchItemResult: Result<ItemSearchResult, Error> = .success(Fixtures.mapleSyrup)
     private(set) var itemSearches: [(String, String?)] = []
+    var chatResult: Result<ChatReply, Error> = .success(ChatReply(reply: "Check the bakery tables by the muffins."))
+    private(set) var chats: [(String, [ChatMessage])] = []
+    var identifyResult: Result<String?, Error> = .success("maple syrup")
+    private(set) var identified: [(Data, String?)] = []
     var zonesResult: Result<[StoreZone], Error> = .success(Fixtures.zones)
     var feedbackResult: Result<FeedbackReceipt, Error> = .success(
         FeedbackReceipt(id: 1, verdict: .found, zoneID: 17, reports: nil)
@@ -108,6 +112,7 @@ final class StubAPI: AisleAPI, @unchecked Sendable {
     private(set) var routeRequests: [(String, [ListItem])] = []
     private(set) var nearbyCalls: [(Double, Double, Int?)] = []
     private(set) var searchQueries: [String] = []
+    private(set) var searchCoordinates: [Coordinate?] = []
 
     func health() async throws -> HealthResponse { try healthResult.get() }
 
@@ -116,8 +121,9 @@ final class StubAPI: AisleAPI, @unchecked Sendable {
         return try nearbyResult.get()
     }
 
-    func searchStores(query: String) async throws -> [Store] {
+    func searchStores(query: String, near: Coordinate?) async throws -> [Store] {
         searchQueries.append(query)
+        searchCoordinates.append(near)
         return try searchResult.get()
     }
 
@@ -126,6 +132,16 @@ final class StubAPI: AisleAPI, @unchecked Sendable {
     func searchItem(query: String, storeID: String?) async throws -> ItemSearchResult {
         itemSearches.append((query, storeID))
         return try searchItemResult.get()
+    }
+
+    func chat(storeID: String, messages: [ChatMessage]) async throws -> ChatReply {
+        chats.append((storeID, messages))
+        return try chatResult.get()
+    }
+
+    func identify(photo: Data, note: String?, storeID: String?) async throws -> String? {
+        identified.append((photo, note))
+        return try identifyResult.get()
     }
 
     func zones(storeID: String) async throws -> [StoreZone] { try zonesResult.get() }
@@ -138,6 +154,14 @@ final class StubAPI: AisleAPI, @unchecked Sendable {
     func parseList(text: String) async throws -> [ParsedListItem] {
         parsedTexts.append(text)
         return try parseListResult.get()
+    }
+
+    var scanListResult: Result<[ParsedListItem], Error> = .success([])
+    private(set) var scannedPhotos: [Data] = []
+
+    func scanList(photo: Data) async throws -> [ParsedListItem] {
+        scannedPhotos.append(photo)
+        return try scanListResult.get()
     }
 
     func sendEvents(_ events: [AnalyticsEvent]) async throws {
@@ -155,6 +179,16 @@ final class StubAPI: AisleAPI, @unchecked Sendable {
                                             neighbors: [], confidence: .medium, source: .fallback)])
         }
         return RoutePlan(storeID: Int(storeID) ?? 0, stops: stops, unplaced: [], distance: 1)
+    }
+
+    var multiRouteResult: Result<MultiRoutePlan, Error> = .failure(APIError.plusRequired(
+        feature: "multi_store", message: "Shopping more than one store in a trip is part of Aisle+."
+    ))
+    private(set) var multiRouteRequests: [([String], [ListItem])] = []
+
+    func planMultiRoute(storeIDs: [String], items: [ListItem]) async throws -> MultiRoutePlan {
+        multiRouteRequests.append((storeIDs, items))
+        return try multiRouteResult.get()
     }
 }
 

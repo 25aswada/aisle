@@ -7,13 +7,19 @@ struct ListItem: Codable, Equatable, Hashable, Identifiable {
     var quantity: String?
     var categoryName: String?
     var isDone: Bool
+    /// Optional details from the item sheet. Kept on this phone (not synced to shared lists yet).
+    var brand: String?
+    var note: String?
 
-    init(id: UUID = UUID(), text: String, quantity: String? = nil, categoryName: String? = nil, isDone: Bool = false) {
+    init(id: UUID = UUID(), text: String, quantity: String? = nil, categoryName: String? = nil, isDone: Bool = false,
+         brand: String? = nil, note: String? = nil) {
         self.id = id
         self.text = text
         self.quantity = quantity
         self.categoryName = categoryName
         self.isDone = isDone
+        self.brand = brand
+        self.note = note
     }
 }
 
@@ -31,6 +37,11 @@ struct ListParseRequestBody: Encodable {
     let text: String
 }
 
+/// `POST /lists/scan`: a photo (base64 JPEG) of a shopping list.
+struct ListScanRequestBody: Encodable {
+    let image: String
+}
+
 /// Offline fallback when `/lists/parse` is unreachable: split on separators, or on
 /// spaces when there are none. The server parser is smarter about multi-word items.
 enum LocalListParser {
@@ -45,4 +56,17 @@ enum LocalListParser {
             .filter { !$0.isEmpty }
             .map { ParsedListItem(text: $0.lowercased(), quantity: nil, category: nil) }
     }
+}
+
+/// Ready-made lists to start from, on the empty list and in the intro.
+struct ListStarter: Identifiable, Equatable {
+    let title: String
+    let items: String
+    var id: String { title }
+
+    static let all = [
+        ListStarter(title: "Weeknight dinner", items: "chicken, rice, onions, garlic, spinach, lemons"),
+        ListStarter(title: "Breakfast basics", items: "eggs, bread, butter, bananas, oats, coffee"),
+        ListStarter(title: "Party supplies", items: "balloons, candles, plates, napkins, cups, ice cream"),
+    ]
 }

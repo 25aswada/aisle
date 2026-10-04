@@ -8,6 +8,8 @@ struct ShoppingModeView: View {
     var body: some View {
         NavigationStack {
             content
+                .aislePage()
+                .tint(Theme.ink)
                 .navigationTitle(model.storeName)
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
@@ -28,20 +30,22 @@ struct ShoppingModeView: View {
         case .loading:
             VStack(spacing: 12) {
                 ProgressView()
-                Text("Planning your route…").foregroundStyle(.secondary)
+                    .tint(Theme.secondaryInk)
+                Text("Planning your route…")
+                    .font(.aisleSubheadline)
+                    .foregroundStyle(Theme.secondaryInk)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .accessibilityElement(children: .combine)
         case .failed(let message):
-            ContentUnavailableView {
-                Label("Couldn't plan a route", systemImage: "map")
-            } description: {
-                Text(message)
-            } actions: {
+            AisleEmptyState(title: "Couldn't plan a route", systemImage: "map", message: message) {
                 Button("Try again") { Task { await model.start() } }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.aisleAccent)
                 Button("Shop in list order") { model.shopWithoutRoute() }
+                    .buttonStyle(.aisleSoft)
             }
+            .padding(.horizontal, 20)
+            .frame(maxHeight: .infinity)
         case .shopping:
             if model.isFinished {
                 TripSummary(model: model) { dismiss() }
@@ -55,6 +59,36 @@ struct ShoppingModeView: View {
         List {
             Section {
                 TripProgress(model: model)
+                if model.isOfflineRoute {
+                    Label("No connection. This route uses the map and spots saved on your phone.", systemImage: "wifi.slash")
+                        .font(.aisleFootnote)
+                        .foregroundStyle(Theme.secondaryInk)
+                }
+            }
+
+            if let next = model.nextLeg {
+                Section {
+                    NextStoreCard(done: model.storeName, next: next) {
+                        Task { await model.goToNextStore() }
+                    }
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+                }
+            }
+
+            if let layout = model.layout, !model.isUnrouted, !model.isCurrentLegDone {
+                Section {
+                    StoreMapCard(
+                        layout: layout,
+                        retailer: model.retailerName,
+                        highlighted: Set(model.currentStopIndex.flatMap { model.stops[$0].zoneID }.map { [$0] } ?? []),
+                        completed: Set(model.stops.filter { model.pendingItems(in: $0).isEmpty }.compactMap(\.zoneID)),
+                        route: model.stops.compactMap(\.zoneID),
+                        height: 240
+                    )
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+                }
             }
 
             if let index = model.currentStopIndex {
@@ -69,7 +103,10 @@ struct ShoppingModeView: View {
                         )
                     }
                 } header: {
-                    StopHeader(stop: stop, number: index + 1, count: model.stops.count, unrouted: model.isUnrouted)
+                    StopHeader(
+                        stop: stop, number: index + 1, count: model.stops.count, unrouted: model.isUnrouted,
+                        storeLabel: model.isMultiStore ? model.retailerName : nil
+                    )
                 }
             }
 
@@ -79,7 +116,7 @@ struct ShoppingModeView: View {
                         HStack {
                             Text(stop.department)
                             Spacer()
-                            Text("\(model.pendingItems(in: stop).count) items")
+                            Text(itemCount(model.pendingItems(in: stop).count))
                                 .foregroundStyle(.secondary)
                                 .monospacedDigit()
                         }
@@ -93,8 +130,10 @@ struct ShoppingModeView: View {
                     ForEach(model.pendingUnplaced) { item in
                         TripItemRow(
                             text: item.text,
-                            detail: item.reason == .notCarried
-                                ? "This store may not carry this."
+                            detail: model.isNowhere(item.id)
+                                ? "None of your stores is likely to carry this. Ask an employee."
+                                : item.reason == .notCarried
+                                ? "\(model.retailerName) typically doesn't carry this. Ask an employee."
                                 : "We don't know where this is. Ask a store employee.",
                             onFound: { withAnimation { model.markFound(item.id) } },
                             onSkip: { withAnimation { model.skip(item.id) } }
@@ -105,11 +144,17 @@ struct ShoppingModeView: View {
                 }
             } else if !model.pendingUnplaced.isEmpty {
                 Section {
-                    Text("\(model.pendingUnplaced.count) items we couldn't place come last.")
+                    Text(model.pendingUnplaced.count == 1
+                        ? "1 item we couldn't place comes last."
+                        : "\(model.pendingUnplaced.count) items we couldn't place come last.")
                         .foregroundStyle(.secondary)
                 }
             }
         }
+    }
+
+    private func itemCount(_ count: Int) -> String {
+        count == 1 ? "1 item" : "\(count) items"
     }
 
     private func detail(for item: RouteStopItem) -> String? {
@@ -131,17 +176,17 @@ private struct TripProgress: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack {
                 Text("\(model.foundCount) of \(model.totalCount) found")
-                    .font(.headline)
+                    .font(.aisleHeadline)
                     .monospacedDigit()
                 Spacer()
                 if model.skippedCount > 0 {
                     Text("\(model.skippedCount) skipped")
-                        .font(.subheadline)
+                        .font(.aisleSubheadline)
                         .foregroundStyle(.secondary)
                 }
             }
             ProgressView(value: model.progress)
-                .tint(.green)
+                .tint(Color(hex: 0xDC6F9C))
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(model.foundCount) of \(model.totalCount) found, \(model.skippedCount) skipped")
@@ -154,18 +199,76 @@ private struct StopHeader: View {
     let number: Int
     let count: Int
     let unrouted: Bool
+    /// The store's name on a multi-store trip.
+    var storeLabel: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(unrouted ? "No route available" : "Stop \(number) of \(count)")
-                .font(.caption)
+            Text(unrouted ? "No route available" : [storeLabel, "Stop \(number) of \(count)"].compactMap { $0 }.joined(separator: " · "))
+                .font(.aisleCaption)
+                .foregroundStyle(Theme.secondaryInk)
+            // Explicit ink: `.primary` inside a List section header renders muted.
             Text(stop.department)
-                .font(.title2.weight(.bold))
-                .foregroundStyle(.primary)
+                .font(.aisleTitle)
+                .foregroundStyle(Theme.ink)
                 .textCase(nil)
         }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isHeader)
+    }
+}
+
+/// Done at one store on a multi-store trip: where to go next.
+private struct NextStoreCard: View {
+    let done: String
+    let next: TripLeg
+    let onGo: () -> Void
+
+    private var itemCount: Int {
+        next.stops.reduce(0) { $0 + $1.items.count } + next.unplaced.count
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 12) {
+                RetailerLogo(url: next.store.retailerLogoURL) {
+                    Image(systemName: "storefront")
+                        .font(.system(size: 26, weight: .semibold))
+                        .foregroundStyle(Theme.accentInk)
+                        .frame(width: 44, height: 44)
+                }
+                .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Done at \(done)")
+                        .font(.aisleFootnote)
+                        .foregroundStyle(Theme.secondaryInk)
+                    Text("Next: \(next.store.name)")
+                        .font(.aisleHeadline)
+                        .foregroundStyle(Theme.ink)
+                    Text(itemCount == 1 ? "1 item to find there" : "\(itemCount) items to find there")
+                        .font(.aisleSubheadline)
+                        .foregroundStyle(Theme.secondaryInk)
+                }
+            }
+            Button(action: onGo) {
+                Label("I'm at \(next.store.retailerDisplayName)", systemImage: "arrow.right")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.aisleAccent)
+            .accessibilityIdentifier("nextStoreButton")
+            Button {
+                // Coordinates, not the address: some stores only have "Near <town>".
+                if let url = URL(string: "maps://?daddr=\(next.store.latitude),\(next.store.longitude)") {
+                    UIApplication.shared.open(url)
+                }
+            } label: {
+                Label("Directions", systemImage: "car.fill")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.aisleSoft)
+        }
+        .padding(18)
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
     }
 }
 
@@ -178,10 +281,10 @@ struct TripItemRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(text.capitalized)
-                .font(.headline)
+                .font(.aisleHeadline)
             if let detail {
                 Text(detail)
-                    .font(.subheadline)
+                    .font(.aisleSubheadline)
                     .foregroundStyle(.secondary)
             }
             AdaptiveStack {
@@ -189,18 +292,16 @@ struct TripItemRow: View {
                     Label("Found", systemImage: "checkmark")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(.green)
+                .buttonStyle(.aisleAccent)
                 .accessibilityLabel("Found \(text)")
 
                 Button(action: onSkip) {
                     Label("Skip", systemImage: "forward")
                         .frame(maxWidth: .infinity)
                 }
-                .buttonStyle(.bordered)
+                .buttonStyle(.aisleSoft)
                 .accessibilityLabel("Skip \(text)")
             }
-            .controlSize(.large)
         }
         .padding(.vertical, 4)
     }
@@ -215,25 +316,24 @@ private struct TripSummary: View {
             VStack(spacing: 16) {
                 Image(systemName: model.skippedCount == 0 ? "checkmark.circle.fill" : "flag.checkered")
                     .font(.system(size: 56))
-                    .foregroundStyle(.green)
+                    .foregroundStyle(Theme.accentInk)
                     .accessibilityHidden(true)
                 Text(model.skippedCount == 0 ? "All done!" : "Trip complete")
-                    .font(.title.weight(.bold))
+                    .font(.aisleLargeTitle)
                 Text("Found \(model.foundCount) of \(model.totalCount) items.")
                     .foregroundStyle(.secondary)
                 if !model.skippedTexts.isEmpty {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Skipped").font(.headline)
+                        Text("Skipped").font(.aisleHeadline)
                         ForEach(model.skippedTexts, id: \.self) { Text("• \($0)") }
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding()
-                    .background(.background.secondary, in: RoundedRectangle(cornerRadius: 12))
+                    .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
                     Button("Look for skipped items again") { withAnimation { model.retrySkipped() } }
                 }
                 Button("Done", action: onDone)
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
+                    .buttonStyle(.aisleAccent)
             }
             .padding()
         }

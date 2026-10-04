@@ -24,6 +24,13 @@ final class StoreSelection {
         }
     }
 
+    /// Replaces the saved store with fresh server data for the same store, e.g. to pick up
+    /// a logo added after it was saved. Ignored if the user has since chosen another store.
+    func refresh(_ store: Store) {
+        guard store.id == current?.id, store != current else { return }
+        select(store)
+    }
+
     func clear() {
         current = nil
         defaults.removeObject(forKey: Self.defaultsKey)

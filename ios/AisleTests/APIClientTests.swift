@@ -63,6 +63,16 @@ final class APIClientTests: XCTestCase {
         let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
         XCTAssertEqual(components.path, "/stores/search")
         XCTAssertEqual(components.queryItems?.first { $0.name == "q" }?.value, "trader joe's & co")
+        XCTAssertNil(components.queryItems?.first { $0.name == "lat" })
+    }
+
+    func testSearchNearALocationSendsIt() async throws {
+        StubURLProtocol.respond(json: "[]")
+        _ = try await client.searchStores(query: "giant eagle", near: Coordinate(latitude: 41.31, longitude: -81.67))
+        let url = try XCTUnwrap(StubURLProtocol.requests.first?.url)
+        let items = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        XCTAssertEqual(items.first { $0.name == "lat" }?.value, "41.31")
+        XCTAssertEqual(items.first { $0.name == "lon" }?.value, "-81.67")
     }
 
     func testStoreByID() async throws {

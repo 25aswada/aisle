@@ -22,6 +22,14 @@ def migration_config(url):
     return config
 
 
+@pytest.fixture(autouse=True)
+def no_real_ai_explanations(monkeypatch):
+    """Never call a real AI provider for explanations, even with a key in backend/.env."""
+    from backend.app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "aisle_ai_explain", False)
+
+
 @pytest.fixture
 def engine(tmp_path):
     url = f"sqlite:///{tmp_path / 'test.db'}"

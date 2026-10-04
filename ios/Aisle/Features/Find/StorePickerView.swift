@@ -3,6 +3,8 @@ import SwiftUI
 struct StorePickerView: View {
     @State var model: StorePickerModel
     let selected: Store?
+    /// Ask for location as soon as the picker opens (the user tapped "Find stores near me").
+    var startsWithLocation = false
     let onSelect: (Store) -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -20,7 +22,14 @@ struct StorePickerView: View {
                 } else {
                     nearbySection
                 }
+                // Store locations come from OpenStreetMap, whose license asks for this credit.
+                Section {} footer: {
+                    Text("Store locations © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright)")
+                        .font(.caption2)
+                }
             }
+            .aislePage()
+            .tint(Theme.ink)
             .navigationTitle("Choose a store")
             .navigationBarTitleDisplayMode(.inline)
             .searchable(
@@ -34,7 +43,13 @@ struct StorePickerView: View {
                     Button("Cancel") { dismiss() }
                 }
             }
-            .task { await model.start() }
+            .task {
+                if startsWithLocation, model.locationAuthorization == .notDetermined {
+                    await model.requestLocationAndLoadNearby()
+                } else {
+                    await model.start()
+                }
+            }
             .task(id: query) {
                 // Debounce keystrokes; `.task(id:)` cancels the previous run.
                 try? await Task.sleep(for: .milliseconds(300))
@@ -109,6 +124,8 @@ struct StorePickerView: View {
                     StoreRow(store: store, isSelected: store.id == selected?.id)
                 }
                 .buttonStyle(.plain)
+                // The selected store is marked by the soft gradient on its whole row.
+                .listRowBackground(store.id == selected?.id ? Rectangle().fill(Theme.accentWash) : nil)
             }
         }
     }
@@ -119,34 +136,45 @@ struct StoreRow: View {
     let isSelected: Bool
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline) {
+        HStack(spacing: 14) {
+            RetailerLogo(url: store.retailerLogoURL) {
+                Text(String(store.name.prefix(1)).uppercased())
+                    .font(Theme.font(24, .bold, relativeTo: .title2))
+                    .foregroundStyle(Theme.ink)
+                    .frame(width: 44, height: 44)
+            }
+            .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
-                Text(store.name).font(.body)
+                Text(store.name)
+                    .font(.aisleHeadline)
+                    .foregroundStyle(Theme.ink)
                 Text(store.address)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .font(.aisleFootnote)
+                    .foregroundStyle(Theme.secondaryInk)
                     .lineLimit(2)
                 if let retailer = store.retailerName, retailer != store.name {
                     Text(retailer)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .font(.aisleCaption)
+                        .foregroundStyle(Theme.secondaryInk)
                 }
             }
             Spacer(minLength: 8)
-            VStack(alignment: .trailing, spacing: 4) {
+            VStack(alignment: .trailing, spacing: 6) {
                 if let miles = store.distanceMiles {
                     Text(Self.format(miles: miles))
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+                        .font(Theme.font(14, .semibold, relativeTo: .subheadline))
+                        .foregroundStyle(Theme.ink)
                         .monospacedDigit()
                 }
                 if isSelected {
                     Image(systemName: "checkmark")
-                        .foregroundStyle(.tint)
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(Theme.ink)
                         .accessibilityLabel("Selected")
                 }
             }
         }
+        .padding(.vertical, 4)
         .contentShape(Rectangle())
     }
 

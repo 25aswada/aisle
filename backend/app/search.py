@@ -3,13 +3,15 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from .ai.intent import parse_intent
-from .ai.providers import LocationModel
 import logging
 
-from .models import SearchEvent, Store
+from .ai.explain import Explainer, ExplainFacts, explain_safely, position_words
+from .ai.intent import parse_intent
+from .ai.providers import LocationModel
+from .models import SearchEvent, Store, StoreZone
 from .resolver import resolve
 from .schemas import CategoryOut, ConceptOut, LocationOut, ReportCountsOut, SearchResponse
+from .store_zones import get_store
 
 log = logging.getLogger(__name__)
 
@@ -36,18 +38,43 @@ def record_search_event(db: Session, query: str, intent, store: Store | None, re
         return None
 
 
+def explain_facts(db: Session, intent, store: Store | None, result) -> ExplainFacts:
+    zone = db.get(StoreZone, result.zone_id) if result.zone_id else None
+    # A category with no matching zone at a store that doesn't stock it isn't a place.
+    department = None if result.availability == "unlikely" and zone is None else result.department
+    return ExplainFacts(
+        item=intent.item,
+        retailer=store.retailer_name if store else None,
+        store_name=store.name if store else None,
+        department=department,
+        aisle=result.aisle,
+        section=result.section,
+        category=result.category_name,
+        neighbors=tuple(result.neighbors[:4]),
+        confidence=result.confidence,
+        availability=result.availability,
+        source=result.source,
+        modifiers=tuple(intent.modifiers),
+        found_reports=result.reports.found if result.reports else 0,
+        not_here_reports=result.reports.not_here if result.reports else 0,
+        position=position_words(zone.x, zone.y) if zone else None,
+        layout_is_template=zone is None or zone.source == "template",
+    )
+
+
 def search(
     db: Session, query: str, store_id: int | None, model: LocationModel | None,
-    device_id: str | None = None,
+    device_id: str | None = None, explainer: Explainer | None = None,
 ) -> SearchResponse:
     store = None
     if store_id is not None:
-        store = db.get(Store, store_id)
+        store = get_store(db, store_id)
         if store is None:
             raise StoreNotFound(store_id)
     intent = parse_intent(query)
     result = resolve(db, intent, store, model)
     search_id = record_search_event(db, query, intent, store, result, device_id)
+    explanation = explain_safely(explainer, explain_facts(db, intent, store, result)) if store else None
     return SearchResponse(
         search_id=search_id,
         query=query,
@@ -71,4 +98,5 @@ def search(
             ReportCountsOut(found=result.reports.found, not_here=result.reports.not_here)
             if result.reports else None
         ),
+        explanation=explanation,
     )

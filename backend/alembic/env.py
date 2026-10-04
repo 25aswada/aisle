@@ -1,8 +1,14 @@
 from alembic import context
 
-from backend.app.config import get_settings
-from backend.app.database import make_engine
-from backend.app.models import Base
+try:
+    from backend.app.config import get_settings
+    from backend.app.database import make_engine
+    from backend.app.models import Base
+except ModuleNotFoundError:
+    # Deployed with backend/ as the root (Heroku), where the package is just `app`.
+    from app.config import get_settings
+    from app.database import make_engine
+    from app.models import Base
 
 config = context.config
 target_metadata = Base.metadata
