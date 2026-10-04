@@ -10,10 +10,10 @@ import hashlib
 import secrets
 from datetime import datetime, timezone
 
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
-from ..models import AuthSession, User, UserIdentity
+from ..models import AuthSession, PlusEntitlement, UsageCounter, User, UserIdentity
 
 
 def sign_in(
@@ -81,8 +81,13 @@ def revoke(db: Session, session: AuthSession) -> None:
 
 
 def delete_user(db: Session, user: User) -> None:
-    """Deletes the account, its identities and sessions. Searches and reports stay anonymous."""
+    """Deletes the account, its identities and sessions, its link to Aisle+ and its
+    free-tier counts, so nothing carries over to a new account (SQLite can reuse the
+    id). Searches and reports stay anonymous. Apple keeps billing a subscription
+    until it's canceled in Settings; "Restore purchases" can move it to a new account."""
     db.execute(update(AuthSession).where(AuthSession.user_id == user.id)
                .values(revoked_at=datetime.now(timezone.utc)))
+    db.execute(delete(PlusEntitlement).where(PlusEntitlement.user_id == user.id))
+    db.execute(delete(UsageCounter).where(UsageCounter.subject == f"user:{user.id}"))
     db.delete(user)
     db.commit()

@@ -403,6 +403,8 @@ class CodeSent(BaseModel):
 
 class UserOut(BaseModel):
     id: int
+    # The app passes this to StoreKit as appAccountToken when buying Aisle+.
+    plus_token: str
     first_name: str
     email: str | None
     phone: str | None
@@ -436,6 +438,9 @@ class ProfileUpdate(BaseModel):
 class PlusSync(BaseModel):
     # StoreKit 2 `jwsRepresentation` of each current Aisle+ entitlement.
     transactions: list[str] = Field(default_factory=list, max_length=20)
+    # "Restore purchases": also take over subscriptions bought for an account that has
+    # since been deleted (still billed by Apple), not just ones bought for this account.
+    claim: bool = False
 
 
 class UsageOut(BaseModel):

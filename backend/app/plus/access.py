@@ -1,7 +1,8 @@
 """Who is asking, whether they have Aisle+, and the free tier's daily limits.
 
-Aisle+ comes from a verified App Store subscription tied to the device that sent it
-and, once signed in, to the account. Free shoppers get a few photo searches and
+Aisle+ comes from a verified App Store subscription that belongs to an account: the
+one it was bought for, or one it was restored to. Signed out, nobody has Aisle+, and
+deleting the account ends it. Free shoppers get a few photo searches and
 follow-ups a day, counted per account when signed in (so reinstalling doesn't reset
 them) and otherwise per device.
 """
@@ -11,7 +12,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from fastapi import HTTPException
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
@@ -48,14 +49,10 @@ def _aware(moment: datetime | None) -> datetime | None:
 
 def active_entitlement(db: Session, caller: Caller, now: datetime | None = None) -> PlusEntitlement | None:
     now = now or datetime.now(timezone.utc)
-    owners = []
-    if caller.device_id:
-        owners.append(PlusEntitlement.device_id == caller.device_id)
-    if caller.user is not None:
-        owners.append(PlusEntitlement.user_id == caller.user.id)
-    if not owners:
+    if caller.user is None:
         return None
-    for entitlement in db.scalars(select(PlusEntitlement).where(or_(*owners), PlusEntitlement.revoked_at.is_(None))):
+    for entitlement in db.scalars(select(PlusEntitlement).where(
+            PlusEntitlement.user_id == caller.user.id, PlusEntitlement.revoked_at.is_(None))):
         expires = _aware(entitlement.expires_at)
         if expires is None or expires > now:
             return entitlement

@@ -196,10 +196,13 @@ class AnalyticsEvent(Base):
 
 
 class User(Base):
-    """A shopper with an account. Accounts are optional; everything works without one."""
+    """A shopper with an account. The app requires one; the API still answers without."""
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    # Stamped on this account's App Store purchases (StoreKit's appAccountToken), so an
+    # Aisle+ subscription belongs to the account that bought it, not the Apple ID or phone.
+    plus_token: Mapped[str] = mapped_column(String(36), unique=True, default=lambda: str(uuid4()))
     first_name: Mapped[str] = mapped_column(String(40), default="")
     # The first verified email or phone number seen for this person, for display and linking.
     email: Mapped[str | None] = mapped_column(String(320), index=True)
@@ -271,7 +274,8 @@ class PlusEntitlement(Base):
     """An Aisle+ subscription the app proved with a signed App Store transaction.
 
     Keyed by the subscription's original transaction id; renewals update expires_at.
-    It applies to the device that sent it and, when signed in, to that account.
+    It applies to the account it was bought for (or later restored to); device_id is kept
+    only as a record of where it was sent from.
     """
     __tablename__ = "plus_entitlements"
 

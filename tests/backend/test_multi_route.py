@@ -4,16 +4,20 @@ import pytest
 
 from backend.app.plus import appstore
 from conftest import store_id_for
-from test_plus import FakeApple
+from test_plus import FakeApple, account
 
 PLUS = {"X-Aisle-Device": "plus-phone"}
 
 
 @pytest.fixture
-def plus(seeded_client, monkeypatch):
+def plus(seeded_client, seeded_engine, monkeypatch):
     fake = FakeApple()
     monkeypatch.setattr(appstore, "apple_root", lambda: fake.root)
-    assert seeded_client.post("/plus/sync", json={"transactions": [fake.sign()]}, headers=PLUS).json()["is_plus"]
+    # Aisle+ belongs to an account: sign one in on this device for the module's PLUS headers.
+    headers, token, _ = account(seeded_engine, PLUS["X-Aisle-Device"])
+    monkeypatch.setitem(PLUS, "Authorization", headers["Authorization"])
+    synced = seeded_client.post("/plus/sync", json={"transactions": [fake.sign(appAccountToken=token)]}, headers=PLUS)
+    assert synced.json()["is_plus"]
     return seeded_client
 
 

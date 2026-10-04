@@ -21,7 +21,8 @@ from backend.app.ai.providers import get_explainer
 from backend.app.config import get_settings
 from backend.app.database import get_db
 from backend.app.main import app
-from backend.app.models import Retailer, Store, UsageCounter
+from backend.app.auth.accounts import create_session
+from backend.app.models import PlusEntitlement, Retailer, Store, UsageCounter, User
 from backend.app.plus import appstore
 from backend.app.plus.appstore import INTERMEDIATE_OID, LEAF_OID, InvalidTransaction, verify_transaction
 
@@ -208,24 +209,81 @@ def test_follow_ups_have_their_own_limit_and_photos_count_as_photo_searches(api)
     assert status["follow_up"]["used"] == 10 and status["photo_search"]["used"] == 1
 
 
-def test_a_verified_subscription_lifts_the_limits(api, apple):
+def account(engine, device_id="phone-a"):
+    """A signed-in shopper: request headers and the token StoreKit stamps on their purchases."""
+    with Session(engine) as db:
+        user = User()
+        db.add(user)
+        db.commit()
+        token = create_session(db, user, device_id)
+        return {"Authorization": f"Bearer {token}", **device(device_id)}, user.plus_token, user.id
+
+
+def sync(api, headers, *transactions, claim=False):
+    return api.post("/plus/sync", json={"transactions": list(transactions), "claim": claim}, headers=headers)
+
+
+def test_a_verified_subscription_lifts_the_limits(api, apple, engine):
+    headers, token, _ = account(engine)
     for _ in range(5):
-        identify(api, "phone-a")
-    synced = api.post("/plus/sync", json={"transactions": [apple.sign()]}, headers=device("phone-a"))
+        api.post("/identify", json={"image": PHOTO}, headers=headers)
+    synced = sync(api, headers, apple.sign(appAccountToken=token.upper()))
     assert synced.status_code == 200
     assert synced.json()["is_plus"] is True
     for _ in range(3):
-        assert identify(api, "phone-a").status_code == 200
+        assert api.post("/identify", json={"image": PHOTO}, headers=headers).status_code == 200
     # Unlimited use isn't counted.
-    assert api.get("/plus/status", headers=device("phone-a")).json()["photo_search"]["used"] == 5
+    assert api.get("/plus/status", headers=headers).json()["photo_search"]["used"] == 5
 
 
-def test_expired_or_refunded_subscriptions_dont_count(api, apple):
+def test_aisle_plus_needs_an_account(api, apple):
+    # Signed out, even a genuine subscription doesn't unlock anything.
+    synced = sync(api, device("phone-a"), apple.sign())
+    assert synced.status_code == 200 and synced.json()["is_plus"] is False
+
+
+def test_a_subscription_belongs_to_the_account_that_bought_it(api, apple, engine):
+    owner, token, _ = account(engine, "phone-a")
+    other, _, _ = account(engine, "phone-a")
+    bought = apple.sign(appAccountToken=token)
+    assert sync(api, owner, bought).json()["is_plus"] is True
+    # Another account on the same phone and Apple ID doesn't get it, even by restoring.
+    assert sync(api, other, bought).json()["is_plus"] is False
+    assert sync(api, other, bought, claim=True).json()["is_plus"] is False
+    assert api.get("/plus/status", headers=other).json()["is_plus"] is False
+    # A purchase made for no account only moves over when restoring.
+    unstamped = apple.sign(originalTransactionId="1000000002")
+    assert sync(api, other, unstamped).json()["is_plus"] is False
+    assert sync(api, other, unstamped, claim=True).json()["is_plus"] is True
+
+
+def test_deleting_the_account_ends_aisle_plus_and_resets_the_free_tier(api, apple, engine):
+    headers, token, user_id = account(engine)
+    bought = apple.sign(appAccountToken=token)
+    assert sync(api, headers, bought).json()["is_plus"] is True
+    with Session(engine) as db:
+        db.add(UsageCounter(subject=f"user:{user_id}", feature="photo_search", day="2026-10-04", count=5))
+        db.commit()
+    assert api.delete("/me", headers=headers).status_code == 204
+    with Session(engine) as db:
+        assert db.query(PlusEntitlement).count() == 0
+        assert db.query(UsageCounter).filter_by(subject=f"user:{user_id}").count() == 0
+
+    # A new account starts on the free tier with nothing used, even with Apple still billing.
+    fresh, _, _ = account(engine)
+    status = sync(api, fresh, bought).json()
+    assert status["is_plus"] is False
+    assert status["photo_search"]["used"] == 0
+    # "Restore purchases" can move the still-billed subscription to the new account.
+    assert sync(api, fresh, bought, claim=True).json()["is_plus"] is True
+
+
+def test_expired_or_refunded_subscriptions_dont_count(api, apple, engine):
+    headers, token, _ = account(engine)
     past = int(time.time() * 1000) - 1000
-    assert api.post("/plus/sync", json={"transactions": [apple.sign(expiresDate=past)]},
-                    headers=device("a")).json()["is_plus"] is False
-    refunded = apple.sign(originalTransactionId="77", revocationDate=past)
-    assert api.post("/plus/sync", json={"transactions": [refunded]}, headers=device("b")).json()["is_plus"] is False
+    assert sync(api, headers, apple.sign(expiresDate=past, appAccountToken=token)).json()["is_plus"] is False
+    refunded = apple.sign(originalTransactionId="77", revocationDate=past, appAccountToken=token)
+    assert sync(api, headers, refunded).json()["is_plus"] is False
 
 
 def test_unverifiable_purchases_are_refused(api):
@@ -234,9 +292,10 @@ def test_unverifiable_purchases_are_refused(api):
     assert api.post("/plus/sync", json={"transactions": []}, headers=device("a")).json()["is_plus"] is False
 
 
-def test_xcode_purchases_follow_the_setting(api, apple, monkeypatch):
+def test_xcode_purchases_follow_the_setting(api, apple, monkeypatch, engine):
+    headers, token, _ = account(engine)
     monkeypatch.setattr(get_settings(), "aisle_plus_allow_xcode", False)
-    xcode = apple.sign(environment="Xcode", originalTransactionId="55")
-    assert api.post("/plus/sync", json={"transactions": [xcode]}, headers=device("a")).status_code == 400
+    xcode = apple.sign(environment="Xcode", originalTransactionId="55", appAccountToken=token)
+    assert sync(api, headers, xcode).status_code == 400
     monkeypatch.setattr(get_settings(), "aisle_plus_allow_xcode", True)
-    assert api.post("/plus/sync", json={"transactions": [xcode]}, headers=device("a")).json()["is_plus"] is True
+    assert sync(api, headers, xcode).json()["is_plus"] is True

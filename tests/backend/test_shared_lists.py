@@ -53,7 +53,8 @@ def item(id, text, done=False, position=0):
 def family(api, apple):
     owner = sign_in(api, "2155550101", "Sam")
     member = sign_in(api, "2155550102", "Alex")
-    api.post("/plus/sync", json={"transactions": [apple.sign()]}, headers=owner)
+    token = api.get("/me", headers=owner).json()["plus_token"]
+    api.post("/plus/sync", json={"transactions": [apple.sign(appAccountToken=token)]}, headers=owner)
     return owner, member
 
 

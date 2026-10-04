@@ -89,7 +89,7 @@ CallerDep = Annotated[Caller, Depends(get_caller)]
 
 def user_out(user: User) -> UserOut:
     return UserOut(
-        id=user.id, first_name=user.first_name, email=user.email, phone=user.phone,
+        id=user.id, plus_token=user.plus_token, first_name=user.first_name, email=user.email, phone=user.phone,
         wants_tips=user.wants_tips, providers=sorted({i.provider for i in user.identities}),
     )
 
