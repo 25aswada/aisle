@@ -88,6 +88,11 @@
             ReferencedContainer = "container:Aisle.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
+      <CommandLineArguments>
+      </CommandLineArguments>
+      <StoreKitConfigurationFileReference
+         identifier = "../../Aisle/Aisle.storekit">
+      </StoreKitConfigurationFileReference>
    </LaunchAction>
    <ProfileAction
       buildConfiguration = "Release"

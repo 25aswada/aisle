@@ -1,0 +1,106 @@
+{
+  "appPolicies" : {
+    "eula" : "",
+    "policies" : [
+      {
+        "locale" : "en_US",
+        "policyText" : "",
+        "policyURL" : ""
+      }
+    ]
+  },
+  "identifier" : "6B1F3A2C",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+
+  ],
+  "settings" : {
+    "_failTransactionsEnabled" : false,
+    "_locale" : "en_US",
+    "_storefront" : "USA",
+    "_storeKitErrors" : [
+
+    ]
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "21500001",
+      "localizations" : [
+        {
+          "description" : "",
+          "displayName" : "Aisle+",
+          "locale" : "en_US"
+        }
+      ],
+      "name" : "Aisle+",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "29.99",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "6740000010",
+          "introductoryOffer" : {
+            "internalID" : "6740000011",
+            "numberOfPeriods" : 1,
+            "paymentMode" : "free",
+            "subscriptionPeriod" : "P1W"
+          },
+          "localizations" : [
+            {
+              "description" : "Unlimited photo searches, shared lists and multi-store trips, billed yearly.",
+              "displayName" : "Aisle+ Yearly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.aisle.plus.yearly",
+          "recurringSubscriptionPeriod" : "P1Y",
+          "referenceName" : "Aisle+ Yearly",
+          "subscriptionGroupID" : "21500001",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [
+
+          ]
+        },
+        {
+          "adHocOffers" : [
+
+          ],
+          "codeOffers" : [
+
+          ],
+          "displayPrice" : "3.99",
+          "familyShareable" : false,
+          "groupNumber" : 2,
+          "internalID" : "6740000020",
+          "localizations" : [
+            {
+              "description" : "Unlimited photo searches, shared lists and multi-store trips, billed monthly.",
+              "displayName" : "Aisle+ Monthly",
+              "locale" : "en_US"
+            }
+          ],
+          "productID" : "com.aisle.plus.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Aisle+ Monthly",
+          "subscriptionGroupID" : "21500001",
+          "type" : "RecurringSubscription",
+          "winbackOffers" : [
+
+          ]
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 4,
+    "minor" : 0
+  }
+}

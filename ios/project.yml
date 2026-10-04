@@ -15,7 +15,12 @@ targets:
   Aisle:
     type: application
     platform: iOS
-    sources: [Aisle]
+    sources:
+      - path: Aisle
+        excludes: [Aisle.storekit]
+      # Local StoreKit testing only; referenced by the scheme, never shipped in the app.
+      - path: Aisle/Aisle.storekit
+        buildPhase: none
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.aisle.Aisle
@@ -59,6 +64,9 @@ schemes:
       targets:
         Aisle: all
         AisleTests: [test]
+    run:
+      # Aisle+ subscriptions without App Store Connect (Xcode-launched runs only).
+      storeKitConfiguration: Aisle/Aisle.storekit
     test:
       targets: [AisleTests]
       gatherCoverageData: false
