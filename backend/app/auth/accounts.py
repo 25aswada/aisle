@@ -3,6 +3,10 @@
 A user can have several identities (Apple, Google, phone, email). Signing in with a
 new identity whose *verified* email matches an existing user adds it to that user,
 so "Continue with Google" after signing up by email code lands in the same account.
+
+Daily limits are per account, so deleting an account must not reset them: its current
+counts are kept under a hash of each way it signed in, and a new account made with any
+of those picks them back up. Each network can only make so many accounts a day.
 """
 from __future__ import annotations
 
@@ -11,9 +15,19 @@ import secrets
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import delete, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from ..models import AuthSession, CodeRequest, EmailCode, PlusEntitlement, UsageCounter, User, UserIdentity
+from ..config import get_settings
+from ..limits import bump, day_window, hour_window, request_ip
+from ..models import AuthSession, EmailCode, PlusEntitlement, UsageCounter, UsedSignInNonce, User, UserIdentity
+
+# A session nobody has used for this long is over; the app asks to sign in again.
+SESSION_IDLE_LIMIT = timedelta(days=90)
+
+
+class TooManyNewAccounts(Exception):
+    """This network has made its accounts for today."""
 
 
 def sign_in(
@@ -34,11 +48,13 @@ def sign_in(
     user = db.scalar(select(User).where(User.email == verified_email)) if verified_email else None
     is_new = user is None
     if user is None:
+        _spend_new_account_budget(db)
         user = User(
             first_name=(given_name or "").strip()[:40], email=verified_email, phone=phone,
         )
         db.add(user)
         db.flush()
+        _pick_up_usage(db, user, _usage_keys([(provider, subject)], verified_email, phone))
     else:
         if phone and not user.phone:
             user.phone = phone
@@ -93,10 +109,83 @@ def user_for_token(db: Session, token: str) -> tuple[User, AuthSession] | None:
         return None
     now = datetime.now(timezone.utc)
     last = session.last_used_at
-    if last is None or (last if last.tzinfo else last.replace(tzinfo=timezone.utc)) < now - timedelta(hours=1):
+    last = (last if last.tzinfo else last.replace(tzinfo=timezone.utc)) if last else None
+    if last is not None and last < now - SESSION_IDLE_LIMIT:
+        session.revoked_at = now
+        db.commit()
+        return None
+    if last is None or last < now - timedelta(hours=1):
         session.last_used_at = now  # At most hourly, not a write on every request.
         db.commit()
     return user, session
+
+
+def first_use_of_nonce(db: Session, provider: str, nonce: str) -> bool:
+    """Records an Apple or Google sign-in's nonce; False if it was used before, so the
+    same ID token can't sign in twice. Atomic: parallel replays can't both pass."""
+    db.add(UsedSignInNonce(nonce_hash=hashlib.sha256(f"{provider}:{nonce}".encode()).hexdigest()))
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        return False
+    return True
+
+
+def has_account(db: Session, channel: str, target: str) -> bool:
+    """Whether this phone number or email already signs in to an account."""
+    provider = "phone" if channel == "sms" else "email"
+    if db.scalar(select(UserIdentity.id).where(
+            UserIdentity.provider == provider, UserIdentity.subject == target).limit(1)) is not None:
+        return True
+    column = User.phone if channel == "sms" else User.email
+    return db.scalar(select(User.id).where(column == target).limit(1)) is not None
+
+
+def _spend_new_account_budget(db: Session) -> None:
+    ip = request_ip.get()
+    if ip is None:
+        return  # Scripts and tests outside a request aren't limited.
+    if bump(db, f"ip:{ip}", "new_accounts", day_window()) > get_settings().aisle_new_accounts_per_ip_per_day:
+        raise TooManyNewAccounts(ip)
+
+
+def _usage_keys(identities, email: str | None, phone: str | None) -> set[str]:
+    """Where a deleted account's counts wait: a hash of each way it signed in."""
+    ways = {f"{provider}:{subject}" for provider, subject in identities}
+    ways |= {f"email:{email}"} if email else set()
+    ways |= {f"phone:{phone}"} if phone else set()
+    return {"gone:" + hashlib.sha256(way.encode()).hexdigest() for way in ways}
+
+
+def _current_windows() -> list[str]:
+    # Today's daily counts and this hour's fair-use counts; older ones no longer limit.
+    return [day_window(), hour_window()]
+
+
+def _pick_up_usage(db: Session, user: User, keys: set[str]) -> None:
+    """A new account made with a deleted account's sign-in starts where that one left off."""
+    best: dict[tuple[str, str], int] = {}
+    for counter in db.scalars(select(UsageCounter).where(
+            UsageCounter.subject.in_(keys), UsageCounter.day.in_(_current_windows()))):
+        key = (counter.feature, counter.day)
+        best[key] = max(best.get(key, 0), counter.count)
+    for (feature, day), count in best.items():
+        db.add(UsageCounter(subject=f"user:{user.id}", feature=feature, day=day, count=count))
+
+
+def _set_aside_usage(db: Session, user: User) -> None:
+    keys = _usage_keys([(i.provider, i.subject) for i in user.identities], user.email, user.phone)
+    counters = db.scalars(select(UsageCounter).where(
+        UsageCounter.subject == f"user:{user.id}", UsageCounter.day.in_(_current_windows()))).all()
+    for key in keys:
+        for counter in counters:
+            kept = db.scalar(select(UsageCounter).where(
+                UsageCounter.subject == key, UsageCounter.feature == counter.feature, UsageCounter.day == counter.day))
+            if kept is None:
+                db.add(UsageCounter(subject=key, feature=counter.feature, day=counter.day, count=counter.count))
+            else:
+                kept.count = max(kept.count, counter.count)
 
 
 def revoke(db: Session, session: AuthSession) -> None:
@@ -105,20 +194,21 @@ def revoke(db: Session, session: AuthSession) -> None:
 
 
 def delete_user(db: Session, user: User) -> None:
-    """Deletes the account, its identities and sessions, its link to Aisle+ and its
-    free-tier counts, so nothing carries over to a new account (SQLite can reuse the
-    id), and the sign-in code records for its phone number and emails. Searches and
-    reports stay anonymous. Apple keeps billing a subscription
-    until it's canceled in Settings; "Restore purchases" can move it to a new account."""
+    """Deletes the account, its identities and sessions, its link to Aisle+, and the
+    emailed codes for its addresses. Today's limit counts move to a hash of each way it
+    signed in (kept about a week, like all counts), so signing up again doesn't reset
+    them; nothing else carries over (SQLite can reuse the id). Sign-in code records only
+    hold hashes and go after two days. Searches and reports stay anonymous. Apple keeps
+    billing a subscription until it's canceled in Settings; "Restore purchases" can move
+    it to a new account."""
     db.execute(update(AuthSession).where(AuthSession.user_id == user.id)
                .values(revoked_at=datetime.now(timezone.utc)))
     db.execute(delete(PlusEntitlement).where(PlusEntitlement.user_id == user.id))
+    _set_aside_usage(db, user)
     db.execute(delete(UsageCounter).where(UsageCounter.subject == f"user:{user.id}"))
-    # Sign-in code records hold the phone number or email; they go too.
-    contacts = {c for c in (user.email, user.phone, *(i.email for i in user.identities),
-                            *(i.subject for i in user.identities if i.provider in ("phone", "email"))) if c}
-    if contacts:
-        db.execute(delete(CodeRequest).where(CodeRequest.target.in_(contacts)))
-        db.execute(delete(EmailCode).where(EmailCode.email.in_(contacts)))
+    emails = {e for e in (user.email, *(i.email for i in user.identities),
+                          *(i.subject for i in user.identities if i.provider == "email")) if e}
+    if emails:
+        db.execute(delete(EmailCode).where(EmailCode.email.in_(emails)))
     db.delete(user)
     db.commit()

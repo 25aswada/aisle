@@ -16,12 +16,14 @@ from sqlalchemy.orm import Session
 
 from backend.app.auth import identity as identity_module
 from backend.app.auth.codes import (
-    CodeProblem, ResendEmailSender, TwilioPhoneVerifier, normalize_email, normalize_phone,
+    CodeProblem, ResendEmailSender, TwilioPhoneVerifier, canonical_email, check_sms_country, normalize_email,
+    normalize_phone, target_key,
 )
 from backend.app.auth.identity import InvalidToken, JWKSIdentityVerifier, ProviderIdentity
 from backend.app.database import get_db
 from backend.app.main import app
-from backend.app.models import CodeRequest
+from backend.app.config import get_settings
+from backend.app.models import AuthSession, CodeRequest
 from backend.app.routers.auth import get_email_sender, get_identity_verifier, get_phone_verifier
 
 NONCE = "raw-nonce-1234"
@@ -83,6 +85,7 @@ def api(engine, fakes):
     app.dependency_overrides[get_email_sender] = lambda: emails
     app.dependency_overrides[get_identity_verifier] = lambda: identities
     with TestClient(app) as client:
+        client.app_engine = engine
         yield client
     app.dependency_overrides.clear()
 
@@ -131,14 +134,64 @@ def test_phone_codes_are_rate_limited(api, engine):
     # Five an hour per number, even spaced out past the 30-second cooldown.
     with Session(engine) as db:
         old = datetime.now(timezone.utc) - timedelta(minutes=10)
-        db.add_all([CodeRequest(channel="sms", target="+12155550199", device_id="d", created_at=old)
-                    for _ in range(5)])
+        db.add_all([CodeRequest(channel="sms", target=target_key("sms", "+12155550199"), device_id="d",
+                                created_at=old) for _ in range(5)])
         db.commit()
     assert api.post("/auth/phone/start", json={"phone": "2155550199"}).status_code == 429
 
 
 def test_bad_phone_numbers_are_rejected(api):
     assert api.post("/auth/phone/start", json={"phone": "555-0123"}).status_code == 400
+
+
+def test_code_records_keep_only_a_hash(api, engine):
+    api.post("/auth/phone/start", json={"phone": "2155550123"}, headers=DEVICE)
+    api.post("/auth/email/start", json={"email": "sam@example.com"}, headers=DEVICE)
+    with Session(engine) as db:
+        targets = {r.target for r in db.query(CodeRequest)}
+    assert targets == {target_key("sms", "+12155550123"), target_key("email", "sam@example.com")}
+    assert not any("2155550123" in t or "example" in t for t in targets)
+
+
+def test_texts_only_go_to_the_us_and_canada():
+    for ok in ["+12155550123", "+14165550123", "+17875550123"]:  # Philadelphia, Toronto, Puerto Rico
+        check_sms_country(ok, ("1",))
+    # +1 also covers the Caribbean and Bermuda (Jamaica, the Dominican Republic) and
+    # premium-rate numbers, which SMS-pumping fraud loves.
+    for bad in ["+18765550123", "+18095550123", "+14415550123", "+19005550123", "+447700900123"]:
+        with pytest.raises(CodeProblem):
+            check_sms_country(bad, ("1",))
+    check_sms_country("+18765550123", ("1", "1876"))  # Unless listed outright.
+    check_sms_country("+447700900123", ("1", "44"))
+
+
+def test_one_mailbox_shares_its_code_limits(api):
+    assert canonical_email("sam.smith+aisle@gmail.com") == "samsmith@gmail.com"
+    assert canonical_email("sam+x@googlemail.com") == "sam@gmail.com"
+    assert canonical_email("sam.smith+x@example.com") == "sam.smith@example.com"
+    assert api.post("/auth/email/start", json={"email": "sam.smith@gmail.com"}).status_code == 200
+    # Another spelling of the same Gmail inbox waits out the same cooldown.
+    assert api.post("/auth/email/start", json={"email": "samsmith+2@gmail.com"}).status_code == 429
+
+
+def test_past_the_overall_cap_only_existing_accounts_get_codes(api, monkeypatch):
+    token = phone_sign_in(api).json()["token"]
+    monkeypatch.setattr(get_settings(), "aisle_codes_per_hour", 1)
+    stranger = api.post("/auth/phone/start", json={"phone": "2155550177"})
+    assert stranger.status_code == 429 and "a lot of codes" in stranger.json()["detail"]
+    # Signed out and back in later, the number already on an account still gets its code.
+    api.post("/auth/signout", headers=bearer(token))
+    with Session(api.app_engine) as db:
+        db.query(CodeRequest).update({CodeRequest.created_at: datetime.now(timezone.utc) - timedelta(minutes=5)})
+        db.commit()
+    assert api.post("/auth/phone/start", json={"phone": "2155550123"}).status_code == 200
+
+
+def test_deleting_the_account_doesnt_reset_code_limits(api):
+    token = phone_sign_in(api).json()["token"]
+    assert api.delete("/me", headers=bearer(token)).status_code == 204
+    # The code sent moments ago still counts: no new one yet.
+    assert api.post("/auth/phone/start", json={"phone": "2155550123"}, headers=DEVICE).status_code == 429
 
 
 def test_normalize_phone():
@@ -211,7 +264,48 @@ def test_apple_first_sign_in_keeps_the_name_the_app_sent(api):
     assert body["is_new"] is True
     assert body["user"]["first_name"] == "Sam"
     assert body["user"]["providers"] == ["apple"]
-    assert api.post("/auth/apple", json={"identity_token": "x" * 40, "nonce": NONCE}).json()["is_new"] is False
+    again = api.post("/auth/apple", json={"identity_token": "y" * 40, "nonce": NONCE + "-2"}).json()
+    assert again["is_new"] is False
+
+
+def test_an_id_token_signs_in_once(api):
+    first = api.post("/auth/apple", json={"identity_token": "x" * 40, "nonce": NONCE})
+    assert first.status_code == 200
+    # Replaying the same token (its nonce) is refused, even after deleting the account.
+    api.delete("/me", headers=bearer(first.json()["token"]))
+    replayed = api.post("/auth/apple", json={"identity_token": "x" * 40, "nonce": NONCE})
+    assert replayed.status_code == 401
+    assert api.post("/auth/google", json={"id_token": "x" * 40, "nonce": NONCE}).status_code == 200
+    assert api.post("/auth/google", json={"id_token": "x" * 40, "nonce": NONCE}).status_code == 401
+
+
+def test_a_network_can_only_make_so_many_accounts_a_day(api, monkeypatch):
+    monkeypatch.setattr(get_settings(), "aisle_new_accounts_per_ip_per_day", 2)
+    for n in range(2):
+        assert phone_sign_in(api, f"215555010{n}").json()["is_new"] is True
+    blocked = phone_sign_in(api, "2155550109")
+    assert blocked.status_code == 429 and "new accounts" in blocked.json()["detail"]
+    # Signing in to an account that already exists still works.
+    with Session(api.app_engine) as db:
+        db.query(CodeRequest).delete()
+        db.commit()
+    assert phone_sign_in(api, "2155550100").json()["is_new"] is False
+
+
+def test_sign_in_attempts_are_limited_per_network(api, monkeypatch):
+    monkeypatch.setattr(get_settings(), "aisle_sign_ins_per_hour", 3)
+    statuses = [api.post("/auth/email/verify", json={"email": "sam@example.com", "code": "123456"}).status_code
+                for _ in range(4)]
+    assert statuses == [400, 400, 400, 429]
+
+
+def test_sessions_end_after_90_days_unused(api, engine):
+    token = phone_sign_in(api).json()["token"]
+    assert api.get("/me", headers=bearer(token)).status_code == 200
+    with Session(engine) as db:
+        db.query(AuthSession).update({AuthSession.last_used_at: datetime.now(timezone.utc) - timedelta(days=91)})
+        db.commit()
+    assert api.get("/me", headers=bearer(token)).status_code == 401
 
 
 def test_rejected_tokens_dont_sign_in(api):

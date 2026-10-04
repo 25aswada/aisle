@@ -10,6 +10,8 @@ enum APIError: Error, Equatable, LocalizedError {
     case timeout
     /// A free-tier limit or an Aisle+ feature (HTTP 402). `message` says why, for the upgrade sheet.
     case plusRequired(feature: String, message: String)
+    /// The server said no and why (a 4xx with a message), e.g. a fair-use or rate limit.
+    case refused(status: Int, message: String)
 
     var errorDescription: String? {
         switch self {
@@ -22,6 +24,7 @@ enum APIError: Error, Equatable, LocalizedError {
         case .offline: return "You're offline. Check your connection and try again."
         case .timeout: return "The request took too long. Try again."
         case .plusRequired(_, let message): return message
+        case .refused(_, let message): return message
         }
     }
 
@@ -36,6 +39,7 @@ enum APIError: Error, Equatable, LocalizedError {
         case .offline: return "offline"
         case .timeout: return "timeout"
         case .plusRequired: return "plus_required"
+        case .refused(let status, _): return "http_\(status)"
         }
     }
 }
@@ -254,7 +258,9 @@ struct APIClient: AisleAPI {
         if http.statusCode == 402 {
             throw Self.plusRequired(from: data)
         }
-        guard (200..<300).contains(http.statusCode) else { throw APIError.httpStatus(http.statusCode) }
+        guard (200..<300).contains(http.statusCode) else {
+            throw Self.refused(status: http.statusCode, from: data) ?? APIError.httpStatus(http.statusCode)
+        }
 
         do {
             return try JSONDecoder().decode(T.self, from: data)
@@ -312,6 +318,15 @@ extension APIClient {
             message: detail?.message ?? "That's part of Aisle+."
         )
     }
+
+    /// A 4xx whose body says why: {"detail": "..."}. Nil for 401 and 404, which callers
+    /// handle themselves, and for server errors and bodies without a message.
+    static func refused(status: Int, from data: Data) -> APIError? {
+        guard (400..<500).contains(status), status != 401, status != 404 else { return nil }
+        struct Body: Decodable { let detail: String }
+        guard let message = (try? JSONDecoder().decode(Body.self, from: data))?.detail, !message.isEmpty else { return nil }
+        return .refused(status: status, message: message)
+    }
 }
 
 // MARK: - Shared lists
@@ -358,7 +373,7 @@ extension APIClient {
         case 401: throw SharedListError.signedOut
         case 402: throw Self.plusRequired(from: data)
         case 404: throw SharedListError.gone
-        default: throw APIError.httpStatus(http.statusCode)
+        default: throw Self.refused(status: http.statusCode, from: data) ?? APIError.httpStatus(http.statusCode)
         }
     }
 }

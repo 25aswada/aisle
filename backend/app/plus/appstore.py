@@ -41,6 +41,8 @@ class VerifiedTransaction:
     product_id: str
     expires_at: datetime | None
     revoked_at: datetime | None
+    # When this transaction (a purchase or a renewal) happened.
+    purchased_at: datetime | None
     environment: str  # Production, Sandbox or Xcode
     # The account the app bought it for (StoreKit's appAccountToken), lowercase; None if unset.
     app_account_token: str | None = None
@@ -101,6 +103,7 @@ def verify_transaction(
         product_id=payload["productId"],
         expires_at=_moment(payload.get("expiresDate")),
         revoked_at=_moment(payload.get("revocationDate")),
+        purchased_at=_moment(payload.get("purchaseDate")),
         environment=environment,
         app_account_token=(payload.get("appAccountToken") or "").lower() or None,
     )

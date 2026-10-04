@@ -1,21 +1,24 @@
 """Shared family lists. Lists normally live only on the phone; sharing one moves it here
 so everyone on it sees the same items.
 
-Sharing needs Aisle+ (the owner's); joining with an invite code is free. Changes are
-"upsert this item" or "delete this item": the latest write to an item wins, and every
-change bumps the list's version so phones can tell when to fetch it again.
+Sharing needs Aisle+ (the owner's); joining with an invite code is free, while the
+owner still has Aisle+. Invite codes are long enough, and joining limited enough, that
+they can't be guessed. Changes are "upsert this item" or "delete this item": the latest
+write to an item wins, and every change bumps the list's version so phones can tell
+when to fetch it again.
 """
 import secrets
 from datetime import datetime, timezone
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..limits import client_ip, rate_limit
 from ..models import SharedList, SharedListItem, SharedListMember, User
-from ..plus.access import require_plus
+from ..plus.access import Caller, is_plus, require_plus
 from ..schemas import (
     JoinSharedList, SharedItemIn, SharedItemOut, SharedListChanges, SharedListCreate, SharedListOut,
     SharedListRename, SharedListSummary, SharedMemberOut,
@@ -26,12 +29,18 @@ router = APIRouter()
 Database = Annotated[Session, Depends(get_db)]
 
 MAX_ITEMS = 500
+MAX_MEMBERS = 20
 CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no 0/O or 1/I mix-ups
+# 32^8 codes: guessing one at the join limits below would take millions of years.
+CODE_LENGTH = 8
+# Tries to join a list (right code or not), per account and per network.
+JOINS_PER_HOUR = 20
+JOINS_PER_IP_PER_HOUR = 60
 
 
 def new_code(db: Session) -> str:
     while True:
-        code = "".join(secrets.choice(CODE_ALPHABET) for _ in range(6))
+        code = "".join(secrets.choice(CODE_ALPHABET) for _ in range(CODE_LENGTH))
         if db.scalar(select(SharedList).where(SharedList.invite_code == code)) is None:
             return code
 
@@ -116,12 +125,20 @@ def share_list(body: SharedListCreate, db: Database, session: SignedIn, caller: 
 
 
 @router.post("/lists/join", response_model=SharedListOut)
-def join_list(body: JoinSharedList, db: Database, session: SignedIn):
+def join_list(body: JoinSharedList, db: Database, session: SignedIn, request: Request):
     user = session[0]
+    slow_down = "That's a lot of tries. Wait a little and check the code."
+    rate_limit(db, f"user:{user.id}", "join", JOINS_PER_HOUR, slow_down)
+    rate_limit(db, f"ip:{client_ip(request)}", "join", JOINS_PER_IP_PER_HOUR, slow_down)
     shared = db.scalar(select(SharedList).where(SharedList.invite_code == normalize_code(body.code)))
     if shared is None:
         raise HTTPException(status_code=404, detail="That code didn't match a list. Check it and try again.")
     if not any(m.user_id == user.id for m in shared.members):
+        if len(shared.members) >= MAX_MEMBERS:
+            raise HTTPException(status_code=409, detail=f"That list already has {MAX_MEMBERS} people on it.")
+        owner = db.get(User, shared.owner_id)
+        if owner is None or not is_plus(db, Caller(user=owner, device_id=None, ip=None)):
+            raise HTTPException(status_code=403, detail="This list's owner needs Aisle+ to add people. Ask them to renew it.")
         shared.members.append(SharedListMember(user_id=user.id))
         touched(shared, datetime.now(timezone.utc))
         db.commit()

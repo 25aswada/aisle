@@ -1,5 +1,6 @@
 import base64
 import binascii
+import re
 from datetime import datetime
 from typing import Literal
 
@@ -173,6 +174,9 @@ class SearchResponse(BaseModel):
     explanation: str | None = None
 
 
+AISLE_LABEL = re.compile(r"[A-Za-z0-9 #&'./-]{1,24}")
+
+
 class FeedbackRequest(BaseModel):
     store_id: int
     item: str = Field(min_length=1, max_length=200)
@@ -196,6 +200,13 @@ class FeedbackRequest(BaseModel):
     def blank_to_none(cls, value: str | None) -> str | None:
         value = " ".join((value or "").split())
         return value or None
+
+    @field_validator("aisle")
+    @classmethod
+    def aisle_like(cls, value: str | None) -> str | None:
+        """Aisle text is shown to other shoppers (and given to the AI) once reports agree,
+        so only a short aisle or sign label is kept ("Aisle 7", "12B", "Frozen 4")."""
+        return value if value and AISLE_LABEL.fullmatch(value) else None
 
 
 class FeedbackResponse(BaseModel):
@@ -416,7 +427,7 @@ class UserOut(BaseModel):
 
 
 class AuthOut(BaseModel):
-    # Send as "Authorization: Bearer <token>". It doesn't expire; signing out revokes it.
+    # Send as "Authorization: Bearer <token>". It ends after 90 days unused, or on sign out.
     token: str
     user: UserOut
     # True when this sign-in created the account, so the app asks for a name.
@@ -462,6 +473,8 @@ class PlusStatus(BaseModel):
     # Today's use of the free tier's limited features (not counted for Aisle+).
     photo_search: UsageOut
     follow_up: UsageOut
+    # Searches answered with the AI's help; past the limit, searches use Aisle's own answers.
+    ai_search: UsageOut
 
 
 # --- Shared lists ---

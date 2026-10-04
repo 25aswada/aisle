@@ -131,8 +131,9 @@ against the pinned Apple root (`backend/app/plus/appstore.py`) and only then lif
 
 | Feature | Free | Aisle+ | Enforced |
 | --- | --- | --- | --- |
-| Photo searches (`/identify`, `/lists/scan`, photo `/chat`) | 5 a day | Unlimited | Server, 402 `photo_search` |
-| Follow-up questions (`/chat`) | 10 a day | Unlimited | Server, 402 `follow_up` |
+| Photo searches (`/identify`, `/lists/scan`, photo `/chat`) | 3 a day | Unlimited (fair use: 50 a day) | Server, 402 `photo_search` |
+| Follow-up questions (`/chat`) | 5 a day | Unlimited (fair use: 100 a day) | Server, 402 `follow_up` |
+| AI answers on searches and routes (`/search`, `/route`) | 20 a day, then Aisle's own answers | Unlimited (fair use: 300 a day) | Server |
 | Lists | 1 | Unlimited | App |
 | Shared family lists (`/lists`) | Join only | Share | Server, 402 `shared_lists` |
 | Multi-store trips (`/route/multi`) | — | 2–4 stores | Server, 402 `multi_store` |

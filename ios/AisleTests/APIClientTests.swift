@@ -44,6 +44,36 @@ final class APIClientTests: XCTestCase {
         }
     }
 
+    func testLimitsShowTheServersMessage() async {
+        StubURLProtocol.respond(status: 429, json: #"{"detail":"That's a lot for one day, even with Aisle+. It resets tomorrow."}"#)
+        do {
+            _ = try await client.health()
+            XCTFail("Expected an error")
+        } catch {
+            let expected = APIError.refused(status: 429, message: "That's a lot for one day, even with Aisle+. It resets tomorrow.")
+            XCTAssertEqual(error as? APIError, expected)
+            XCTAssertEqual(expected.errorDescription, "That's a lot for one day, even with Aisle+. It resets tomorrow.")
+            XCTAssertEqual(expected.kind, "http_429")
+        }
+    }
+
+    func testNotFoundAndValidationErrorsKeepTheirStatus() async {
+        StubURLProtocol.respond(status: 404, json: #"{"detail":"Store not found"}"#)
+        do {
+            _ = try await client.health()
+            XCTFail("Expected an error")
+        } catch {
+            XCTAssertEqual(error as? APIError, .httpStatus(404))
+        }
+        StubURLProtocol.respond(status: 422, json: #"{"detail":[{"msg":"bad"}]}"#)
+        do {
+            _ = try await client.health()
+            XCTFail("Expected an error")
+        } catch {
+            XCTAssertEqual(error as? APIError, .httpStatus(422))
+        }
+    }
+
     func testNearbyBuildsQuery() async throws {
         StubURLProtocol.respond(json: #"{"stores":[]}"#)
         _ = try await client.nearbyStores(latitude: 39.95, longitude: -75.16, limit: 5)

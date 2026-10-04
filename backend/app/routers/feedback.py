@@ -10,6 +10,7 @@ from ..database import get_db
 from ..limits import rate_limit
 from ..models import LocationObservation, SearchEvent, StoreZone
 from ..observations import counts_by_zone, observations_for
+from ..plus.access import require_signed_in
 from ..resolver import find_concept
 from ..schemas import (
     FeedbackRequest, FeedbackResponse, LayoutPoint, LayoutZoneOut, ReportCountsOut, StoreLayoutOut, StoreZoneOut,
@@ -58,6 +59,9 @@ def store_layout(store_id: int, db: Database, response: Response):
 
 @router.post("/feedback", response_model=FeedbackResponse, status_code=201)
 def submit_feedback(body: FeedbackRequest, db: Database, caller: CallerDep):
+    """A shopper's report. Reports decide what everyone is told, so each comes from an
+    account, and one account counts once however many times it reports."""
+    require_signed_in(caller, "reports")
     rate_limit(db, caller.subject, "feedback", get_settings().aisle_writes_per_hour)
     store = get_store(db, body.store_id)
     if store is None:
@@ -78,8 +82,8 @@ def submit_feedback(body: FeedbackRequest, db: Database, caller: CallerDep):
         zone_id=body.zone_id,
         aisle_text=body.aisle if body.verdict == "found" else None,
         note=body.note,
-        # Who reported it, for counting agreement: the account, or the network when signed
-        # out. Not the device id, which the client can make up.
+        # Who reported it, for counting agreement: the account. Not the device id, which
+        # the client can make up.
         device_id=caller.subject[:64],
     )
     db.add(observation)

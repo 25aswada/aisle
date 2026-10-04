@@ -7,7 +7,7 @@ from ..ai.providers import LocationModel, get_location_model
 from ..config import get_settings
 from ..database import get_db
 from ..limits import rate_limit
-from ..plus.access import require_plus
+from ..plus.access import ai_search_allowance, require_plus
 from ..routing import Route, plan_multi_store, plan_route
 from ..schemas import (
     MultiRouteRequest, MultiRouteResponse, RouteLeg, RouteRequest, RouteResponse, RouteStop, RouteStopItem,
@@ -21,13 +21,41 @@ Database = Annotated[Session, Depends(get_db)]
 Model = Annotated[LocationModel | None, Depends(get_location_model)]
 
 
+class CountingModel:
+    """Passes guesses through, counting them, so a trip that never needed the AI isn't
+    charged one of the day's AI answers."""
+
+    def __init__(self, model: LocationModel):
+        self.name = model.name
+        self._model = model
+        self.calls = 0
+
+    def locate(self, intent, retailer_name, layout):
+        self.calls += 1
+        return self._model.locate(intent, retailer_name, layout)
+
+
+def metered(db: Session, caller, model: LocationModel | None):
+    """(model, allowance): a planned trip takes one of the day's AI answers, or runs on
+    Aisle's own data when there are none left."""
+    allowance = ai_search_allowance(db, caller) if model else None
+    return (CountingModel(model), allowance) if allowance else (None, None)
+
+
+def settle(model: CountingModel | None, allowance) -> None:
+    if allowance and model and model.calls == 0:
+        allowance.refund()
+
+
 @router.post("/route", response_model=RouteResponse)
 def route(body: RouteRequest, db: Database, model: Model, caller: CallerDep):
     rate_limit(db, caller.subject, "route", get_settings().aisle_routes_per_hour)
     store = get_store(db, body.store_id)
     if store is None:
         raise HTTPException(status_code=404, detail="Store not found")
+    model, allowance = metered(db, caller, model)
     planned = plan_route(db, store, [(i.id, i.text) for i in body.items], model)
+    settle(model, allowance)
     return RouteResponse(store_id=store.id, **route_fields(planned))
 
 
@@ -42,7 +70,9 @@ def multi_route(body: MultiRouteRequest, db: Database, model: Model, caller: Cal
     stores = [get_store(db, store_id) for store_id in body.store_ids]
     if any(store is None for store in stores):
         raise HTTPException(status_code=404, detail="Store not found")
+    model, allowance = metered(db, caller, model)
     legs, nowhere = plan_multi_store(db, stores, [(i.id, i.text) for i in body.items], model)
+    settle(model, allowance)
     return MultiRouteResponse(
         legs=[
             RouteLeg(

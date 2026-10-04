@@ -1,14 +1,17 @@
-"""Who is asking, whether they have Aisle+, and the free tier's daily limits.
+"""Who is asking, whether they have Aisle+, and how much AI each person gets a day.
 
 Aisle+ comes from a verified App Store subscription that belongs to an account: the
 one it was bought for, or one it was restored to. Signed out, nobody has Aisle+, and
-deleting the account ends it. Free shoppers get a few photo searches and
-follow-ups a day, counted per account when signed in (so reinstalling doesn't reset
-them) and otherwise per network. A use is counted before the AI runs, in one atomic
-step, and handed back if nothing came of it.
+deleting the account ends it. Free shoppers get a few photo searches, follow-ups and
+AI-answered searches a day, counted per account when signed in (so reinstalling
+doesn't reset them; see auth.accounts for deleting) and otherwise per network. Aisle+
+is unlimited within fair use: daily ceilings no real shopper reaches, counted apart
+from the free tier. A use is counted before the AI runs, in one atomic step, and
+handed back if nothing came of it. Everyone's AI use together has a daily budget too.
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
@@ -20,14 +23,24 @@ from ..config import get_settings
 from ..limits import bump, day_window
 from ..models import PlusEntitlement, UsageCounter, User
 
+log = logging.getLogger(__name__)
+
 PHOTO_SEARCH = "photo_search"
 FOLLOW_UP = "follow_up"
+# A text search answered with the AI's help (its guess, its "where to find it" answer).
+AI_SEARCH = "ai_search"
 PLUS_PRODUCTS = {"app.shopaisle.plus.yearly", "app.shopaisle.plus.monthly"}
 
 UPGRADE_MESSAGES = {
     PHOTO_SEARCH: "You've used today's {limit} free photo searches. Aisle+ has unlimited.",
     FOLLOW_UP: "You've used today's {limit} free follow-ups. Aisle+ has unlimited.",
+    AI_SEARCH: "You've used today's {limit} free AI answers. Aisle+ has unlimited.",
 }
+FAIR_USE = "That's a lot for one day, even with Aisle+. It resets tomorrow."
+AI_PAUSED = "Aisle's AI is taking a break for today. Try again tomorrow."
+# Everyone's AI use today, for the daily budget.
+EVERYONE = "everyone"
+AI_REQUESTS = "ai_requests"
 
 
 @dataclass(frozen=True)
@@ -66,9 +79,15 @@ def is_plus(db: Session, caller: Caller) -> bool:
     return active_entitlement(db, caller) is not None
 
 
-def limit_for(feature: str) -> int:
-    settings = get_settings()
-    return settings.aisle_free_photo_searches if feature == PHOTO_SEARCH else settings.aisle_free_follow_ups
+def limit_for(feature: str, *, plus: bool = False, signed_in: bool = True) -> int:
+    """Uses allowed a day: the free tier's, or Aisle+'s fair-use ceiling."""
+    s = get_settings()
+    if plus:
+        return {PHOTO_SEARCH: s.aisle_plus_photo_searches, FOLLOW_UP: s.aisle_plus_follow_ups,
+                AI_SEARCH: s.aisle_plus_ai_searches}[feature]
+    if feature == AI_SEARCH:
+        return s.aisle_free_ai_searches if signed_in else s.aisle_signed_out_ai_searches
+    return s.aisle_free_photo_searches if feature == PHOTO_SEARCH else s.aisle_free_follow_ups
 
 
 def today() -> str:
@@ -91,32 +110,47 @@ def plus_required(feature: str, message: str, limit: int | None = None) -> HTTPE
 
 @dataclass
 class Allowance:
-    """One use of a limited feature, already counted (unless it's Aisle+). Refund it when
-    the feature gave nothing back, so failures don't use up the day's free tries."""
+    """One use of a limited feature, already counted. Refund it when the feature gave
+    nothing back, so failures don't use up the day's tries."""
     db: Session
-    caller: Caller
-    feature: str
-    counted: bool
-
-    @property
-    def unlimited(self) -> bool:
-        return not self.counted
+    subject: str
+    counter: str  # The feature, or "plus:<feature>" for Aisle+'s fair-use count.
+    day: str
+    counted: bool = True
 
     def refund(self) -> None:
         if self.counted:
-            bump(self.db, self.caller.subject, self.feature, today(), -1)
+            bump(self.db, self.subject, self.counter, self.day, -1)
+            bump(self.db, EVERYONE, AI_REQUESTS, self.day, -1)
             self.counted = False
 
 
 def reserve_allowance(db: Session, caller: Caller, feature: str) -> Allowance:
-    """Counts one use now, or raises 402 when a free shopper is out for today."""
-    if is_plus(db, caller):
-        return Allowance(db, caller, feature, counted=False)
-    limit = limit_for(feature)
-    if bump(db, caller.subject, feature, today()) > limit:
-        bump(db, caller.subject, feature, today(), -1)
+    """Counts one use now. Raises 402 when a free shopper is out for today, 429 past
+    Aisle+'s fair use, and 503 once everyone's AI budget for the day is spent."""
+    plus = is_plus(db, caller)
+    counter, day = (f"plus:{feature}" if plus else feature), today()
+    limit = limit_for(feature, plus=plus, signed_in=caller.user is not None)
+    if bump(db, caller.subject, counter, day) > limit:
+        bump(db, caller.subject, counter, day, -1)
+        if plus:
+            raise HTTPException(status_code=429, detail=FAIR_USE)
         raise plus_required(feature, UPGRADE_MESSAGES[feature].format(limit=limit), limit)
-    return Allowance(db, caller, feature, counted=True)
+    if bump(db, EVERYONE, AI_REQUESTS, day) > get_settings().aisle_ai_requests_per_day:
+        bump(db, EVERYONE, AI_REQUESTS, day, -1)
+        bump(db, caller.subject, counter, day, -1)
+        log.warning("Today's AI budget for everyone is spent; AI features are paused")
+        raise HTTPException(status_code=503, detail=AI_PAUSED)
+    return Allowance(db, caller.subject, counter, day)
+
+
+def ai_search_allowance(db: Session, caller: Caller) -> Allowance | None:
+    """One AI-answered search, or None when the caller (or everyone) is out for today;
+    the search then runs on Aisle's own data and wording instead."""
+    try:
+        return reserve_allowance(db, caller, AI_SEARCH)
+    except HTTPException:
+        return None
 
 
 def require_signed_in(caller: Caller, what: str) -> None:

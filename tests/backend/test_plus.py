@@ -17,11 +17,11 @@ from cryptography.x509.oid import NameOID
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
-from backend.app.ai.providers import get_explainer
+from backend.app.ai.providers import get_explainer, get_location_model
 from backend.app.config import get_settings
 from backend.app.database import get_db
 from backend.app.main import app
-from backend.app.auth.accounts import create_session
+from backend.app.auth.accounts import create_session, sign_in
 from backend.app.models import PlusEntitlement, Retailer, Store, UsageCounter, User
 from backend.app.plus import appstore
 from backend.app.plus.appstore import INTERMEDIATE_OID, LEAF_OID, InvalidTransaction, verify_transaction
@@ -63,7 +63,7 @@ class FakeApple:
         payload = {
             "transactionId": "2000000001", "originalTransactionId": "1000000001", "bundleId": BUNDLE,
             "productId": YEARLY, "expiresDate": now_ms + 7 * 86_400_000, "environment": "Sandbox",
-            "signedDate": now_ms,
+            "signedDate": now_ms, "purchaseDate": now_ms,
         }
         payload.update(overrides)
         x5c = [base64.b64encode(c.public_bytes(serialization.Encoding.DER)).decode()
@@ -179,24 +179,24 @@ def identify(api, who):
 
 
 def test_free_photo_searches_stop_at_the_daily_limit(api):
-    for _ in range(5):
+    for _ in range(3):
         assert identify(api, "phone-a").json() == {"item": "milk"}
     blocked = identify(api, "phone-a")
     assert blocked.status_code == 402
     assert blocked.json()["detail"]["code"] == "plus_required"
     assert blocked.json()["detail"]["feature"] == "photo_search"
-    assert "5 free photo searches" in blocked.json()["detail"]["message"]
+    assert "3 free photo searches" in blocked.json()["detail"]["message"]
     # Another account has its own allowance; list scans share the same one.
     assert identify(api, "phone-b").status_code == 200
     assert api.post("/lists/scan", json={"image": PHOTO}, headers=shopper(api, "phone-a")).status_code == 402
 
     status = api.get("/plus/status", headers=shopper(api, "phone-a")).json()
     assert status["is_plus"] is False
-    assert status["photo_search"] == {"used": 5, "limit": 5}
+    assert status["photo_search"] == {"used": 3, "limit": 3}
 
 
 def test_limits_reset_each_day(api, engine):
-    for _ in range(5):
+    for _ in range(3):
         identify(api, "phone-a")
     with Session(engine) as db:
         for counter in db.query(UsageCounter):
@@ -208,13 +208,13 @@ def test_limits_reset_each_day(api, engine):
 def test_follow_ups_have_their_own_limit_and_photos_count_as_photo_searches(api):
     convo = [{"role": "user", "content": "milk"}, {"role": "assistant", "content": "Dairy."},
              {"role": "user", "content": "and eggs?"}]
-    for _ in range(10):
+    for _ in range(5):
         assert api.post("/chat", json={"store_id": 1, "messages": convo}, headers=shopper(api, "p")).status_code == 200
     assert api.post("/chat", json={"store_id": 1, "messages": convo}, headers=shopper(api, "p")).status_code == 402
     with_photo = convo[:2] + [{"role": "user", "content": "this?", "image": PHOTO}]
     assert api.post("/chat", json={"store_id": 1, "messages": with_photo}, headers=shopper(api, "p")).status_code == 200
     status = api.get("/plus/status", headers=shopper(api, "p")).json()
-    assert status["follow_up"]["used"] == 10 and status["photo_search"]["used"] == 1
+    assert status["follow_up"]["used"] == 5 and status["photo_search"]["used"] == 1
 
 
 def account(engine, device_id="phone-a"):
@@ -233,15 +233,15 @@ def sync(api, headers, *transactions, claim=False):
 
 def test_a_verified_subscription_lifts_the_limits(api, apple, engine):
     headers, token, _ = account(engine)
-    for _ in range(5):
+    for _ in range(3):
         api.post("/identify", json={"image": PHOTO}, headers=headers)
     synced = sync(api, headers, apple.sign(appAccountToken=token.upper()))
     assert synced.status_code == 200
     assert synced.json()["is_plus"] is True
     for _ in range(3):
         assert api.post("/identify", json={"image": PHOTO}, headers=headers).status_code == 200
-    # Unlimited use isn't counted.
-    assert api.get("/plus/status", headers=headers).json()["photo_search"]["used"] == 5
+    # Aisle+ use isn't counted against the free tier.
+    assert api.get("/plus/status", headers=headers).json()["photo_search"]["used"] == 3
 
 
 def test_aisle_plus_needs_an_account(api, apple):
@@ -277,7 +277,8 @@ def test_deleting_the_account_ends_aisle_plus_and_resets_the_free_tier(api, appl
         assert db.query(PlusEntitlement).count() == 0
         assert db.query(UsageCounter).filter_by(subject=f"user:{user_id}").count() == 0
 
-    # A new account starts on the free tier with nothing used, even with Apple still billing.
+    # Someone else's new account starts on the free tier with nothing used, even with
+    # Apple still billing.
     fresh, _, _ = account(engine)
     status = sync(api, fresh, bought).json()
     assert status["is_plus"] is False
@@ -346,3 +347,153 @@ def test_notifications_must_be_genuine_and_for_this_app(api, apple):
     assert notify(api, apple, "DID_RENEW", apple.sign(), bundle="com.other.app").status_code == 400
     forged = FakeApple()  # Signed by someone else's certificates.
     assert notify(api, forged, "REFUND", forged.sign()).status_code == 400
+
+
+def test_a_refunded_subscription_stays_refunded(api, apple, engine):
+    headers, token, _ = account(engine)
+    now_ms = int(time.time() * 1000)
+    bought = apple.sign(appAccountToken=token, expiresDate=now_ms + 365 * 86_400_000, purchaseDate=now_ms - 60_000)
+    assert sync(api, headers, bought).json()["is_plus"] is True
+    refunded = apple.sign(appAccountToken=token, expiresDate=now_ms + 365 * 86_400_000,
+                          purchaseDate=now_ms - 60_000, revocationDate=now_ms)
+    assert notify(api, apple, "REFUND", refunded).status_code == 200
+    # Sending the purchase saved from before the refund doesn't bring Aisle+ back...
+    assert sync(api, headers, bought).json()["is_plus"] is False
+    assert sync(api, headers, bought, claim=True).json()["is_plus"] is False
+    # ...but subscribing again does, even for a shorter plan.
+    again = apple.sign(appAccountToken=token, transactionId="2000000002", productId="app.shopaisle.plus.monthly",
+                       expiresDate=now_ms + 30 * 86_400_000, purchaseDate=now_ms + 1000)
+    assert sync(api, headers, again).json()["is_plus"] is True
+
+
+def test_apple_reversing_a_refund_restores_aisle_plus(api, apple, engine):
+    headers, token, _ = account(engine)
+    now_ms = int(time.time() * 1000)
+    bought = apple.sign(appAccountToken=token, purchaseDate=now_ms - 60_000)
+    sync(api, headers, bought)
+    notify(api, apple, "REFUND", apple.sign(appAccountToken=token, purchaseDate=now_ms - 60_000, revocationDate=now_ms))
+    assert api.get("/plus/status", headers=headers).json()["is_plus"] is False
+    assert notify(api, apple, "REFUND_REVERSED", bought).status_code == 200
+    assert api.get("/plus/status", headers=headers).json()["is_plus"] is True
+
+
+def signed_in_as(engine, provider, subject, email=None):
+    """Signs in the way the app would (outside a request, so no per-network account limit)."""
+    with Session(engine) as db:
+        user, _ = sign_in(db, provider, subject, email=email, email_verified=email is not None)
+        return {"Authorization": f"Bearer {create_session(db, user, 'phone-a')}"}
+
+
+def test_deleting_the_account_and_signing_up_again_doesnt_reset_the_free_tier(api, engine):
+    headers = signed_in_as(engine, "apple", "apple-sub-1", "sam@example.com")
+    for _ in range(3):
+        assert api.post("/identify", json={"image": PHOTO}, headers=headers).status_code == 200
+    assert api.delete("/me", headers=headers).status_code == 204
+    # Same Apple ID, or any other way the account signed in (here its email), picks up
+    # where it left off.
+    for provider, subject in (("apple", "apple-sub-1"), ("email", "sam@example.com")):
+        again = signed_in_as(engine, provider, subject, "sam@example.com" if provider == "email" else None)
+        assert api.get("/plus/status", headers=again).json()["photo_search"]["used"] == 3
+        assert api.post("/identify", json={"image": PHOTO}, headers=again).status_code == 402
+        api.delete("/me", headers=again)
+    # A different person starts fresh.
+    other = signed_in_as(engine, "apple", "apple-sub-2")
+    assert api.post("/identify", json={"image": PHOTO}, headers=other).status_code == 200
+
+
+class RecordingAI(FakeAI):
+    def __init__(self, explanation=None):
+        self.chats, self.explanation = [], explanation
+
+    def explain(self, facts):
+        return self.explanation
+
+    def chat(self, system, messages):
+        self.chats.append(messages)
+        return super().chat(system, messages)
+
+
+def test_photos_earlier_in_a_follow_up_go_nowhere(api, engine):
+    ai = RecordingAI()
+    app.dependency_overrides[get_explainer] = lambda: ai
+    headers, _, _ = account(engine)
+    convo = [
+        {"role": "user", "content": "this?", "image": PHOTO}, {"role": "assistant", "content": "made up"},
+        {"role": "user", "content": "", "image": PHOTO}, {"role": "assistant", "content": "made up"},
+        {"role": "user", "content": "what are these two things?"},
+    ]
+    assert api.post("/chat", json={"store_id": 1, "messages": convo}, headers=headers).status_code == 200
+    # A text follow-up, so its photos never reach the AI.
+    assert all("image" not in m for m in ai.chats[0])
+    assert [m["content"] for m in ai.chats[0]][2] == "(a photo)"
+    status = api.get("/plus/status", headers=headers).json()
+    assert status["photo_search"]["used"] == 0 and status["follow_up"]["used"] == 1
+
+
+def test_long_conversations_are_trimmed_before_the_ai(api, engine):
+    ai = RecordingAI()
+    app.dependency_overrides[get_explainer] = lambda: ai
+    headers, _, _ = account(engine)
+    convo = [{"role": "user" if i % 2 == 0 else "assistant", "content": f"{i} " + "x" * 3990} for i in range(39)]
+    assert api.post("/chat", json={"store_id": 1, "messages": convo}, headers=headers).status_code == 200
+    sent = ai.chats[0]
+    assert len(sent) == 11
+    assert [m["content"].split()[0] for m in sent] == ["0", "1", *map(str, range(30, 39))]
+    assert all(len(m["content"]) <= 2000 for m in sent)
+
+
+def search(api, headers=None):
+    return api.post("/search", json={"query": "milk", "store_id": 1}, headers=headers or {})
+
+
+def test_free_ai_answers_have_a_daily_limit_then_search_keeps_working(api, engine, monkeypatch):
+    app.dependency_overrides[get_explainer] = lambda: RecordingAI("By the eggs.")
+    app.dependency_overrides[get_location_model] = lambda: None
+    monkeypatch.setattr(get_settings(), "aisle_free_ai_searches", 2)
+    headers, _, _ = account(engine)
+    answers = [search(api, headers) for _ in range(3)]
+    assert [r.status_code for r in answers] == [200, 200, 200]
+    assert [r.json()["explanation"] for r in answers] == ["By the eggs.", "By the eggs.", None]
+    status = api.get("/plus/status", headers=headers).json()
+    assert status["ai_search"] == {"used": 2, "limit": 2}
+
+
+def test_signed_out_gets_fewer_ai_answers(api, monkeypatch):
+    app.dependency_overrides[get_explainer] = lambda: RecordingAI("By the eggs.")
+    app.dependency_overrides[get_location_model] = lambda: None
+    monkeypatch.setattr(get_settings(), "aisle_signed_out_ai_searches", 1)
+    assert [search(api).json()["explanation"] for _ in range(2)] == ["By the eggs.", None]
+
+
+def test_search_without_an_ai_answer_isnt_counted(api, engine):
+    app.dependency_overrides[get_explainer] = lambda: RecordingAI(None)
+    app.dependency_overrides[get_location_model] = lambda: None
+    headers, _, _ = account(engine)
+    search(api, headers)
+    assert api.get("/plus/status", headers=headers).json()["ai_search"]["used"] == 0
+
+
+def test_aisle_plus_has_a_fair_use_ceiling(api, apple, engine, monkeypatch):
+    monkeypatch.setattr(get_settings(), "aisle_plus_photo_searches", 2)
+    headers, token, _ = account(engine)
+    sync(api, headers, apple.sign(appAccountToken=token))
+    statuses = [api.post("/identify", json={"image": PHOTO}, headers=headers).status_code for _ in range(3)]
+    assert statuses == [200, 200, 429]
+    # Fair use is counted apart from the free tier.
+    assert api.get("/plus/status", headers=headers).json()["photo_search"]["used"] == 0
+
+
+def test_everyones_ai_has_a_daily_budget(api, engine, monkeypatch):
+    app.dependency_overrides[get_explainer] = lambda: RecordingAI("By the eggs.")
+    app.dependency_overrides[get_location_model] = lambda: None
+    monkeypatch.setattr(get_settings(), "aisle_ai_requests_per_day", 2)
+    first, _, _ = account(engine, "phone-a")
+    second, _, _ = account(engine, "phone-b")
+    assert api.post("/identify", json={"image": PHOTO}, headers=first).status_code == 200
+    assert search(api, first).json()["explanation"] == "By the eggs."
+    # Budget spent: photo search pauses for everyone, and search falls back to Aisle's own answers.
+    paused = api.post("/identify", json={"image": PHOTO}, headers=second)
+    assert paused.status_code == 503 and "AI" in paused.json()["detail"]
+    assert search(api, second).json()["explanation"] is None
+    # The refused tries didn't use up the shopper's own allowance.
+    assert api.get("/plus/status", headers=second).json()["photo_search"]["used"] == 0

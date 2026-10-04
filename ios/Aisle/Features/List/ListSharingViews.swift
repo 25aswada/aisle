@@ -106,10 +106,11 @@ struct ShareListSheet: View {
         }
     }
 
-    /// "K7Q2MX" as "K7Q 2MX", easier to read out.
+    /// "K7Q2MXRT" as "K7Q2 MXRT" (and older six-letter codes as "K7Q 2MX"), easier to read out.
     static func spaced(_ code: String) -> String {
-        guard code.count == 6 else { return code }
-        return String(code.prefix(3)) + " " + String(code.suffix(3))
+        guard code.count == 6 || code.count == 8 else { return code }
+        let half = code.count / 2
+        return String(code.prefix(half)) + " " + String(code.suffix(half))
     }
 }
 

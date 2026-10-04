@@ -429,3 +429,11 @@ final class PracticeListTests: XCTestCase {
         XCTAssertEqual(Set(ListStarter.all.map(\.id)).count, ListStarter.all.count)
     }
 }
+
+final class InviteCodeTests: XCTestCase {
+    func testCodesAreSplitInHalfToReadOut() {
+        XCTAssertEqual(ShareListSheet.spaced("K7Q2MXRT"), "K7Q2 MXRT")
+        XCTAssertEqual(ShareListSheet.spaced("K7Q2MX"), "K7Q 2MX")
+        XCTAssertEqual(ShareListSheet.spaced("ODD"), "ODD")
+    }
+}

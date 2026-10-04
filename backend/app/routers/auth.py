@@ -2,14 +2,19 @@
 
 Every sign-in returns a session token; the app sends it as "Authorization: Bearer ..."
 to /me and /auth/signout. The app requires an account; in the API, photo search,
-follow-ups and sharing need one, and everything else also works signed out.
+follow-ups, reports and sharing need one, and everything else also works signed out
+(with a smaller daily allowance of AI answers).
 """
+import hashlib
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
-from ..auth.accounts import PhoneTaken, add_phone, create_session, delete_user, revoke, sign_in, user_for_token
+from ..auth.accounts import (
+    PhoneTaken, TooManyNewAccounts, add_phone, create_session, delete_user, first_use_of_nonce, has_account, revoke,
+    sign_in, user_for_token,
+)
 from ..auth.apple_tokens import AppleTokens, AppleTokenService
 from ..auth.codes import (
     RESEND_COOLDOWN, CodeProblem, EmailSender, PhoneVerifier, ResendEmailSender, TwilioPhoneVerifier,
@@ -17,7 +22,7 @@ from ..auth.codes import (
     reserve_code_request,
 )
 from ..auth.identity import IdentityVerifier, InvalidToken, JWKSIdentityVerifier
-from ..limits import client_ip
+from ..limits import client_ip, rate_limit
 from ..plus.access import Caller
 from ..config import get_settings
 from ..database import get_db
@@ -116,7 +121,27 @@ def problem(error: CodeProblem) -> HTTPException:
 def reserve(db: Session, channel: str, target: str, device_id: str | None, request: Request) -> None:
     s = get_settings()
     reserve_code_request(db, channel, target, device_id, client_ip(request),
-                         per_hour=s.aisle_codes_per_hour, per_day=s.aisle_codes_per_day)
+                         per_hour=s.aisle_codes_per_hour, per_day=s.aisle_codes_per_day,
+                         returning=has_account(db, channel, target))
+
+
+def limit_sign_ins(db: Session, request: Request) -> None:
+    """Sign-ins and code checks per network per hour, so codes and tokens can't be tried
+    at speed."""
+    rate_limit(db, f"ip:{client_ip(request)}", "sign_in", get_settings().aisle_sign_ins_per_hour,
+               "That's a lot of sign-in attempts. Try again in a little while.")
+
+
+def account_for(db: Session, provider: str, subject: str, **details) -> tuple[User, bool]:
+    try:
+        return sign_in(db, provider, subject, **details)
+    except TooManyNewAccounts:
+        raise HTTPException(status_code=429, detail="This network has made a lot of new accounts today. Try again tomorrow.")
+
+
+def check_nonce_unused(db: Session, provider: str, nonce: str, problem_detail: str) -> None:
+    if not first_use_of_nonce(db, provider, nonce):
+        raise HTTPException(status_code=401, detail=problem_detail)
 
 
 # MARK: - SMS codes
@@ -138,9 +163,10 @@ def phone_start(body: PhoneStart, db: Database, phones: Phones, request: Request
 
 
 @router.post("/auth/phone/verify", response_model=AuthOut)
-def phone_verify(body: PhoneVerify, db: Database, phones: Phones, device_id: DeviceID = None):
+def phone_verify(body: PhoneVerify, db: Database, phones: Phones, request: Request, device_id: DeviceID = None):
     if phones is None:
         raise HTTPException(status_code=503, detail=UNAVAILABLE)
+    limit_sign_ins(db, request)
     try:
         phone = normalize_phone(body.phone)
         approved = phones.check(phone, body.code)
@@ -150,7 +176,7 @@ def phone_verify(body: PhoneVerify, db: Database, phones: Phones, device_id: Dev
         raise HTTPException(status_code=503, detail=UNAVAILABLE)
     if not approved:
         raise HTTPException(status_code=400, detail=WRONG_CODE)
-    user, is_new = sign_in(db, "phone", phone, phone=phone)
+    user, is_new = account_for(db, "phone", phone, phone=phone)
     return signed_in(db, user, is_new, device_id)
 
 
@@ -176,7 +202,8 @@ def email_start(body: EmailStart, db: Database, emails: Emails, request: Request
 
 
 @router.post("/auth/email/verify", response_model=AuthOut)
-def email_verify(body: EmailVerify, db: Database, device_id: DeviceID = None):
+def email_verify(body: EmailVerify, db: Database, request: Request, device_id: DeviceID = None):
+    limit_sign_ins(db, request)
     try:
         email = normalize_email(body.email)
         approved = check_email_code(db, email, body.code)
@@ -185,23 +212,30 @@ def email_verify(body: EmailVerify, db: Database, device_id: DeviceID = None):
     if not approved:
         raise HTTPException(status_code=400, detail=WRONG_CODE)
     # The code proved they own the address.
-    user, is_new = sign_in(db, "email", email, email=email, email_verified=True)
+    user, is_new = account_for(db, "email", email, email=email, email_verified=True)
     return signed_in(db, user, is_new, device_id)
 
 
 # MARK: - Apple and Google
 
+APPLE_FAILED = "Apple sign-in didn't go through. Try again."
+GOOGLE_FAILED = "Google sign-in didn't go through. Try again."
+
+
 @router.post("/auth/apple", response_model=AuthOut)
 def apple(body: AppleSignIn, db: Database, identities: Identities, apple_tokens: AppleTokensDep,
-          device_id: DeviceID = None):
+          request: Request, device_id: DeviceID = None):
+    limit_sign_ins(db, request)
     try:
         who = identities.apple(body.identity_token, body.nonce)
     except InvalidToken:
-        raise HTTPException(status_code=401, detail="Apple sign-in didn't go through. Try again.")
+        raise HTTPException(status_code=401, detail=APPLE_FAILED)
     except ConnectionError:
         raise HTTPException(status_code=503, detail="Couldn't reach Apple. Try again in a moment.")
-    user, is_new = sign_in(db, "apple", who.subject, email=who.email, email_verified=who.email_verified,
-                           given_name=body.first_name)
+    # The token carries the nonce's hash; each one signs in once.
+    check_nonce_unused(db, "apple", hashlib.sha256(body.nonce.encode()).hexdigest(), APPLE_FAILED)
+    user, is_new = account_for(db, "apple", who.subject, email=who.email, email_verified=who.email_verified,
+                               given_name=body.first_name)
     if apple_tokens is not None and body.authorization_code:
         # Kept so deleting the account can revoke this Apple sign-in. Best effort: a
         # failure here never stops the sign-in.
@@ -214,15 +248,17 @@ def apple(body: AppleSignIn, db: Database, identities: Identities, apple_tokens:
 
 
 @router.post("/auth/google", response_model=AuthOut)
-def google(body: GoogleSignIn, db: Database, identities: Identities, device_id: DeviceID = None):
+def google(body: GoogleSignIn, db: Database, identities: Identities, request: Request, device_id: DeviceID = None):
+    limit_sign_ins(db, request)
     try:
         who = identities.google(body.id_token, body.nonce)
     except InvalidToken:
-        raise HTTPException(status_code=401, detail="Google sign-in didn't go through. Try again.")
+        raise HTTPException(status_code=401, detail=GOOGLE_FAILED)
     except ConnectionError:
         raise HTTPException(status_code=503, detail="Couldn't reach Google. Try again in a moment.")
-    user, is_new = sign_in(db, "google", who.subject, email=who.email, email_verified=who.email_verified,
-                           given_name=who.given_name)
+    check_nonce_unused(db, "google", body.nonce, GOOGLE_FAILED)
+    user, is_new = account_for(db, "google", who.subject, email=who.email, email_verified=who.email_verified,
+                               given_name=who.given_name)
     return signed_in(db, user, is_new, device_id)
 
 
@@ -271,9 +307,10 @@ def add_phone_start(body: PhoneStart, db: Database, phones: Phones, request: Req
 
 
 @router.post("/me/phone/verify", response_model=UserOut)
-def add_phone_verify(body: PhoneVerify, db: Database, phones: Phones, session: SignedIn):
+def add_phone_verify(body: PhoneVerify, db: Database, phones: Phones, session: SignedIn, request: Request):
     if phones is None:
         raise HTTPException(status_code=503, detail="Aisle can't check codes right now. Try again later.")
+    limit_sign_ins(db, request)
     try:
         phone = normalize_phone(body.phone)
         approved = phones.check(phone, body.code)

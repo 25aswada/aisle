@@ -91,6 +91,7 @@ def seeded_client(seeded_engine):
     # Tests never call a real AI provider unless they install a fake one.
     app.dependency_overrides[get_location_model] = lambda: None
     with TestClient(app) as client:
+        client.engine = seeded_engine
         yield client
     app.dependency_overrides.clear()
 

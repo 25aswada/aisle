@@ -12,7 +12,9 @@ from sqlalchemy.orm import Session
 from ..config import get_settings
 from ..database import get_db
 from ..models import PlusEntitlement, User
-from ..plus.access import FOLLOW_UP, PHOTO_SEARCH, PLUS_PRODUCTS, Caller, active_entitlement, limit_for, used_today
+from ..plus.access import (
+    AI_SEARCH, FOLLOW_UP, PHOTO_SEARCH, PLUS_PRODUCTS, Caller, active_entitlement, limit_for, used_today,
+)
 from ..plus.appstore import InvalidTransaction, VerifiedTransaction, verify_notification, verify_transaction
 from ..schemas import AppStoreNotification, PlusStatus, PlusSync, UsageOut
 from .auth import CallerDep
@@ -30,6 +32,8 @@ def status_for(db: Session, caller: Caller) -> PlusStatus:
         product_id=entitlement.product_id if entitlement else None,
         photo_search=UsageOut(used=used_today(db, caller, PHOTO_SEARCH), limit=limit_for(PHOTO_SEARCH)),
         follow_up=UsageOut(used=used_today(db, caller, FOLLOW_UP), limit=limit_for(FOLLOW_UP)),
+        ai_search=UsageOut(used=used_today(db, caller, AI_SEARCH),
+                           limit=limit_for(AI_SEARCH, signed_in=caller.user is not None)),
     )
 
 
@@ -80,17 +84,22 @@ def _aware(moment: datetime | None) -> datetime | None:
     return moment.replace(tzinfo=timezone.utc) if moment and moment.tzinfo is None else moment
 
 
-def apply_transaction(entitlement: PlusEntitlement, verified: VerifiedTransaction) -> None:
-    """Updates a subscription from one of its transactions. A refund or revocation ends it;
-    otherwise the latest expiry wins, so an older transaction arriving late can't shorten it."""
+def apply_transaction(entitlement: PlusEntitlement, verified: VerifiedTransaction, *, reinstate: bool = False) -> None:
+    """Updates a subscription from one of its transactions. A refund or revocation ends it,
+    and only a later purchase or renewal (or Apple reversing the refund: `reinstate`)
+    brings it back, so a transaction saved from before the refund can't. Otherwise the
+    latest expiry wins, so an older transaction arriving late can't shorten it."""
     entitlement.environment = verified.environment
     entitlement.updated_at = datetime.now(timezone.utc)
     if verified.revoked_at is not None:
         entitlement.revoked_at = verified.revoked_at
         entitlement.product_id = entitlement.product_id or verified.product_id
         return
+    revoked = _aware(entitlement.revoked_at)
+    if revoked is not None and not reinstate and (verified.purchased_at is None or verified.purchased_at <= revoked):
+        return
     current = _aware(entitlement.expires_at)
-    if current is None or (verified.expires_at is not None and verified.expires_at >= current):
+    if revoked is not None or current is None or (verified.expires_at is not None and verified.expires_at >= current):
         entitlement.expires_at = verified.expires_at
         entitlement.product_id = verified.product_id
         entitlement.revoked_at = None
@@ -119,7 +128,7 @@ def app_store_notification(body: AppStoreNotification, db: Database):
         entitlement = PlusEntitlement(original_transaction_id=verified.original_transaction_id,
                                       user_id=owner.id if owner else None)
         db.add(entitlement)
-    apply_transaction(entitlement, verified)
+    apply_transaction(entitlement, verified, reinstate=notice.notification_type == "REFUND_REVERSED")
     if notice.notification_type in ("REFUND", "REVOKE") and entitlement.revoked_at is None:
         entitlement.revoked_at = datetime.now(timezone.utc)
     db.commit()

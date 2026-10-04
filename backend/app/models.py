@@ -267,9 +267,20 @@ class CodeRequest(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     channel: Mapped[str] = mapped_column(String(10))  # sms or email
+    # A hash of the phone or email (auth.codes.target_key), never the address itself.
     target: Mapped[str] = mapped_column(String(320), index=True)
     device_id: Mapped[str | None] = mapped_column(String(64), index=True)
     ip: Mapped[str | None] = mapped_column(String(45), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+
+class UsedSignInNonce(Base):
+    """An Apple or Google sign-in already used, by a hash of its nonce, so the same ID
+    token can't sign in (and make a fresh account) twice. Kept a couple of days; the
+    tokens themselves expire within the hour."""
+    __tablename__ = "used_sign_in_nonces"
+
+    nonce_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
 
 
@@ -294,14 +305,16 @@ class PlusEntitlement(Base):
 
 
 class UsageCounter(Base):
-    """How many times a free shopper used a limited feature on a (UTC) day."""
+    """How many times someone used a limited feature in a window: a (UTC) day for daily
+    limits, an hour for fair-use rate limits."""
     __tablename__ = "usage_counters"
     __table_args__ = (UniqueConstraint("subject", "feature", "day", name="uq_usage_subject_feature_day"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    # "user:7", "device:<install id>" or "ip:<address>".
+    # "user:7", "ip:<address>", "everyone", or "gone:<hash>" for a deleted account's
+    # counts, kept by a hash of how it signed in (see auth.accounts.delete_user).
     subject: Mapped[str] = mapped_column(String(80))
-    feature: Mapped[str] = mapped_column(String(20))  # photo_search or follow_up
+    feature: Mapped[str] = mapped_column(String(20))  # e.g. photo_search, plus:follow_up, rl:search
     day: Mapped[str] = mapped_column(String(10))  # YYYY-MM-DD
     count: Mapped[int] = mapped_column(default=0)
 

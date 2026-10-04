@@ -109,7 +109,7 @@ enum Legal {
         We don't sell your personal information, share it for advertising, or show ads. We don't use your data to train third-party AI models.
         """),
         Section(title: "How long we keep things", body: """
-        Account details are kept until you delete your account. When you do, we delete your name, contact details and sign-in records, end your sign-in with Apple, and unlink your searches and feedback from you. Searches are deleted after a year and anonymous usage counts after six months. Records of sign-in codes are deleted after two days, and the counts behind daily limits after about a week. Sign-in codes themselves expire within minutes.
+        Account details are kept until you delete your account. When you do, we delete your name, contact details and sign-in records, end your sign-in with Apple, and unlink your searches and feedback from you. Searches are deleted after a year and anonymous usage counts after six months. Records of sign-in codes, which keep only a scrambled form of your phone number or email, are deleted after two days, and the counts behind daily limits after about a week. Those counts stay with a scrambled form of how you signed in for that week even if you delete your account, so deleting doesn't reset them. Sign-in codes themselves expire within minutes.
         """),
         Section(title: "Your choices and rights", body: """
         You can turn off usage sharing, change your name, or delete your account in the You tab. You can also email us to ask for a copy of your data or for it to be deleted, and we'll respond within 30 days. Depending on where you live, you may have more rights under laws like the CCPA or GDPR; email us and we'll help.

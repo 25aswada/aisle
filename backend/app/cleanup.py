@@ -4,8 +4,9 @@
 
 On Heroku the web app also runs it every few hours (see main.py).
 
-- Sign-in code records (phone numbers, emails): after 2 days. Rate limits only look back a day.
+- Sign-in code records (hashed phone numbers and emails): after 2 days. Rate limits only look back a day.
 - Emailed sign-in codes (hashed): after a day; they expire in 10 minutes.
+- Used Apple and Google sign-in nonces (hashed): after 2 days; the tokens expire within the hour.
 - Usage counters: daily ones after 8 days, hourly fair-use ones after 2 days.
 - App usage events: after 180 days. Searches: after 365 days.
 """
@@ -21,7 +22,7 @@ from sqlalchemy.orm import Session
 
 from .database import get_engine
 from .limits import day_window, hour_window
-from .models import AnalyticsEvent, CodeRequest, EmailCode, SearchEvent, UsageCounter
+from .models import AnalyticsEvent, CodeRequest, EmailCode, SearchEvent, UsageCounter, UsedSignInNonce
 
 log = logging.getLogger(__name__)
 
@@ -33,6 +34,8 @@ def clean_up(db: Session, now: datetime | None = None) -> dict[str, int]:
     deleted = {
         "code_requests": db.execute(delete(CodeRequest).where(CodeRequest.created_at < now - timedelta(days=2))).rowcount,
         "email_codes": db.execute(delete(EmailCode).where(EmailCode.created_at < now - timedelta(days=1))).rowcount,
+        "used_nonces": db.execute(delete(UsedSignInNonce).where(
+            UsedSignInNonce.created_at < now - timedelta(days=2))).rowcount,
         # Daily windows look like 2026-10-04, hourly ones like 2026100420.
         "usage_counters": (
             db.execute(delete(UsageCounter).where(
