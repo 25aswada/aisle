@@ -69,8 +69,17 @@ final class ShoppingListStore {
         }
     }
 
+    /// How many lists of their own free shoppers can have. Aisle+ has no limit.
+    static let freeListLimit = 1
+
     /// Lists you made yourself (joined lists don't count against the free tier's one list).
     var ownLists: [ShoppingList] { lists.filter { $0.shared == nil || $0.shared?.isOwner == true } }
+
+    /// Whether another list can be made. Lists made while on Aisle+ are kept if it ends;
+    /// only making more needs it.
+    func canCreateList(isPlus: Bool) -> Bool {
+        isPlus || ownLists.count < Self.freeListLimit
+    }
 
     func select(_ id: UUID) {
         guard lists.contains(where: { $0.id == id }) else { return }
@@ -87,9 +96,12 @@ final class ShoppingListStore {
     }
 
     func renameCurrent(to name: String) {
+        renameList(currentID, to: name)
+    }
+
+    func renameList(_ id: UUID, to name: String) {
         let trimmed = String(name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(60))
-        guard !trimmed.isEmpty else { return }
-        let index = currentIndex
+        guard !trimmed.isEmpty, let index = lists.firstIndex(where: { $0.id == id }) else { return }
         lists[index].name = trimmed
         if let serverID = lists[index].shared?.serverID, let service {
             Task { _ = try? await service.rename(serverID: serverID, name: trimmed) }
@@ -99,15 +111,21 @@ final class ShoppingListStore {
     /// Removes the current list from this phone (a shared one is deleted for everyone
     /// if you own it, otherwise you leave it). There's always at least one list.
     func deleteCurrent() async throws {
-        let index = currentIndex
-        if let serverID = lists[index].shared?.serverID, let service {
+        try await deleteList(currentID)
+    }
+
+    func deleteList(_ id: UUID) async throws {
+        guard let list = lists.first(where: { $0.id == id }) else { return }
+        if let serverID = list.shared?.serverID, let service {
             do {
                 try await service.deleteOrLeave(serverID: serverID)
             } catch SharedListError.gone {
                 // Already gone on the server.
             }
         }
-        removeLocally(at: index)
+        if let index = lists.firstIndex(where: { $0.id == id }) {
+            removeLocally(at: index)
+        }
     }
 
     static func nextName(after names: [String]) -> String {

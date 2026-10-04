@@ -81,6 +81,7 @@
 		BEA01E7B5BBE39A7758D354A /* ShoppingTripModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = DDE7419EB2F6E6940BFF3E1A /* ShoppingTripModel.swift */; };
 		C391ACD1FF697AD66C3C126A /* TestSupport.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABB2DBC3C15E5E57C3A76464 /* TestSupport.swift */; };
 		C6C7BF9D14B046FF82CA31DF /* HealthResponse.swift in Sources */ = {isa = PBXBuildFile; fileRef = CAE10BD9BB063D1B70E12C65 /* HealthResponse.swift */; };
+		C90A879D36C747766FED9196 /* AllListsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FB1648A7564A619F9DCB11A /* AllListsView.swift */; };
 		CA6DA4E9F57439A98861270D /* RecentSearches.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86B371EFE8FBC1EC87453EDF /* RecentSearches.swift */; };
 		CB34D035D4275BBC8D5B9689 /* Geist-OFL.txt in Resources */ = {isa = PBXBuildFile; fileRef = B5DF99D4E4C76377B3143E44 /* Geist-OFL.txt */; };
 		D07C52F967B4E3907957F9F5 /* Analytics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C6BE6461AED2D5FE72E6E32 /* Analytics.swift */; };
@@ -120,6 +121,7 @@
 		1EDA2ABCE94A8CDD6E75123F /* LocalAccountData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalAccountData.swift; sourceTree = "<group>"; };
 		1EFBDA882BA0042549AB325F /* Geist-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Geist-Regular.ttf"; sourceTree = "<group>"; };
 		1F0F01B66F7546CB39F575F8 /* Aisle.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Aisle.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		1FB1648A7564A619F9DCB11A /* AllListsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AllListsView.swift; sourceTree = "<group>"; };
 		207430DA22AED8FD50091409 /* SignUpTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignUpTests.swift; sourceTree = "<group>"; };
 		213EE7135209C2740A08F7EC /* APIClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClientTests.swift; sourceTree = "<group>"; };
 		22288B5DF451567DC01A8355 /* TripStoresSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripStoresSheet.swift; sourceTree = "<group>"; };
@@ -254,6 +256,7 @@
 		0F73C214918171DE8E0753ED /* List */ = {
 			isa = PBXGroup;
 			children = (
+				1FB1648A7564A619F9DCB11A /* AllListsView.swift */,
 				1C7E407880AFD8F8823A9A69 /* ListSharingViews.swift */,
 				4295092DC67F0FAF0166F7DA /* ShoppingListView.swift */,
 			);
@@ -627,6 +630,7 @@
 				75FF8578F9D171902575892A /* ActivityHistory.swift in Sources */,
 				700677C23C091E32EBFABB43 /* AdaptiveStack.swift in Sources */,
 				7279D46DDD29BC46B14AD3AF /* AisleApp.swift in Sources */,
+				C90A879D36C747766FED9196 /* AllListsView.swift in Sources */,
 				D07C52F967B4E3907957F9F5 /* Analytics.swift in Sources */,
 				1C11F1DBCA0F567C1442269D /* AppConfig.swift in Sources */,
 				F4E2826F6D20F85EBBE94F96 /* CameraSheet.swift in Sources */,

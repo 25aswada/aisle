@@ -766,8 +766,8 @@ private struct HeroCard: View {
                 .padding(.top, 16)
                 .accessibilityAddTraits(.isHeader)
             Text(isPlus
-                 ? "Unlimited photo search, shared lists and trips across stores are on. Thanks for supporting Aisle."
-                 : "Unlimited photo search, shared lists and trips across stores. Aisle stays honest either way.")
+                 ? "Unlimited lists and photo search, shared lists and trips across stores are on. Thanks for supporting Aisle."
+                 : "Unlimited lists and photo search, shared lists and trips across stores. Aisle stays honest either way.")
                 .font(Theme.font(15, relativeTo: .subheadline))
                 .opacity(0.8)
                 .fixedSize(horizontal: false, vertical: true)
@@ -901,6 +901,7 @@ struct PaywallView: View {
 
     private static let table: [(String, Bool)] = [
         ("Find items in any store", true),
+        ("Unlimited lists", false),
         ("Unlimited photo search", false),
         ("Unlimited follow-ups", false),
         ("Shared family lists", false),
@@ -1164,6 +1165,7 @@ private struct CircleButton: View {
 private struct FeatureMarquee: View {
     private static let items: [(String, String)] = [
         ("camera", "Unlimited photos"),
+        ("list.bullet", "Unlimited lists"),
         ("person.2", "Family lists"),
         ("point.topleft.down.to.point.bottomright.curvepath", "Multi-store trips"),
         ("map", "Offline maps"),
