@@ -5,13 +5,13 @@ from sqlalchemy.orm import Session
 
 from ..ai.providers import LocationModel, get_location_model
 from ..database import get_db
-from ..models import Store
 from ..plus.access import require_plus
 from ..routing import Route, plan_multi_store, plan_route
 from ..schemas import (
     MultiRouteRequest, MultiRouteResponse, RouteLeg, RouteRequest, RouteResponse, RouteStop, RouteStopItem,
     UnplacedItem,
 )
+from ..store_zones import get_store
 from .auth import CallerDep
 
 router = APIRouter()
@@ -21,7 +21,7 @@ Model = Annotated[LocationModel | None, Depends(get_location_model)]
 
 @router.post("/route", response_model=RouteResponse)
 def route(body: RouteRequest, db: Database, model: Model):
-    store = db.get(Store, body.store_id)
+    store = get_store(db, body.store_id)
     if store is None:
         raise HTTPException(status_code=404, detail="Store not found")
     planned = plan_route(db, store, [(i.id, i.text) for i in body.items], model)
@@ -35,7 +35,7 @@ def multi_route(body: MultiRouteRequest, db: Database, model: Model, caller: Cal
     require_plus(db, caller, "multi_store", "Shopping more than one store in a trip is part of Aisle+.")
     if len(set(body.store_ids)) != len(body.store_ids):
         raise HTTPException(status_code=422, detail="Each store can only be in the trip once.")
-    stores = [db.get(Store, store_id) for store_id in body.store_ids]
+    stores = [get_store(db, store_id) for store_id in body.store_ids]
     if any(store is None for store in stores):
         raise HTTPException(status_code=404, detail="Store not found")
     legs, nowhere = plan_multi_store(db, stores, [(i.id, i.text) for i in body.items], model)

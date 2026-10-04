@@ -45,7 +45,8 @@ enum APIError: Error, Equatable, LocalizedError {
 protocol AisleAPI: Sendable {
     func health() async throws -> HealthResponse
     func nearbyStores(latitude: Double, longitude: Double, limit: Int?) async throws -> [Store]
-    func searchStores(query: String) async throws -> [Store]
+    /// Stores matching every word of `query`; nearest first when `near` is given.
+    func searchStores(query: String, near: Coordinate?) async throws -> [Store]
     func store(id: String) async throws -> Store
     func searchItem(query: String, storeID: String?) async throws -> ItemSearchResult
     /// The next Aisle reply in a conversation that started with a search, with a search
@@ -100,11 +101,13 @@ struct APIClient: AisleAPI {
         return response.stores
     }
 
-    func searchStores(query: String) async throws -> [Store] {
-        let response: StoresResponse = try await get(
-            "stores/search",
-            query: [URLQueryItem(name: "q", value: query)]
-        )
+    func searchStores(query: String, near: Coordinate?) async throws -> [Store] {
+        var items = [URLQueryItem(name: "q", value: query)]
+        if let near {
+            items.append(URLQueryItem(name: "lat", value: String(near.latitude)))
+            items.append(URLQueryItem(name: "lon", value: String(near.longitude)))
+        }
+        let response: StoresResponse = try await get("stores/search", query: items)
         return response.stores
     }
 
@@ -355,6 +358,10 @@ extension APIClient {
 }
 
 extension AisleAPI {
+    func searchStores(query: String) async throws -> [Store] {
+        try await searchStores(query: query, near: nil)
+    }
+
     /// Stand-ins without a map; the app just hides it.
     func storeLayout(storeID: String) async throws -> StoreLayout {
         throw URLError(.unsupportedURL)

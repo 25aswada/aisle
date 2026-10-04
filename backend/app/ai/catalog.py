@@ -421,11 +421,18 @@ from .chain_layouts import CHAIN_HINTS, CHAIN_LAYOUTS  # noqa: E402  (needs the 
 
 LAYOUTS.update(CHAIN_LAYOUTS)
 
-_RETAILER_LAYOUT_HINTS = CHAIN_HINTS + (
+# Grocery chains whose names contain another chain's hint are checked first.
+_RETAILER_LAYOUT_HINTS = (
+    ("walmart neighborhood market", "grocery"),
+    ("lowes foods", "grocery"),
+    ("lowe's market", "grocery"),
+) + CHAIN_HINTS + (
     ("bj's", "warehouse_club"),
     ("meijer", "supercenter"),
+    ("fred meyer", "supercenter"),
     ("rite aid", "pharmacy"),
     ("ace hardware", "home_improvement"),
+    ("menards", "home_improvement"),
 )
 
 

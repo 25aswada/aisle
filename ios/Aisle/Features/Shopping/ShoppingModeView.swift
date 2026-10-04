@@ -257,8 +257,10 @@ private struct NextStoreCard: View {
             .buttonStyle(.aisleAccent)
             .accessibilityIdentifier("nextStoreButton")
             Button {
-                let address = next.store.address.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-                if let url = URL(string: "maps://?daddr=\(address)") { UIApplication.shared.open(url) }
+                // Coordinates, not the address: some stores only have "Near <town>".
+                if let url = URL(string: "maps://?daddr=\(next.store.latitude),\(next.store.longitude)") {
+                    UIApplication.shared.open(url)
+                }
             } label: {
                 Label("Directions", systemImage: "car.fill")
                     .frame(maxWidth: .infinity)

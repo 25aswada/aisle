@@ -25,6 +25,7 @@ from .ai.intent import normalize, parse_intent
 from .database import get_engine
 from .models import Category, ProductAlias, ProductConcept, ProductLocation, Store, StoreZone, utcnow
 from .resolver import LOCATION_SOURCE_PRIORITY
+from .store_zones import get_store
 
 
 @dataclass
@@ -61,7 +62,7 @@ def import_rows(db: Session, rows: Iterable[dict]) -> ImportReport:
         source = _clean(row.get("source"))
         item = _clean(row.get("item"))
         try:
-            store = db.get(Store, int(row.get("store_id") or 0))
+            store = get_store(db, int(row.get("store_id") or 0))
         except ValueError:
             store = None
         if store is None or not item or source not in LOCATION_SOURCE_PRIORITY:

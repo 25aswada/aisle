@@ -11,6 +11,7 @@ from .ai.providers import LocationModel
 from .models import SearchEvent, Store, StoreZone
 from .resolver import resolve
 from .schemas import CategoryOut, ConceptOut, LocationOut, ReportCountsOut, SearchResponse
+from .store_zones import get_store
 
 log = logging.getLogger(__name__)
 
@@ -67,7 +68,7 @@ def search(
 ) -> SearchResponse:
     store = None
     if store_id is not None:
-        store = db.get(Store, store_id)
+        store = get_store(db, store_id)
         if store is None:
             raise StoreNotFound(store_id)
     intent = parse_intent(query)

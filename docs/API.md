@@ -27,18 +27,20 @@ and sends it back as an integer `store_id`.
 | name | string | |
 | address | string | single line |
 | latitude, longitude | number | WGS84 |
-| external_place_id, store_number | string or null | null in demo data |
+| external_place_id, store_number | string or null | `osm:way/123` and the chain's store number for stores imported from OpenStreetMap; null in demo data |
 | retailer | object | `{id, name, domain}`; `domain` (e.g. `target.com`) may be null |
 | retailer_name | string | flat copy of `retailer.name`; the iOS client reads this |
 | retailer_logo_url | string \| null | logo.dev image for `retailer.domain`; null without a domain or `LOGO_DEV_PUBLISHABLE_KEY`. Unknown domains return 404 (no generated monogram), so clients fall back to their own tile. |
-| distance_miles | number | only on `/stores/nearby` |
+| distance_miles | number | only on `/stores/nearby`, and on `/stores/search` with `lat` and `lon` |
 
 - `GET /health` → `{"status":"ok"}`. No database access.
 - `GET /stores/nearby?lat=&lon=&limit=` → `{"stores":[...],"message":null}`, nearest
   first. `limit` 1–100, default 20. Missing `lat` or `lon` → `{"stores":[],"message":"..."}`
   with status 200.
-- `GET /stores/search?q=` → bare JSON array, case-insensitive substring of store
-  name, retailer name, or address. Whitespace-only `q` → `[]`.
+- `GET /stores/search?q=&lat=&lon=&limit=` → bare JSON array of stores whose name,
+  retailer name or address contain every word of `q` (case-insensitive), so
+  `giant eagle strongsville` works. With `lat` and `lon`, nearest first with
+  `distance_miles`; otherwise by name. `limit` 1–100, default 50. Whitespace-only `q` → `[]`.
 - `GET /stores/{store_id}` → one store, or 404 `{"detail":"Store not found"}`.
 
 ## Item search

@@ -62,10 +62,10 @@ Interactive API documentation: <http://127.0.0.1:8000/docs>.
   ordered by great-circle distance, with store ID breaking ties.
 - Missing either coordinate → `{"stores":[],"message":"Provide both lat and lon to find nearby stores."}`.
   This succeeds without querying the database.
-- `GET /stores/search?q=Market` → an array matching store name, retailer name,
-  or address by case-insensitive substring. Surrounding whitespace is ignored;
-  `%` and `_` are literal characters. A whitespace-only query returns `[]`;
-  a missing or empty `q` returns 422.
+- `GET /stores/search?q=Market` → up to `limit` (default 50) stores whose name,
+  retailer name or address contain every word of `q`, case-insensitively; with `lat`
+  and `lon`, nearest first with `distance_miles`. `%` and `_` are literal characters.
+  A whitespace-only query returns `[]`; a missing or empty `q` returns 422.
 - `GET /stores/{store_id}` → one store, or 404 if absent.
 
 Stores expose `id`, `retailer_id`, `name`, `address`, `latitude`, `longitude`,
@@ -102,6 +102,29 @@ python -m backend.app.ai.evaluate             # model if a key is set
 python -m backend.app.ai.evaluate --fallback  # deterministic only
 ```
 
+## Real stores
+
+`import_stores` loads the US locations of about 70 major chains (Walmart, Target,
+Kroger, Costco, Giant Eagle, Publix, CVS, Home Depot…, listed in `CHAINS`) from
+OpenStreetMap through the Overpass API. A store is imported only when OSM ties it to the
+chain's Wikidata ID, and gas stations, pharmacy counters and auto centers that share the
+chain's tag are left out. Each chain's stores get its store map: a researched layout
+for the chains in `ai/chain_layouts.py`, otherwise their store format's template, copied
+the first time a store is used.
+
+```sh
+python -m backend.app.import_stores --save stores.json     # fetch all chains (~15 min), then load
+python -m backend.app.import_stores --from-file stores.json --dry-run
+python -m backend.app.import_stores --chain "Giant Eagle" --bbox 41.0,-82.0,41.6,-81.3
+```
+
+Re-running updates stores in place (matched by OSM ID, store number, or the same chain
+within 150 m), so store IDs and shoppers' reports survive. Stores no longer in OSM are
+listed and only deleted with `--prune`. To load Heroku, run it locally against the
+production database: `DATABASE_URL=$(heroku config:get DATABASE_URL -a aisle-api)
+python -m backend.app.import_stores --from-file stores.json`. The data is
+© OpenStreetMap contributors (ODbL); the app's store picker carries that credit.
+
 Import real product locations (the only source of aisle text):
 
 ```sh
@@ -110,10 +133,9 @@ python -m backend.app.import_locations locations.csv
 
 ## Current limitations
 
-Seed data is representative demo data with approximate coordinates, not a verified
-or live store directory. Provider place IDs and store numbers remain null.
-Distances are straight-line miles, not driving distances. Nearby discovery sorts
-all stores in memory and search has no pagination; this is appropriate for the
-small Milestone 1 directory and will need indexing/pagination for larger datasets.
+Seed data is representative demo data with approximate coordinates; real stores come
+from `import_stores`, and are only as complete as OpenStreetMap (stores OSM lacks, or
+has without an address, are missing). Distances are straight-line miles, not driving
+distances.
 Zone layouts and coordinates are per-format templates, not real floor plans. No real
 aisle data is seeded.

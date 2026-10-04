@@ -112,6 +112,7 @@ final class StubAPI: AisleAPI, @unchecked Sendable {
     private(set) var routeRequests: [(String, [ListItem])] = []
     private(set) var nearbyCalls: [(Double, Double, Int?)] = []
     private(set) var searchQueries: [String] = []
+    private(set) var searchCoordinates: [Coordinate?] = []
 
     func health() async throws -> HealthResponse { try healthResult.get() }
 
@@ -120,8 +121,9 @@ final class StubAPI: AisleAPI, @unchecked Sendable {
         return try nearbyResult.get()
     }
 
-    func searchStores(query: String) async throws -> [Store] {
+    func searchStores(query: String, near: Coordinate?) async throws -> [Store] {
         searchQueries.append(query)
+        searchCoordinates.append(near)
         return try searchResult.get()
     }
 

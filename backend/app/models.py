@@ -35,9 +35,10 @@ class Store(Base):
     retailer_id: Mapped[int] = mapped_column(ForeignKey("retailers.id"), index=True)
     name: Mapped[str] = mapped_column(String(200))
     address: Mapped[str] = mapped_column(String(500))
-    latitude: Mapped[float]
+    latitude: Mapped[float] = mapped_column(index=True)
     longitude: Mapped[float]
-    external_place_id: Mapped[str | None] = mapped_column(String(255))
+    # "osm:node/123" or "osm:way/456" for stores imported from OpenStreetMap.
+    external_place_id: Mapped[str | None] = mapped_column(String(255), index=True, unique=True)
     store_number: Mapped[str | None] = mapped_column(String(50))
     # Floor-plan anchors in normalized units (x 0..1 left to right, y 0..1 front to back).
     entrance_x: Mapped[float | None]

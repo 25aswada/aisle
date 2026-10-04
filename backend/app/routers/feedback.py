@@ -6,12 +6,13 @@ from sqlalchemy.orm import Session
 
 from ..ai.intent import parse_intent
 from ..database import get_db
-from ..models import LocationObservation, SearchEvent, Store, StoreZone
+from ..models import LocationObservation, SearchEvent, StoreZone
 from ..observations import counts_by_zone, observations_for
 from ..resolver import find_concept
 from ..schemas import (
     FeedbackRequest, FeedbackResponse, LayoutPoint, LayoutZoneOut, ReportCountsOut, StoreLayoutOut, StoreZoneOut,
 )
+from ..store_zones import get_store
 
 router = APIRouter()
 Database = Annotated[Session, Depends(get_db)]
@@ -20,7 +21,7 @@ DeviceID = Annotated[str | None, Header(alias="X-Aisle-Device", max_length=64)]
 
 @router.get("/stores/{store_id}/zones", response_model=list[StoreZoneOut])
 def store_zones(store_id: int, db: Database, response: Response):
-    if db.get(Store, store_id) is None:
+    if get_store(db, store_id) is None:
         raise HTTPException(status_code=404, detail="Store not found")
     # Zones change rarely; let the app's URL cache reuse them for a few minutes.
     response.headers["Cache-Control"] = "public, max-age=300"
@@ -33,7 +34,7 @@ def store_zones(store_id: int, db: Database, response: Response):
 def store_layout(store_id: int, db: Database, response: Response):
     """Approximate floor plan for drawing a schematic map: zone positions plus the
     entrance and checkout. Template positions are per store format, not real plans."""
-    store = db.get(Store, store_id)
+    store = get_store(db, store_id)
     if store is None:
         raise HTTPException(status_code=404, detail="Store not found")
     response.headers["Cache-Control"] = "public, max-age=300"
@@ -55,7 +56,7 @@ def store_layout(store_id: int, db: Database, response: Response):
 
 @router.post("/feedback", response_model=FeedbackResponse, status_code=201)
 def submit_feedback(body: FeedbackRequest, db: Database, device_id: DeviceID = None):
-    store = db.get(Store, body.store_id)
+    store = get_store(db, body.store_id)
     if store is None:
         raise HTTPException(status_code=404, detail="Store not found")
     if body.zone_id is not None:

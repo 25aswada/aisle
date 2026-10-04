@@ -299,7 +299,9 @@ struct OfflineAwareAPI: AisleAPI {
     func nearbyStores(latitude: Double, longitude: Double, limit: Int?) async throws -> [Store] {
         try await base.nearbyStores(latitude: latitude, longitude: longitude, limit: limit)
     }
-    func searchStores(query: String) async throws -> [Store] { try await base.searchStores(query: query) }
+    func searchStores(query: String, near: Coordinate?) async throws -> [Store] {
+        try await base.searchStores(query: query, near: near)
+    }
     func store(id: String) async throws -> Store { try await base.store(id: id) }
     func chat(storeID: String, messages: [ChatMessage]) async throws -> ChatReply {
         try await base.chat(storeID: storeID, messages: messages)

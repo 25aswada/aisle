@@ -2,10 +2,11 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from .ai.catalog import CATEGORIES, layout_for_retailer
+from .ai.catalog import CATEGORIES
 from .ai.intent import normalize
 from .database import get_engine
 from .models import Category, ProductAlias, ProductConcept, Retailer, Store, StoreZone
+from .store_zones import sync_template_zones
 
 # Retailer website domains, used for logos.
 RETAILER_DOMAINS = {
@@ -70,34 +71,17 @@ def seed_catalog(session: Session) -> None:
 
 
 def seed_store_zones(session: Session) -> None:
-    """Keep each store's template zones in step with its chain's layout.
+    """Keep laid-out stores' template zones in step with their chain's layout.
 
-    Template zones are added, moved, re-categorised and reordered to match the current
-    layout, and template zones the layout no longer has are removed (references to them
-    become null). Verified zones are never touched. Entrance and checkout anchors always
-    follow the layout, since stores have no hand-set anchors yet.
+    Hand-added stores (no external place ID) are always laid out. Imported stores are
+    laid out the first time they're used (store_zones.ensure_zones), so only those
+    already in use are synced here.
     """
     categories = {c.slug: c for c in session.scalars(select(Category))}
+    in_use = set(session.scalars(select(StoreZone.store_id).where(StoreZone.source == "template").distinct()))
     for store in session.scalars(select(Store)):
-        layout = layout_for_retailer(store.retailer_name)
-        store.entrance_x, store.entrance_y = layout.entrance
-        store.checkout_x, store.checkout_y = layout.checkout
-        existing = {z.name: z for z in session.scalars(select(StoreZone).where(StoreZone.store_id == store.id))}
-        wanted = {zone.name for zone in layout.zones}
-        for order, zone in enumerate(layout.zones):
-            zone_categories = [categories[slug] for slug in zone.categories if slug in categories]
-            row = existing.get(zone.name)
-            if row is None:
-                session.add(StoreZone(
-                    store_id=store.id, name=zone.name, source="template", sort_order=order,
-                    x=zone.x, y=zone.y, categories=zone_categories,
-                ))
-            elif row.source == "template":
-                row.x, row.y, row.sort_order = zone.x, zone.y, order
-                row.categories = zone_categories
-        for name, row in existing.items():
-            if row.source == "template" and name not in wanted:
-                session.delete(row)
+        if store.external_place_id is None or store.id in in_use:
+            sync_template_zones(session, store, categories)
     session.commit()
 
 

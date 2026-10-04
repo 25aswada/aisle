@@ -22,6 +22,11 @@ struct StorePickerView: View {
                 } else {
                     nearbySection
                 }
+                // Store locations come from OpenStreetMap, whose license asks for this credit.
+                Section {} footer: {
+                    Text("Store locations © [OpenStreetMap contributors](https://www.openstreetmap.org/copyright)")
+                        .font(.caption2)
+                }
             }
             .aislePage()
             .tint(Theme.ink)

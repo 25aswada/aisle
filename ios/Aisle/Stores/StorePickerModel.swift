@@ -20,6 +20,8 @@ final class StorePickerModel {
 
     @ObservationIgnored private let api: AisleAPI
     @ObservationIgnored private let location: LocationProviding
+    /// Where nearby stores were last loaded, so a search for "Walmart" lists the closest ones.
+    @ObservationIgnored private var lastCoordinate: Coordinate?
 
     init(api: AisleAPI, location: LocationProviding) {
         self.api = api
@@ -52,6 +54,7 @@ final class StorePickerModel {
         nearby = .loading
         do {
             let coordinate = try await location.currentCoordinate()
+            lastCoordinate = coordinate
             let stores = try await api.nearbyStores(
                 latitude: coordinate.latitude,
                 longitude: coordinate.longitude,
@@ -75,7 +78,7 @@ final class StorePickerModel {
         }
         searchResults = .loading
         do {
-            let stores = try await api.searchStores(query: query)
+            let stores = try await api.searchStores(query: query, near: lastCoordinate)
             try Task.checkCancellation()
             searchResults = .loaded(stores)
         } catch is CancellationError {

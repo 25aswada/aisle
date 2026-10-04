@@ -8,7 +8,9 @@ SQLAlchemy models live in `backend/app/models.py`; Alembic migrations in
 - `retailers(id, name unique, domain null)`: `domain` is the website (`target.com`), used
   for logos (migration 0006). Seeding fills it for known retailers but never overwrites it.
 - `stores(id, retailer_id → retailers, name, address, latitude, longitude,
-  external_place_id null, store_number null)`
+  external_place_id null unique, store_number null)`: `latitude` is indexed for nearby
+  search, and `external_place_id` (`osm:node/…`, `osm:way/…`) identifies stores imported
+  from OpenStreetMap (migration 0011).
 
 ## Catalog and locations (Milestone 3)
 
@@ -33,9 +35,11 @@ SQLAlchemy models live in `backend/app/models.py`; Alembic migrations in
 - `store_zones.x`, `store_zones.y`: approximate floor-plan position (0..1), null when unknown.
 - `stores.entrance_x/_y`, `stores.checkout_x/_y`: route start and end anchors.
 
-Seeding fills these from the store's layout and keeps `template` zones in sync with it
-(positions, categories, order; template zones the layout dropped are removed). It never
-changes `verified` zones.
+These come from the store's layout (`backend/app/store_zones.py`), which also keeps
+`template` zones in sync with it (positions, categories, order; template zones the layout
+dropped are removed). It never changes `verified` zones. Imported stores have no zones
+until first used: the zones, layout, search, route and feedback endpoints copy the
+chain's template then. Seeding syncs hand-added stores and stores already in use.
 
 Layouts are per chain where researched (`backend/app/ai/chain_layouts.py`: Costco, Sam's
 Club, Trader Joe's, Aldi, Walmart, Target, Whole Foods, Kroger, CVS, Walgreens, Home Depot,
@@ -86,6 +90,9 @@ Deleting the owner's account deletes their lists; deleting a member's removes th
 `python -m backend.app.seed` loads demo stores, the catalog (categories, concepts,
 aliases) and `template` zones per store. Seeding never writes aisle labels or
 product locations.
+
+Real stores enter through `python -m backend.app.import_stores` (major US chains from
+OpenStreetMap; see the backend README).
 
 Real locations enter through `python -m backend.app.import_locations file.csv`
 (columns `store_id,item,source,department,aisle,section`). That importer is the only
