@@ -8,12 +8,14 @@ the Twilio bill or flood someone's inbox.
 """
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import logging
 import re
 import secrets
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Protocol
 
 import httpx
@@ -163,6 +165,10 @@ class EmailSender(Protocol):
     def send_code(self, email: str, code: str) -> None: ...
 
 
+_WORDMARK_ID = "aisle-wordmark"
+_WORDMARK_PNG = base64.b64encode((Path(__file__).parent / "aisle-wordmark.png").read_bytes()).decode()
+
+
 class ResendEmailSender:
     def __init__(self, api_key: str, sender: str, client: httpx.Client | None = None):
         self._api_key = api_key
@@ -177,6 +183,8 @@ class ResendEmailSender:
             "text": f"Your Aisle sign-in code is {code}.\n\nIt expires in 10 minutes. "
                     "If you didn't ask for it, you can ignore this email.",
             "html": _email_html(code),
+            # Inline, so the wordmark shows without "load images" and without hosting it.
+            "attachments": [{"filename": "aisle.png", "content": _WORDMARK_PNG, "content_id": _WORDMARK_ID}],
         }
         try:
             response = self._client.post(
@@ -194,15 +202,70 @@ class ResendEmailSender:
             raise ConnectionError("Resend send failed")
 
 
+# The app's accent ink (lavender, pink, peach), one stop per letter, so the word reads as
+# a gradient even in Gmail, which drops background-clip text.
+_GRADIENT_WORD = (("c", "#9A6BD6"), ("o", "#C66EAF"), ("d", "#E17C88"), ("e", "#EC9560"))
+
+
 def _email_html(code: str) -> str:
-    return (
-        '<div style="font-family:-apple-system,Helvetica,Arial,sans-serif;max-width:420px;margin:0 auto;'
-        'padding:32px 24px;color:#1f1b24">'
-        '<p style="font-size:15px;margin:0 0 8px">Your Aisle sign-in code</p>'
-        f'<p style="font-size:36px;font-weight:700;letter-spacing:6px;margin:0 0 16px">{code}</p>'
-        '<p style="font-size:14px;color:#6b6570;margin:0">It expires in 10 minutes. '
-        "If you didn't ask for it, you can ignore this email.</p></div>"
+    """Aisle-branded code email, styled like the app's "Check your email" screen: the bare
+    wordmark on the warm glow background, a big Geist headline with its last word in the
+    accent ink, and the code in six white boxes like the ones it gets typed into.
+
+    Tables and inline styles so Gmail, Outlook and Apple Mail all agree. Gradients fall
+    back to solid colours, and the digit boxes are inline spans with nothing between
+    them, so copying the code still gives six plain digits."""
+    font = "'Geist',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
+    word = "".join(f'<span style="color:{color}">{letter}</span>' for letter, color in _GRADIENT_WORD)
+    box = ("display:inline-block;width:54px;height:64px;line-height:64px;margin-right:9px;"
+           "background:#FFFFFF;border:1px solid #EFE6EC;border-radius:16px;text-align:center;"
+           "font-size:28px;font-weight:600;color:#1F1B24;box-shadow:0 6px 16px rgba(220,111,156,0.10)")
+    digits = "".join(
+        f'<span class="aisle-digit" style="{box}{";margin-right:0" if i == len(code) - 1 else ""}">{d}</span>'
+        for i, d in enumerate(code)
     )
+    return f"""<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light only"><meta name="supported-color-schemes" content="light only">
+<title>{code} is your Aisle code</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap');
+@media (max-width:480px) {{
+  .aisle-page {{ padding:16px 10px 28px !important; }}
+  .aisle-pad {{ padding-left:24px !important; padding-right:24px !important; }}
+  .aisle-title {{ font-size:32px !important; line-height:36px !important; }}
+  .aisle-digit {{ width:44px !important; height:56px !important; line-height:56px !important; margin-right:6px !important; font-size:24px !important; border-radius:14px !important; }}
+}}
+@media (max-width:360px) {{
+  .aisle-digit {{ width:38px !important; height:50px !important; line-height:50px !important; margin-right:5px !important; font-size:22px !important; }}
+}}
+</style>
+</head>
+<body style="margin:0;padding:0;background:#F3F4F1">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0">{code} &middot; Enter it in Aisle to sign in. It works for 10 minutes.</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#F3F4F1">
+<tr><td class="aisle-page" align="center" style="padding:40px 16px 36px">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:480px;border-radius:32px;overflow:hidden;font-family:{font};color:#1F1B24;background-color:#FCF3F1;background-image:radial-gradient(circle at 100% 0%,rgba(244,143,184,0.30) 0%,rgba(244,143,184,0) 55%),radial-gradient(circle at 0% 100%,rgba(255,216,114,0.30) 0%,rgba(255,216,114,0) 55%),linear-gradient(160deg,#F6EEFD 0%,#FDEDF3 40%,#FFF2E7 75%,#FFF8E3 100%)">
+<tr><td class="aisle-pad" style="padding:36px 40px 0">
+<img src="cid:{_WORDMARK_ID}" width="96" height="26" alt="aisle" style="display:block;border:0;width:96px;height:26px">
+</td></tr>
+<tr><td class="aisle-pad" style="padding:56px 40px 0">
+<p class="aisle-title" style="margin:0;font-size:38px;line-height:42px;font-weight:700;letter-spacing:-1.2px;color:#1F1B24">Here's your {word}</p>
+<p style="margin:14px 0 0;font-size:17px;line-height:25px;color:#4E544F">Enter it in Aisle to finish signing in.</p>
+</td></tr>
+<tr><td class="aisle-pad" style="padding:32px 40px 0;white-space:nowrap">{digits}</td></tr>
+<tr><td class="aisle-pad" style="padding:16px 40px 0">
+<p style="margin:0;font-size:14px;line-height:20px;font-weight:500;color:#1F1B24">Works for 10 minutes</p>
+</td></tr>
+<tr><td class="aisle-pad" style="padding:48px 40px 36px">
+<p style="margin:0;font-size:13px;line-height:19px;color:#6E6872">Didn't ask for this? You can ignore this email. Nobody can sign in without the code, and we'll never ask you to share it.</p>
+</td></tr>
+</table>
+<p style="margin:22px 0 0;font-family:{font};font-size:12px;line-height:18px;color:#8A8F8B">aisle &middot; find anything inside any store</p>
+</td></tr>
+</table>
+</body></html>"""
 
 
 def _hash_code(email: str, code: str) -> str:

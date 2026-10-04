@@ -353,3 +353,6 @@ def test_resend_request():
     body = request.read().decode()
     assert '"to":["sam@example.com"]' in body.replace(" ", "")
     assert "123456 is your Aisle code" in body
+    # The wordmark rides along as an inline image the HTML points at.
+    assert '"content_id":"aisle-wordmark"' in body.replace(" ", "")
+    assert "cid:aisle-wordmark" in body
