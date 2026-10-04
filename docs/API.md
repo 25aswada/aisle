@@ -1,6 +1,7 @@
 # API
 
-Local origin: `http://127.0.0.1:8000`. JSON in and out. No accounts or auth.
+Local origin: `http://127.0.0.1:8000`. JSON in and out. Accounts are optional: only `/me` and
+`/auth/signout` need a session (see Accounts below); everything else is public.
 `/docs` on the running service shows the live OpenAPI schema. This document and
 `ios/Aisle/Networking/APIClient.swift` must change together.
 
@@ -195,7 +196,7 @@ Database rows still win over observations.
 
 ## Shopping lists (Milestone 5)
 
-Lists live on the device (no accounts). The server only parses text.
+Lists live on the device. The server only parses text.
 
 ### POST /lists/parse
 
@@ -267,6 +268,41 @@ its checkout: nearest neighbor, then 2-opt, using Manhattan distance on zone `x`
 are approximate template positions. Zones without coordinates come last. `unplaced`
 reasons: `unknown` (no department) or `not_carried` (the store format usually doesn't
 stock it).
+
+## Accounts
+
+Optional. Sign in with an SMS code (Twilio Verify), an email code (sent with Resend),
+Sign in with Apple or Google. Every sign-in returns:
+
+```json
+{"token": "…", "is_new": true,
+ "user": {"id": 7, "first_name": "", "email": null, "phone": "+12155550123",
+          "wants_tips": false, "providers": ["phone"]}}
+```
+
+Send the token as `Authorization: Bearer <token>`. It doesn't expire; signing out or
+deleting the account revokes it. Only a SHA-256 of it is stored. `is_new` means this
+sign-in created the account, so the app asks for a first name (`PATCH /me`).
+
+| Route | Body | Notes |
+| --- | --- | --- |
+| `POST /auth/phone/start` | `{"phone"}` | Ten digits are taken as US; otherwise start with `+`. Returns `{"sent_to": "+1 •••• 0123", "retry_after": 30}` |
+| `POST /auth/phone/verify` | `{"phone", "code"}` | 400 wrong code, expired code, or too many tries (429) |
+| `POST /auth/email/start` | `{"email"}` | Same response shape; the email shows in full |
+| `POST /auth/email/verify` | `{"email", "code"}` | Codes last 10 minutes and 5 tries, and work once |
+| `POST /auth/apple` | `{"identity_token", "nonce"?, "first_name"?}` | Token checked against Apple's keys, audience `APPLE_BUNDLE_ID`; `nonce` is the raw value whose SHA-256 the app sent Apple |
+| `POST /auth/google` | `{"id_token", "nonce"?}` | Token checked against Google's keys, audience `GOOGLE_IOS_CLIENT_ID` |
+| `GET /me` | | 401 when the session ended |
+| `PATCH /me` | `{"first_name"?, "wants_tips"?}` | |
+| `DELETE /me` | | Deletes the account and its sign-ins; 204 |
+| `POST /auth/signout` | | Revokes this session; 204 |
+
+- Signing in with a new method whose verified email matches an existing account adds it
+  to that account.
+- Code sends are limited: 30 seconds apart and 5 an hour per phone or email, 10 an hour
+  per device, 20 an hour per IP (429 with a message the app shows).
+- A method without keys in `backend/.env` answers 503 with a message to try another way.
+- Errors carry `{"detail": "…"}` meant for the shopper.
 
 ## Analytics and errors (Milestone 7)
 

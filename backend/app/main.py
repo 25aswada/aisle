@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from .database import get_db
 from .models import Retailer, Store
 from .routers import analytics as analytics_routes
+from .routers import auth as auth_routes
 from .routers import feedback as feedback_routes
 from .routers import lists as list_routes
 from .routers import route as route_routes
@@ -23,6 +24,7 @@ app.include_router(feedback_routes.router)
 app.include_router(list_routes.router)
 app.include_router(route_routes.router)
 app.include_router(analytics_routes.router)
+app.include_router(auth_routes.router)
 log = logging.getLogger(__name__)
 
 

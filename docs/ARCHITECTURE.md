@@ -115,4 +115,9 @@ Pytest discovery is the default: files named `test_*.py` or `*_test.py` under `b
 
 ## Access
 
-All routes are public. Aisle has no accounts, tokens, or sessions; the app sends an anonymous install id in `X-Aisle-Device`. The SwiftUI app is the client, so browser CORS is unused.
+Accounts are optional (`backend/app/auth/`, `routers/auth.py`): SMS codes through Twilio
+Verify, email codes sent with Resend, and Sign in with Apple and Google, whose ID tokens
+are checked against the providers' published keys. Sessions are random bearer tokens
+stored only as SHA-256 hashes; the app keeps its token in the Keychain. Only `/me` and
+`/auth/signout` need one; every other route is public, and the app still sends an
+anonymous install id in `X-Aisle-Device`. The SwiftUI app is the client, so browser CORS is unused.

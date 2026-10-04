@@ -48,6 +48,22 @@ per-store floor plans, so the app labels maps "Typical <store> layout".
 `analytics_events(id, name, device_id null, properties json, occurred_at, received_at)`.
 Names come from a fixed list; properties are small scalars with no user text.
 
+## Accounts
+
+- `users(id, first_name, email null, phone null, wants_tips, created_at)`: email and phone
+  are the first verified ones seen, used for display and for linking sign-in methods.
+- `user_identities(id, user_id, provider, subject, email null, created_at)`, unique on
+  `(provider, subject)`. `provider` is apple, google, phone or email; `subject` is the
+  provider's stable id or the normalized phone/email.
+- `auth_sessions(id, user_id, token_hash unique, device_id null, created_at, last_used_at,
+  revoked_at null)`: only a SHA-256 of each token.
+- `email_codes(id, email, code_hash, attempts, expires_at, consumed_at null, created_at)`.
+- `code_requests(id, channel, target, device_id null, ip null, created_at)`: every code
+  sent, for rate limits.
+
+Deleting a user deletes its identities and revokes its sessions. Searches, reports and
+analytics stay anonymous and are not linked to users.
+
 ### Seeding and imports
 
 `python -m backend.app.seed` loads demo stores, the catalog (categories, concepts,

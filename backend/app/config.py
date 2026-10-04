@@ -24,6 +24,19 @@ class Settings(BaseSettings):
     aisle_ai_explain: bool = True
     # logo.dev publishable key (pk_...). Without it stores show letter tiles.
     logo_dev_publishable_key: str | None = None
+
+    # Accounts. Each sign-in method is off until its keys are set.
+    # SMS codes: a Twilio Verify service.
+    twilio_account_sid: str | None = None
+    twilio_auth_token: str | None = None
+    twilio_verify_service_sid: str | None = None
+    # Email codes: Resend, sending from a verified domain.
+    resend_api_key: str | None = None
+    aisle_email_from: str = "Aisle <codes@shopaisle.app>"
+    # Sign in with Google: the iOS OAuth client ID its ID tokens are issued to.
+    google_ios_client_id: str | None = None
+    # Sign in with Apple: the app's bundle ID its identity tokens are issued to.
+    apple_bundle_id: str = "app.shopaisle.aisle"
     model_config = SettingsConfigDict(
         env_file=Path(__file__).resolve().parents[1] / ".env", extra="ignore"
     )

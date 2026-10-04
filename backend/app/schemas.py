@@ -340,3 +340,71 @@ class AnalyticsAccepted(BaseModel):
 
 
 ChatResponse.model_rebuild()
+
+
+# --- Accounts ---
+
+class PhoneStart(BaseModel):
+    phone: str = Field(min_length=7, max_length=32)
+
+
+class PhoneVerify(PhoneStart):
+    code: str = Field(pattern=r"^\d{4,10}$")
+
+
+class EmailStart(BaseModel):
+    email: str = Field(min_length=3, max_length=320)
+
+
+class EmailVerify(EmailStart):
+    code: str = Field(pattern=r"^\d{6}$")
+
+
+class AppleSignIn(BaseModel):
+    identity_token: str = Field(min_length=20, max_length=8000)
+    # The raw nonce the app hashed into Apple's request.
+    nonce: str | None = Field(default=None, max_length=200)
+    # Apple shares the name only on the very first sign-in, and only with the app.
+    first_name: str | None = Field(default=None, max_length=40)
+
+
+class GoogleSignIn(BaseModel):
+    id_token: str = Field(min_length=20, max_length=8000)
+    nonce: str | None = Field(default=None, max_length=200)
+
+
+class CodeSent(BaseModel):
+    # Where the code went, masked a little for display ("+1 •••• 0123").
+    sent_to: str
+    # Seconds before another code can be sent to the same place.
+    retry_after: int
+
+
+class UserOut(BaseModel):
+    id: int
+    first_name: str
+    email: str | None
+    phone: str | None
+    wants_tips: bool
+    # How this account can sign in: apple, google, phone, email.
+    providers: list[str]
+
+
+class AuthOut(BaseModel):
+    # Send as "Authorization: Bearer <token>". It doesn't expire; signing out revokes it.
+    token: str
+    user: UserOut
+    # True when this sign-in created the account, so the app asks for a name.
+    is_new: bool
+
+
+class ProfileUpdate(BaseModel):
+    first_name: str | None = Field(default=None, max_length=40)
+    wants_tips: bool | None = None
+
+    @field_validator("first_name")
+    @classmethod
+    def name_not_blank(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
+            raise ValueError("first_name must not be blank")
+        return value.strip() if value else value
