@@ -88,6 +88,7 @@ final class FindModel {
                 return
             }
             query = item
+            MemberActivity.recordPhotoSearch(photo)
             await find(item, storeID: storeID)
         } catch is CancellationError {
             // A newer search replaced this one.
@@ -202,6 +203,7 @@ final class FindModel {
                 throw APIError.invalidResponse
             }
             turns.append(ChatTurn(role: .aisle, text: reply, result: answer.search))
+            MemberActivity.recordFollowUp(question: text, answer: reply)
             if let found = answer.search {
                 // "Was it there?" now asks about this item.
                 feedback = .none

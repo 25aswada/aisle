@@ -136,6 +136,40 @@ final class PlusStore {
         await refreshEntitlement()
     }
 
+    /// The active subscription as the App Store reports it.
+    struct Membership: Equatable {
+        let plan: Plan
+        let isTrial: Bool
+        /// When it renews (or the trial converts), or ends if auto-renew is off.
+        let nextDate: Date?
+        let willRenew: Bool
+        let price: String
+        let since: Date
+    }
+
+    func membership() async -> Membership? {
+        for await result in Transaction.currentEntitlements {
+            guard case .verified(let transaction) = result,
+                  let plan = Plan(rawValue: transaction.productID),
+                  transaction.revocationDate == nil else { continue }
+            var willRenew = true
+            if let product = products[plan],
+               let status = try? await product.subscription?.status.first,
+               case .verified(let renewal) = status.renewalInfo {
+                willRenew = renewal.willAutoRenew
+            }
+            return Membership(
+                plan: plan,
+                isTrial: transaction.offerType == .introductory,
+                nextDate: transaction.expirationDate,
+                willRenew: willRenew,
+                price: price(plan),
+                since: transaction.originalPurchaseDate
+            )
+        }
+        return nil
+    }
+
     func refreshEntitlement() async {
         var active = false
         var signed: [String] = []

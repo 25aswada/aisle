@@ -151,6 +151,7 @@ final class ShoppingTripModel {
                 legs = planned.isEmpty ? [TripLeg(store: stores[0], stops: [], unplaced: [])] : planned
                 nowhere = plan.unplaced
                 isOfflineRoute = plan.isOffline
+                MemberActivity.recordMultiStoreTrip()
             } else {
                 let plan = try await api.planRoute(storeID: stores[0].id, items: items)
                 legs = [TripLeg(store: stores[0], stops: plan.stops, unplaced: plan.unplaced)]

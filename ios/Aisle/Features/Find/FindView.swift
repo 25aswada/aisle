@@ -96,6 +96,7 @@ struct FindView: View {
                 .onChange(of: model.isReplying) { scrollToEnd(scroller) }
             }
             .cameraOverlay(isPresented: $isTakingPhoto) { photo in model.photo = photo }
+            .onReceive(NotificationCenter.default.publisher(for: .aisleOpenCamera)) { _ in openCamera() }
             .plusUpgradeSheet(reason: $model.upgradePrompt)
             .onChange(of: isTakingPhoto) { _, taking in
                 // Photo in: open the keyboard in its composer, ready for a note or send.

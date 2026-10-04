@@ -33,7 +33,13 @@ struct RootView: View {
         .onChange(of: list.pendingJoinCode) {
             if list.pendingJoinCode != nil { tab = .list }
         }
+        .environment(\.openTab) { tab = $0 }
         .tint(Theme.ink)
         .font(.aisleBody)
     }
+}
+
+extension EnvironmentValues {
+    /// Switches the main tab, e.g. from the Aisle+ tab's shortcuts.
+    @Entry var openTab: (RootView.Tab) -> Void = { _ in }
 }
