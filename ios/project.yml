@@ -13,6 +13,10 @@ settings:
     AISLE_API_BASE_URL: "http://127.0.0.1:8000"
     # Sign in with Google (iOS OAuth client in Cloud project aisle-510605). Not a secret.
     AISLE_GOOGLE_CLIENT_ID: "192788314882-d6e46f6nv0nc8b00iaomfv57pgr65js9.apps.googleusercontent.com"
+  configs:
+    # Release builds talk to the Heroku app; Debug stays on this Mac (Config/Local.xcconfig).
+    Release:
+      AISLE_API_BASE_URL: "https://aisle-api-db30672cd6aa.herokuapp.com"
 targets:
   Aisle:
     type: application
