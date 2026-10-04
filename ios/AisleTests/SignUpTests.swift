@@ -254,6 +254,48 @@ final class SignUpTests: XCTestCase {
         XCTAssertNil(AccountStore(defaults: defaults, tokens: tokens).account)
     }
 
+    func testSigningOutOrDeletingGivesThePhoneANewInstallID() async throws {
+        let defaults = UserDefaults.fresh("SignUpTests.InstallID")
+        let store = AccountStore(defaults: defaults, tokens: InMemoryTokenStore(), auth: FakeAuth())
+        let first = DeviceIdentity.current(defaults: defaults)
+        store.signIn(AuthSession(token: "tok", account: FakeAuth.account("Sam"), isNew: false))
+        store.signOut()
+        let second = DeviceIdentity.current(defaults: defaults)
+        XCTAssertNotEqual(first, second)
+
+        store.signIn(AuthSession(token: "tok", account: FakeAuth.account("Sam"), isNew: false))
+        try await store.deleteAccount()
+        XCTAssertNotEqual(DeviceIdentity.current(defaults: defaults), second)
+    }
+
+    func testAppleSignUpCanSkipTheName() async {
+        let auth = FakeAuth()
+        let model = SignUpModel(auth: auth)
+        // Apple shared no name (the shopper chose "Hide").
+        auth.providerResult = .success(AuthSession(token: "t", account: FakeAuth.account("", providers: [.apple]), isNew: true))
+        _ = await model.continueWith(.apple)
+        XCTAssertTrue(model.needsName)
+        XCTAssertTrue(model.isNameOptional)
+        XCTAssertTrue(model.canFinish)
+        let finished = await model.finish()
+        XCTAssertNotNil(finished)
+        XCTAssertEqual(auth.profileUpdates.first?.0, nil)
+    }
+
+    func testCodeSignUpStillNeedsAName() async {
+        let auth = FakeAuth()
+        let model = SignUpModel(auth: auth)
+        model.choose(.email)
+        model.email = "sam@example.com"
+        _ = await model.sendCode()
+        model.code = "123456"
+        _ = await model.verifyCode()
+        XCTAssertFalse(model.isNameOptional)
+        XCTAssertFalse(model.canFinish)
+        model.firstName = "Sam"
+        XCTAssertTrue(model.canFinish)
+    }
+
     func testDeleteAccount() async throws {
         let auth = FakeAuth()
         let store = AccountStore(defaults: .fresh("SignUpTests.Delete"), tokens: InMemoryTokenStore(), auth: auth)

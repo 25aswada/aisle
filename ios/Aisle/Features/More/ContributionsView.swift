@@ -105,13 +105,6 @@ struct ContributionsView: View {
                 } else {
                     SmallStoreLogo(url: entry.logoURL, size: 40)
                 }
-                Image(systemName: symbol(entry.kind))
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(Theme.onAccent)
-                    .frame(width: 18, height: 18)
-                    .background(entry.kind == .notHere ? AnyShapeStyle(Theme.fill) : AnyShapeStyle(Theme.accent), in: Circle())
-                    .overlay(Circle().stroke(Theme.surface, lineWidth: 2))
-                    .offset(x: 4, y: 4)
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(entry.item.capitalizedFirst)
@@ -123,9 +116,14 @@ struct ContributionsView: View {
                     .lineLimit(1)
             }
             Spacer(minLength: 8)
-            Text(entry.date.formatted(.relative(presentation: .named, unitsStyle: .abbreviated)))
-                .font(Theme.font(12, relativeTo: .caption))
-                .foregroundStyle(Theme.secondaryInk)
+            VStack(alignment: .trailing, spacing: 4) {
+                Image(systemName: symbol(entry.kind))
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(entry.kind == .notHere ? AnyShapeStyle(Theme.secondaryInk) : AnyShapeStyle(Theme.accentInk))
+                Text(entry.date.formatted(.relative(presentation: .named, unitsStyle: .abbreviated)))
+                    .font(Theme.font(12, relativeTo: .caption))
+                    .foregroundStyle(Theme.secondaryInk)
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)

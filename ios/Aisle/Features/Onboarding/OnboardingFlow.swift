@@ -27,7 +27,7 @@ struct OnboardingFlow: View {
         NavigationStack(path: $path) {
             Group {
                 if signInOnly {
-                    accountScreen(.method(returning: true), canLeave: false)
+                    accountScreen(.method(returning: true))
                 } else {
                     LiveOnboarding(
                         api: api,
@@ -41,7 +41,7 @@ struct OnboardingFlow: View {
             }
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: AccountFlowStep.self) { step in
-                accountScreen(step, canLeave: true)
+                accountScreen(step)
             }
         }
         .tint(Theme.ink)
@@ -53,10 +53,9 @@ struct OnboardingFlow: View {
         if accounts.isSignedIn { onFinish() } else { path.append(.method(returning: false)) }
     }
 
-    private func accountScreen(_ step: AccountFlowStep, canLeave: Bool) -> some View {
+    private func accountScreen(_ step: AccountFlowStep) -> some View {
         AccountFlowScreen(
             step: step, model: signUp, path: $path,
-            onLeave: canLeave ? {} : nil, onSkip: nil,
             onSignedIn: { session in
                 accounts.signIn(session)
                 onFinish()

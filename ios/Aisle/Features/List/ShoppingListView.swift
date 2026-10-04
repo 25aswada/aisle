@@ -27,7 +27,7 @@ struct ShoppingListView: View {
 
     /// The list screens' sheets, one at a time.
     enum ListSheet: Identifiable {
-        case share, join(String), rename, signIn, tripStores, pastTrips, allLists
+        case share, join(String), rename, tripStores, pastTrips, allLists
         var id: String {
             switch self {
             case .allLists: return "allLists"
@@ -36,7 +36,6 @@ struct ShoppingListView: View {
             case .share: return "share"
             case .join(let code): return "join-\(code)"
             case .rename: return "rename"
-            case .signIn: return "signIn"
             }
         }
     }
@@ -118,8 +117,6 @@ struct ShoppingListView: View {
                 case .share: ShareListSheet().presentationDetents([.large])
                 case .join(let code): JoinListSheet(code: code).presentationDetents([.medium, .large])
                 case .rename: RenameListSheet().presentationDetents([.medium])
-                case .signIn:
-                    if let auth = accounts.auth { AccountSheet(auth: auth) }
                 case .tripStores:
                     TripStoresSheet(api: api, location: location, first: storeSelection.current) { stores in
                         composerFocused = false
@@ -158,7 +155,7 @@ struct ShoppingListView: View {
                 }
             }
             .task(id: accounts.account?.id) {
-                if accounts.isSignedIn { await list.refreshMemberships() }
+                await list.refreshMemberships()
             }
             .onChange(of: scenePhase) {
                 if scenePhase == .active { Task { await list.refreshShared() } }
@@ -167,7 +164,7 @@ struct ShoppingListView: View {
                 // An invite link (also when it opened the app on this tab).
                 guard let code = list.pendingJoinCode else { return }
                 list.pendingJoinCode = nil
-                sheet = accounts.isSignedIn ? .join(code) : .signIn
+                sheet = .join(code)
             }
             .sensoryFeedback(.impact(weight: .light), trigger: list.remaining.count)
             .fullScreenCover(item: $trip) { trip in
@@ -219,7 +216,7 @@ struct ShoppingListView: View {
                         Button("Share with family…", systemImage: "person.2.badge.plus") { shareTapped() }
                     }
                     Button("Join a shared list…", systemImage: "person.crop.circle.badge.plus") {
-                        sheet = accounts.isSignedIn ? .join("") : .signIn
+                        sheet = .join("")
                     }
                     Button("Rename list…", systemImage: "pencil") { sheet = .rename }
                     Button("Past trips", systemImage: "clock.arrow.circlepath") { sheet = .pastTrips }
@@ -476,12 +473,8 @@ struct ShoppingListView: View {
         }
     }
 
-    /// Sharing needs an account (to know who's on the list) and Aisle+ (the server checks too).
+    /// Sharing needs Aisle+ (the server checks too).
     private func shareTapped() {
-        guard accounts.isSignedIn else {
-            sheet = .signIn
-            return
-        }
         guard plus.isPlus else {
             composer.upgradePrompt = "Sharing lists with your family is part of Aisle+."
             return

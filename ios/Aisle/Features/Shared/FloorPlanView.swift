@@ -263,9 +263,8 @@ private struct FloorPin: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
-                AisleMark(size: 15)
+                AisleMark(size: 18)
                     .frame(width: 26, height: 26)
-                    .background(Theme.accent, in: Circle())
                 Text(title)
                     .font(Theme.font(13, .bold, relativeTo: .footnote))
                     .foregroundStyle(Theme.ink)

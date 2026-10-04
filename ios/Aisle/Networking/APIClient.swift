@@ -73,19 +73,23 @@ protocol AisleAPI: Sendable {
 struct APIClient: AisleAPI {
     let baseURL: URL
     let session: URLSession
-    /// Sent as `X-Aisle-Device` so the server can count repeat reports once.
-    let deviceID: String?
+    /// Sent as `X-Aisle-Device` so the server can count repeat reports once. Read on every
+    /// request, because it changes when the account signs out or is deleted.
+    var deviceID: String? { deviceIDProvider?() ?? fixedDeviceID }
+    private let fixedDeviceID: String?
+    private let deviceIDProvider: (@Sendable () -> String?)?
     /// The signed-in session, sent as a bearer token so Aisle+ and the free tier's limits
     /// follow the account. Nil (or returning nil) when signed out.
     let authToken: (@Sendable () -> String?)?
 
     init(
         baseURL: URL = AppConfig.current.apiBaseURL, session: URLSession = .shared, deviceID: String? = nil,
-        authToken: (@Sendable () -> String?)? = nil
+        deviceIDProvider: (@Sendable () -> String?)? = nil, authToken: (@Sendable () -> String?)? = nil
     ) {
         self.baseURL = baseURL
         self.session = session
-        self.deviceID = deviceID
+        self.fixedDeviceID = deviceID
+        self.deviceIDProvider = deviceIDProvider
         self.authToken = authToken
     }
 

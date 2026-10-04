@@ -138,9 +138,8 @@ private struct PlusMemberView: View {
             Image("AisleLogo")
                 .resizable().renderingMode(.template).scaledToFit()
                 .foregroundStyle(Theme.onAccent)
-                .frame(width: 24, height: 24)
+                .frame(width: 32, height: 32)
                 .frame(width: 40, height: 40)
-                .background(.white.opacity(0.55), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(planTitle).font(Theme.font(15, .bold, relativeTo: .subheadline))
@@ -533,7 +532,6 @@ private struct FamilyTile: View {
 
     @State private var bob = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    private static let colors: [Color] = [Color(hex: 0xE2CFF9), Color(hex: 0xF9CFE0), Color(hex: 0xFFDDC6)]
     private static let spots: [CGPoint] = [CGPoint(x: 18, y: 36), CGPoint(x: 58, y: 18), CGPoint(x: 98, y: 40)]
 
     var body: some View {
@@ -542,11 +540,9 @@ private struct FamilyTile: View {
             ZStack(alignment: .topLeading) {
                 ForEach(Array(people.prefix(3).enumerated()), id: \.offset) { index, name in
                     Text(String(name.prefix(1)).uppercased())
-                        .font(Theme.font(13, .bold, relativeTo: .footnote))
-                        .foregroundStyle(Theme.onAccent)
+                        .font(Theme.font(24, .bold, relativeTo: .title2))
+                        .foregroundStyle(Theme.accentInk)
                         .frame(width: 36, height: 36)
-                        .background(Self.colors[index], in: Circle())
-                        .overlay(Circle().strokeBorder(Theme.surface, lineWidth: 2.5))
                         .position(Self.spots[index])
                         .offset(y: bob && !reduceMotion ? (index.isMultiple(of: 2) ? -3 : 3) : 0)
                 }
@@ -766,6 +762,7 @@ struct PaywallView: View {
     @Environment(PlusStore.self) private var plus
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var plan: PlusStore.Plan = .yearly
     @State private var trial: String?
     @State private var isBuying = false
@@ -892,8 +889,9 @@ struct PaywallView: View {
                     .foregroundStyle(Theme.onAccent)
                     .frame(maxWidth: .infinity, minHeight: 58)
                     .background {
-                        TimelineView(.animation(minimumInterval: 1 / 20)) { timeline in
-                            FlowingGradient(time: timeline.date.timeIntervalSinceReferenceDate)
+                        // Still under Reduce Motion: the gradient holds its first frame.
+                        TimelineView(.animation(minimumInterval: 1 / 20, paused: reduceMotion)) { timeline in
+                            FlowingGradient(time: reduceMotion ? 0 : timeline.date.timeIntervalSinceReferenceDate)
                         }
                     }
                     .clipShape(Capsule())
@@ -1149,14 +1147,12 @@ private struct PlanTile: View {
             }
             .overlay(alignment: .topTrailing) {
                 Image(systemName: "checkmark")
-                    .font(.system(size: 12, weight: .heavy))
-                    .foregroundStyle(Theme.onAccent)
+                    .font(.system(size: 17, weight: .heavy))
+                    .foregroundStyle(Theme.accentInk)
                     .frame(width: 28, height: 28)
-                    .background(Theme.accent, in: Circle())
-                    .shadow(color: Theme.glow.opacity(0.3), radius: 5, y: 4)
                     .scaleEffect(selected ? 1 : 0.4)
                     .opacity(selected ? 1 : 0)
-                    .offset(x: 8, y: -10)
+                    .padding(10)
             }
             .shadow(color: Theme.glow.opacity(selected ? 0.18 : 0), radius: 12, y: 10)
             .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
@@ -1168,34 +1164,36 @@ private struct PlanTile: View {
     }
 }
 
-/// After buying: a burst around the badge and a first thing to try.
+/// After buying: a burst around the bare Aisle mark (a plain fade under Reduce Motion)
+/// and a first thing to try.
 private struct PlusWelcome: View {
     let onDone: () -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var burst = false
 
     var body: some View {
         VStack(spacing: 0) {
             Spacer()
             ZStack {
-                ForEach(0..<12, id: \.self) { index in
-                    let angle = Double(index) / 12 * 2 * .pi
-                    Circle()
-                        .fill(Theme.accentColors[index % Theme.accentColors.count])
-                        .frame(width: index.isMultiple(of: 3) ? 11 : 8)
-                        .offset(x: burst ? cos(angle) * 130 : 0, y: burst ? sin(angle) * 130 : 0)
-                        .opacity(burst ? 0 : 1)
+                if !reduceMotion {
+                    ForEach(0..<12, id: \.self) { index in
+                        let angle = Double(index) / 12 * 2 * .pi
+                        Circle()
+                            .fill(Theme.accentColors[index % Theme.accentColors.count])
+                            .frame(width: index.isMultiple(of: 3) ? 11 : 8)
+                            .offset(x: burst ? cos(angle) * 130 : 0, y: burst ? sin(angle) * 130 : 0)
+                            .opacity(burst ? 0 : 1)
+                    }
                 }
                 Image("AisleLogo")
                     .resizable()
                     .renderingMode(.template)
                     .scaledToFit()
-                    .foregroundStyle(Theme.onAccent)
-                    .frame(width: 58, height: 58)
-                    .frame(width: 120, height: 120)
-                    .background(Theme.accent, in: RoundedRectangle(cornerRadius: 36, style: .continuous))
-                    .shadow(color: Theme.glow.opacity(0.35), radius: 22, y: 14)
-                    .scaleEffect(burst ? 1 : 0.8)
+                    .foregroundStyle(Theme.ink)
+                    .frame(width: 96, height: 96)
+                    .scaleEffect(burst || reduceMotion ? 1 : 0.8)
+                    .opacity(burst || !reduceMotion ? 1 : 0)
             }
             .accessibilityHidden(true)
             (Text("Welcome to ") + Text("Aisle+").foregroundStyle(Theme.accentInk))
@@ -1216,7 +1214,7 @@ private struct PlusWelcome: View {
         .padding(.horizontal, 26)
         .padding(.bottom, 24)
         .onAppear {
-            withAnimation(.spring(response: 0.6, dampingFraction: 0.6)) { burst = true }
+            withAnimation(reduceMotion ? .easeOut(duration: 0.25) : .spring(response: 0.6, dampingFraction: 0.6)) { burst = true }
         }
     }
 }
