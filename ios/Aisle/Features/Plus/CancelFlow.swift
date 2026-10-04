@@ -155,7 +155,7 @@ struct CancelPlusFlow: View {
                 extraPhotoSearches > 0 ? "You used \(extraPhotoSearches) more than that in the last 2 weeks." : nil
             )
             RowDivider()
-            change("bubble.left", "Follow-ups go back to 10 a day", nil)
+            change("bubble.left", "Follow-ups go back to \(MemberActivity.freeFollowUpsPerDay) a day", nil)
             RowDivider()
             change(
                 "person.2",

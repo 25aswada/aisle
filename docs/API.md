@@ -169,7 +169,8 @@ The store's departments, for the correction picker. 404 for an unknown store.
 
 ### POST /feedback
 
-"Found it", "Not here", and corrections. Status 201.
+"Found it", "Not here", and corrections. Status 201. Needs a signed-in account (401
+otherwise): reports decide what everyone is told, and each account counts once.
 
 ```json
 {"store_id": 2, "item": "maple syrup", "verdict": "found",
@@ -180,7 +181,7 @@ The store's departments, for the correction picker. 404 for an unknown store.
 | --- | --- |
 | verdict | `found` or `not_here` |
 | zone_id | optional. For `found`, where it was (the suggested zone, or a correction). For `not_here`, the zone it wasn't in. Must belong to the store, else 422 |
-| aisle | optional, ≤ 40 chars, kept only for `found`. Shown in search results only after 2+ shoppers type the same text |
+| aisle | optional, kept only for `found` and only when it looks like an aisle or sign label: ≤ 24 letters, digits, spaces and `#&'./-` (anything else is dropped, not rejected). Shown in search results only after 2+ shoppers type the same text |
 | search_id | optional; unknown ids are ignored |
 
 Response:
@@ -304,8 +305,8 @@ Sign in with Apple or Google. Every sign-in returns:
           "wants_tips": false, "providers": ["phone"]}}
 ```
 
-Send the token as `Authorization: Bearer <token>`. It doesn't expire; signing out or
-deleting the account revokes it. Only a SHA-256 of it is stored. `is_new` means this
+Send the token as `Authorization: Bearer <token>`. It ends after 90 days unused; signing
+out or deleting the account revokes it. Only a SHA-256 of it is stored. `is_new` means this
 sign-in created the account, so the app asks for a first name (`PATCH /me`).
 
 | Route | Body | Notes |
@@ -314,17 +315,23 @@ sign-in created the account, so the app asks for a first name (`PATCH /me`).
 | `POST /auth/phone/verify` | `{"phone", "code"}` | 400 wrong code, expired code, or too many tries (429) |
 | `POST /auth/email/start` | `{"email"}` | Same response shape; the email shows in full |
 | `POST /auth/email/verify` | `{"email", "code"}` | Codes last 10 minutes and 5 tries, and work once |
-| `POST /auth/apple` | `{"identity_token", "nonce"?, "first_name"?}` | Token checked against Apple's keys, audience `APPLE_BUNDLE_ID`; `nonce` is the raw value whose SHA-256 the app sent Apple |
-| `POST /auth/google` | `{"id_token", "nonce"?}` | Token checked against Google's keys, audience `GOOGLE_IOS_CLIENT_ID` |
+| `POST /auth/apple` | `{"identity_token", "nonce", "first_name"?}` | Token checked against Apple's keys, audience `APPLE_BUNDLE_ID`; `nonce` is the raw value whose SHA-256 the app sent Apple. Each nonce signs in once (a replay is 401) |
+| `POST /auth/google` | `{"id_token", "nonce"}` | Token checked against Google's keys, audience `GOOGLE_IOS_CLIENT_ID`. Each nonce signs in once |
 | `GET /me` | | 401 when the session ended |
 | `PATCH /me` | `{"first_name"?, "wants_tips"?}` | |
-| `DELETE /me` | | Deletes the account and its sign-ins; 204 |
+| `DELETE /me` | | Deletes the account and its sign-ins; 204. Today's limit counts stay with a hash of each way it signed in, so a new account made with any of them picks them up |
 | `POST /auth/signout` | | Revokes this session; 204 |
 
 - Signing in with a new method whose verified email matches an existing account adds it
   to that account.
-- Code sends are limited: 30 seconds apart and 5 an hour per phone or email, 10 an hour
-  per device, 20 an hour per IP (429 with a message the app shows).
+- Code sends are limited: 30 seconds apart and 5 an hour per phone or email (spellings of
+  one mailbox, like Gmail dots and `+tags`, count together), 10 an hour per device, 20 an
+  hour per IP (429 with a message the app shows). Past the overall hourly/daily cap
+  (`AISLE_CODES_PER_HOUR`, `AISLE_CODES_PER_DAY`), only numbers and emails that already
+  have an account get codes. Code records keep a hash of the phone or email, not the
+  address.
+- Sign-ins and code checks: `AISLE_SIGN_INS_PER_HOUR` (60) per IP. New accounts:
+  `AISLE_NEW_ACCOUNTS_PER_IP_PER_DAY` (20) per IP, then 429.
 - A method without keys in `backend/.env` answers 503 with a message to try another way.
 - Errors carry `{"detail": "…"}` meant for the shopper.
 
@@ -337,14 +344,14 @@ the same items. Every route needs a session. Joining with an invite code is free
 | --- | --- | --- |
 | `GET /lists` | | Summaries of the lists you're on: `id, name, version, is_owner, item_count, members` |
 | `POST /lists` | `{"name", "items": [item…]}` | Shares a list; 402 without Aisle+. 201 with the list |
-| `POST /lists/join` | `{"code"}` | Case and spacing don't matter; 404 for an unknown code |
+| `POST /lists/join` | `{"code"}` | Case and spacing don't matter; 404 for an unknown code. 20 tries an hour per account (60 per IP), then 429. 409 when the list has 20 people; 403 once the owner's Aisle+ has ended |
 | `GET /lists/{id}` | | The list; 404 if it's gone or you're not on it |
 | `POST /lists/{id}/changes` | `{"changes": [{"op": "upsert", "item": item} \| {"op": "delete", "id"}]}` | Latest write to an item wins; bumps `version` |
 | `PATCH /lists/{id}` | `{"name"}` | |
 | `DELETE /lists/{id}` | | The owner deletes it for everyone; anyone else leaves. 204 |
 
 An item is `{"id", "text", "quantity", "category_name", "is_done", "position"}`; `id` is the
-phone's UUID for it. A list is `{"id", "name", "invite_code", "version", "is_owner",
+phone's UUID for it. Invite codes are 8 characters (older lists keep their 6). A list is `{"id", "name", "invite_code", "version", "is_owner",
 "members": [{"first_name", "is_owner", "is_you"}], "items": [item…]}`, up to 500 items.
 The app keeps unconfirmed changes on the phone, sends them after a short pause, polls every
 few seconds while the list is open, and replays its own pending changes on top of the
@@ -364,17 +371,33 @@ checking the App Store's signature.
   session, the account. All rejected → 400. Returns the status below.
 - `GET /plus/status` →
   `{"is_plus": false, "expires_at": null, "product_id": null,
-    "photo_search": {"used": 2, "limit": 5}, "follow_up": {"used": 0, "limit": 10}}`
+    "photo_search": {"used": 2, "limit": 3}, "follow_up": {"used": 0, "limit": 5},
+    "ai_search": {"used": 12, "limit": 20}}`
+- A refund or revocation sticks: only a later purchase or renewal, or Apple's
+  `REFUND_REVERSED` notification, brings Aisle+ back. A transaction saved from before
+  the refund doesn't.
 
-Free limits, per UTC day, counted per account when signed in and otherwise per device:
-5 photo searches (`/identify`, `/lists/scan`, and `/chat` messages with a photo) and 10
-follow-ups (other `/chat` messages). A request only counts when it got an answer.
-Over the limit, or for an Aisle+-only feature, the server answers **402**:
+Free limits, per UTC day, counted per account when signed in and otherwise per IP:
+3 photo searches (`/identify`, `/lists/scan`, and `/chat` messages with a photo), 5
+follow-ups (other `/chat` messages), and 20 AI answers (`/search` and `/route` with the
+AI's help; 5 signed out). A request only counts when the AI added something. Past the
+AI-answer limit, `/search` and `/route` still work, from Aisle's own data and wording
+(`explanation` is null). Over the other limits, or for an Aisle+-only feature, the
+server answers **402**:
 
 ```json
-{"detail": {"code": "plus_required", "feature": "photo_search", "limit": 5,
-            "message": "You've used today's 5 free photo searches. Aisle+ has unlimited."}}
+{"detail": {"code": "plus_required", "feature": "photo_search", "limit": 3,
+            "message": "You've used today's 3 free photo searches. Aisle+ has unlimited."}}
 ```
+
+Aisle+ is unlimited within fair use: 50 photo searches, 100 follow-ups and 300 AI
+answers a day (`AISLE_PLUS_*`), counted apart from the free tier; past them, **429**
+with a message. Everyone's AI requests together are capped at `AISLE_AI_REQUESTS_PER_DAY`
+(30,000): past it, photo search and follow-ups answer **503** until the next UTC day, and
+search falls back to Aisle's own answers.
+
+In `/chat`, only the newest message's photo reaches the AI (the app sends no others);
+the model sees the first two messages and the latest nine, each cut to 2,000 characters.
 
 ## Analytics and errors (Milestone 7)
 
@@ -398,13 +421,16 @@ Basic, anonymous product analytics. Status 202.
 
 ### Access and limits
 
-- `/chat`, `/identify` and `/lists/scan` need a signed-in account (401 otherwise). Free
-  accounts get a few a day (402 `plus_required`); a use that returns nothing isn't counted.
+- `/chat`, `/identify`, `/lists/scan` and `/feedback` need a signed-in account (401
+  otherwise). Free accounts get a few a day (402 `plus_required`); a use that returns
+  nothing isn't counted.
 - Fair-use limits per account (per IP when signed out) return 429: searches, photos,
   follow-ups, routes, and writes (`/feedback`, `/events`, `/lists/parse`). Each network can
-  also only set up so many never-used stores' maps a day.
-- Sign-in codes: SMS only to `AISLE_SMS_COUNTRY_CODES` (US/Canada), per-target, device,
-  IP and global hourly/daily caps. `/auth/apple` and `/auth/google` require `nonce`;
+  also only set up so many never-used stores' maps a day; past the total for everyone,
+  only networks that already set up 5 today are refused.
+- Sign-in codes: SMS only to `AISLE_SMS_COUNTRY_CODES` (US/Canada; `+1` numbers in the
+  Caribbean and Bermuda, and premium 900/976 numbers, need their own entry such as
+  `1876`), per-target, device, IP and global hourly/daily caps. `/auth/apple` and `/auth/google` require `nonce`;
   `/auth/apple` also takes Apple's `authorization_code` so account deletion can revoke it.
 - The client IP is the last `X-Forwarded-For` entry (the one Heroku's router adds).
 - Request bodies over 8 MB get 413. On Heroku, plain HTTP gets a 308 to HTTPS and

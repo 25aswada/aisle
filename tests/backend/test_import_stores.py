@@ -434,11 +434,13 @@ def test_cleanup_deletes_data_past_its_retention(engine):
     from datetime import datetime, timedelta, timezone
 
     from backend.app.cleanup import clean_up
-    from backend.app.models import AnalyticsEvent, CodeRequest, EmailCode, UsageCounter
+    from backend.app.models import AnalyticsEvent, CodeRequest, EmailCode, UsageCounter, UsedSignInNonce
 
     now = datetime.now(timezone.utc)
     with Session(engine) as session:
         session.add_all([
+            UsedSignInNonce(nonce_hash="old", created_at=now - timedelta(days=3)),
+            UsedSignInNonce(nonce_hash="new", created_at=now),
             CodeRequest(channel="sms", target="+12155550100", created_at=now - timedelta(days=3)),
             CodeRequest(channel="sms", target="+12155550101", created_at=now),
             EmailCode(email="a@example.com", code_hash="x", expires_at=now, created_at=now - timedelta(days=2)),
@@ -449,7 +451,7 @@ def test_cleanup_deletes_data_past_its_retention(engine):
             AnalyticsEvent(name="old", occurred_at=now, received_at=now - timedelta(days=200)),
         ])
         session.commit()
-        assert clean_up(session, now) == {"code_requests": 1, "email_codes": 1, "usage_counters": 2,
+        assert clean_up(session, now) == {"code_requests": 1, "email_codes": 1, "used_nonces": 1, "usage_counters": 2,
                                           "analytics_events": 1, "search_events": 0}
         assert session.scalar(select(func.count()).select_from(UsageCounter)) == 2
         assert session.scalar(select(CodeRequest.target)) == "+12155550101"

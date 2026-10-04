@@ -1,11 +1,14 @@
 """Shared family lists: sharing needs the owner's Aisle+, joining is free, and every
 member's changes reach everyone."""
+from datetime import datetime, timedelta, timezone
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from backend.app.database import get_db
 from backend.app.main import app
+from backend.app.models import PlusEntitlement, SharedListMember, User
 from backend.app.plus import appstore
 from backend.app.routers.auth import get_phone_verifier
 from test_plus import FakeApple
@@ -73,11 +76,11 @@ def test_share_join_and_sync(api, family):
     assert shared.status_code == 201
     body = shared.json()
     code, list_id = body["invite_code"], body["id"]
-    assert len(code) == 6 and body["is_owner"] is True
+    assert len(code) == 8 and body["is_owner"] is True
     assert [i["text"] for i in body["items"]] == ["milk", "eggs"]
 
     # Joining is free, and codes forgive case and spacing.
-    joined = api.post("/lists/join", json={"code": f" {code[:3].lower()} {code[3:]} "}, headers=member)
+    joined = api.post("/lists/join", json={"code": f" {code[:4].lower()} {code[4:]} "}, headers=member)
     assert joined.status_code == 200
     assert joined.json()["is_owner"] is False
     assert [(m["first_name"], m["is_owner"]) for m in joined.json()["members"]] == [("Sam", True), ("Alex", False)]
@@ -128,3 +131,36 @@ def test_items_cant_move_between_lists(api, family):
              headers=owner)
     assert api.get(f"/lists/{first['id']}", headers=owner).json()["items"][0]["text"] == "milk"
     assert api.get(f"/lists/{second['id']}", headers=owner).json()["items"] == []
+
+
+def test_guessing_invite_codes_is_cut_off(api, family):
+    _, member = family
+    statuses = [api.post("/lists/join", json={"code": f"ZZZZZ{n:03d}"}, headers=member).status_code
+                for n in range(21)]
+    assert statuses == [404] * 20 + [429]
+
+
+def test_a_list_holds_up_to_20_people(api, family, engine):
+    owner, member = family
+    shared = api.post("/lists", json={"name": "Groceries"}, headers=owner).json()
+    with Session(engine) as db:
+        for _ in range(19):
+            someone = User()
+            db.add(someone)
+            db.flush()
+            db.add(SharedListMember(list_id=shared["id"], user_id=someone.id))
+        db.commit()
+    full = api.post("/lists/join", json={"code": shared["invite_code"]}, headers=member)
+    assert full.status_code == 409 and "20 people" in full.json()["detail"]
+
+
+def test_no_one_new_joins_once_the_owners_aisle_plus_ends(api, family, engine):
+    owner, member = family
+    shared = api.post("/lists", json={"name": "Groceries"}, headers=owner).json()
+    with Session(engine) as db:
+        db.query(PlusEntitlement).update({PlusEntitlement.expires_at: datetime.now(timezone.utc) - timedelta(days=1)})
+        db.commit()
+    refused = api.post("/lists/join", json={"code": shared["invite_code"]}, headers=member)
+    assert refused.status_code == 403 and "renew" in refused.json()["detail"]
+    # The owner still has the list.
+    assert api.get(f"/lists/{shared['id']}", headers=owner).status_code == 200

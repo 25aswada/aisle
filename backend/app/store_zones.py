@@ -2,8 +2,10 @@
 
 Imported stores start with no zones: the template is copied the first time a store is
 used, so tens of thousands of stores don't each carry a copy until someone shops there.
-Each network, and everyone together, can only set up so many new stores a day, so
-nobody can fill the database by opening every store.
+Each network can only set up so many new stores a day, so nobody can fill the database
+by opening every store. Past the daily total for everyone, networks that have already
+set up a few stores today are refused too, but a shopper opening their own store
+never is, so many networks together can't lock everyone else out.
 """
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -61,13 +63,19 @@ def ensure_zones(session: Session, store: Store) -> None:
         session.rollback()
 
 
+# New stores a network can always set up in a day, even past the total for everyone.
+LIGHT_USE_MAPS = 5
+
+
 def _spend_new_store_budget(session: Session) -> None:
     ip = request_ip.get()
     if ip is None:
         return  # Scripts (seeding, imports) aren't limited.
     settings, today = get_settings(), day_window()
-    if (bump(session, f"ip:{ip}", "new_maps", today) > settings.aisle_new_store_maps_per_ip_per_day
-            or bump(session, "everyone", "new_maps", today) > settings.aisle_new_store_maps_per_day):
+    mine = bump(session, f"ip:{ip}", "new_maps", today)
+    if mine > settings.aisle_new_store_maps_per_ip_per_day or (
+            bump(session, "everyone", "new_maps", today) > settings.aisle_new_store_maps_per_day
+            and mine > LIGHT_USE_MAPS):
         raise HTTPException(status_code=429, detail="Aisle is setting up a lot of new stores right now. Try again later.")
 
 

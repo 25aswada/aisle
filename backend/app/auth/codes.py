@@ -5,7 +5,10 @@ random digits, stored only as a hash, valid for 10 minutes and 5 tries.
 
 Every send is rate limited by phone/email, device and IP, and all sends together are
 capped per hour and day, so a script can't run up the Twilio bill or flood someone's
-inbox. Texts only go to the countries in settings (the US and Canada by default).
+inbox; past the overall cap, only people who already have an account still get codes.
+The records behind these limits keep a hash of the phone or email, not the address,
+so they can outlive a deleted account (a couple of days) and deleting can't reset them.
+Texts only go to the countries in settings (the US and Canada by default).
 """
 from __future__ import annotations
 
@@ -20,7 +23,7 @@ from pathlib import Path
 from typing import Protocol
 
 import httpx
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select, text, update
 from sqlalchemy.orm import Session
 
 from ..models import CodeRequest, EmailCode
@@ -66,9 +69,25 @@ def normalize_phone(raw: str) -> str:
             digits = "1" + digits
         elif not (len(digits) == 11 and digits.startswith("1")):
             raise CodeProblem(400, "That phone number doesn't look right. Include the country code if it's not a US number.")
-    if not 8 <= len(digits) <= 15 or digits.startswith("0"):
+    if not 8 <= len(digits) <= 15 or digits.startswith("0") or (digits.startswith("1") and len(digits) != 11):
         raise CodeProblem(400, "That phone number doesn't look right.")
     return "+" + digits
+
+
+def canonical_email(email: str) -> str:
+    """One mailbox's many spellings as one: "+tags" dropped, and Gmail's dots too."""
+    local, _, domain = email.partition("@")
+    local = local.split("+", 1)[0] or local
+    if domain in ("gmail.com", "googlemail.com"):
+        local, domain = local.replace(".", ""), "gmail.com"
+    return f"{local}@{domain}"
+
+
+def target_key(channel: str, target: str) -> str:
+    """What code records keep for a phone or email: a hash, never the address."""
+    if channel == "email":
+        target = canonical_email(target)
+    return hashlib.sha256(f"{channel}:{target}".encode()).hexdigest()
 
 
 # MARK: - Rate limits
@@ -77,6 +96,7 @@ def check_rate_limits(db: Session, channel: str, target: str, device_id: str | N
                       now: datetime | None = None) -> None:
     now = now or datetime.now(timezone.utc)
     hour_ago = now - timedelta(hours=1)
+    target = target_key(channel, target)
 
     def count(*conditions) -> int:
         return db.scalar(select(func.count()).select_from(CodeRequest).where(
@@ -94,8 +114,23 @@ def check_rate_limits(db: Session, channel: str, target: str, device_id: str | N
         raise CodeProblem(429, "Too many codes from this network. Try again later.")
 
 
+# Area codes inside +1 that belong to other countries (the Caribbean and Bermuda). Texts
+# there cost far more and are a favorite of SMS-pumping fraud, so +1 alone doesn't allow
+# them; list one in settings (e.g. "1876") to text it.
+OTHER_NANP_COUNTRIES = {
+    "242", "246", "264", "268", "284", "345", "441", "473", "649", "658", "664", "721",
+    "758", "767", "784", "809", "829", "849", "868", "869", "876",
+}
+# Premium-rate numbers.
+PREMIUM_NANP = {"900", "976"}
+
+
 def check_sms_country(phone: str, country_codes: tuple[str, ...]) -> None:
-    if not any(phone[1:].startswith(code) for code in country_codes):
+    digits = phone[1:]
+    allowed = any(digits.startswith(code) for code in country_codes)
+    if allowed and digits.startswith("1") and digits[1:4] in OTHER_NANP_COUNTRIES | PREMIUM_NANP:
+        allowed = any(len(code) > 1 and digits.startswith(code) for code in country_codes)
+    if not allowed:
         raise CodeProblem(400, "Aisle can only text US and Canadian numbers for now. Try email instead.")
 
 
@@ -104,8 +139,11 @@ _CODE_LOCK = 0x4149534C45  # "AISLE"
 
 
 def reserve_code_request(db: Session, channel: str, target: str, device_id: str | None, ip: str | None,
-                         *, per_hour: int, per_day: int, now: datetime | None = None) -> None:
-    """Checks every limit and records the send in one step, before anything is sent."""
+                         *, per_hour: int, per_day: int, returning: bool = False,
+                         now: datetime | None = None) -> None:
+    """Checks every limit and records the send in one step, before anything is sent.
+    `returning`: the phone or email already signs in to an account. Those still get
+    codes past the overall cap, so a flood of new numbers can't lock everyone out."""
     now = now or datetime.now(timezone.utc)
     if db.get_bind().dialect.name == "postgresql":
         db.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": _CODE_LOCK})
@@ -115,10 +153,12 @@ def reserve_code_request(db: Session, channel: str, target: str, device_id: str 
         return db.scalar(select(func.count()).select_from(CodeRequest).where(
             CodeRequest.channel == channel, CodeRequest.created_at >= moment)) or 0
 
-    if sent_since(now - timedelta(hours=1)) >= per_hour or sent_since(now - timedelta(days=1)) >= per_day:
+    if not returning and (sent_since(now - timedelta(hours=1)) >= per_hour
+                          or sent_since(now - timedelta(days=1)) >= per_day):
         log.warning("Global %s code limit reached", channel)
         raise CodeProblem(429, "Aisle is sending a lot of codes right now. Try again a little later.")
-    db.add(CodeRequest(channel=channel, target=target, device_id=device_id, ip=ip, created_at=now))
+    db.add(CodeRequest(channel=channel, target=target_key(channel, target), device_id=device_id, ip=ip,
+                       created_at=now))
     db.commit()
 
 
@@ -316,12 +356,21 @@ def check_email_code(db: Session, email: str, code: str) -> bool:
     )
     if current is None or _aware(current.expires_at) <= now:
         raise CodeProblem(400, "That code has expired. Ask for a new one.")
-    if current.attempts >= MAX_CODE_ATTEMPTS:
-        raise CodeProblem(429, "Too many wrong tries. Ask for a new code.")
-    current.attempts += 1
-    if hmac.compare_digest(current.code_hash, _hash_code(email, code)):
-        current.consumed_at = now
-        db.commit()
-        return True
+    # Count the try in the same statement that checks the limit, so parallel guesses
+    # can't all slip in under it.
+    counted = db.execute(
+        update(EmailCode).where(EmailCode.id == current.id, EmailCode.attempts < MAX_CODE_ATTEMPTS)
+        .values(attempts=EmailCode.attempts + 1).returning(EmailCode.id)
+    ).scalar()
     db.commit()
-    return False
+    if counted is None:
+        raise CodeProblem(429, "Too many wrong tries. Ask for a new code.")
+    if not hmac.compare_digest(current.code_hash, _hash_code(email, code)):
+        return False
+    # And use it up the same way, so it signs in once.
+    used = db.execute(
+        update(EmailCode).where(EmailCode.id == current.id, EmailCode.consumed_at.is_(None))
+        .values(consumed_at=now).returning(EmailCode.id)
+    ).scalar()
+    db.commit()
+    return used is not None

@@ -5,7 +5,8 @@ import UIKit
 /// photo searches per day (and a few small thumbnails), follow-up questions with the
 /// latest exchange, and multi-store trips. Views read the counts with @AppStorage.
 enum MemberActivity {
-    static let freePhotosPerDay = 5
+    static let freePhotosPerDay = 3
+    static let freeFollowUpsPerDay = 5
 
     static let photosKey = "aisle.member.photos"
     static let photoDaysKey = "aisle.member.photoDays"

@@ -57,18 +57,35 @@ class Settings(BaseSettings):
 
     # Fair use, per account (or per network when signed out), per hour.
     aisle_searches_per_hour: int = 120
-    aisle_photos_per_hour: int = 40
-    aisle_follow_ups_per_hour: int = 80
+    aisle_photos_per_hour: int = 20
+    aisle_follow_ups_per_hour: int = 40
     aisle_routes_per_hour: int = 60
     aisle_writes_per_hour: int = 120
+    # Sign-ins and sign-in code checks, per network per hour.
+    aisle_sign_ins_per_hour: int = 60
+    # Accounts one network can create in a day, so limits per account mean limits per person.
+    aisle_new_accounts_per_ip_per_day: int = 20
     # Store maps are laid out the first time a store is used; this caps how many new ones
-    # one network, and everyone together, can cause in a day.
+    # one network can cause in a day. Past the daily total for everyone, only networks
+    # that have already set up a few today are refused, so shoppers aren't locked out.
     aisle_new_store_maps_per_ip_per_day: int = 150
     aisle_new_store_maps_per_day: int = 3000
 
-    # Aisle+. The free tier's daily limits (per account, or per device when signed out).
-    aisle_free_photo_searches: int = 5
-    aisle_free_follow_ups: int = 10
+    # Aisle+. The free tier's daily limits (per account, or per network when signed out).
+    aisle_free_photo_searches: int = 3
+    aisle_free_follow_ups: int = 5
+    # Searches answered with the AI's help. Past the limit, searches still work with
+    # Aisle's own answers and wording.
+    aisle_free_ai_searches: int = 20
+    # Signed out (the app always signs in, so this is scripts), per network.
+    aisle_signed_out_ai_searches: int = 5
+    # Aisle+ is unlimited within fair use: daily ceilings no real shopper gets near.
+    aisle_plus_photo_searches: int = 50
+    aisle_plus_follow_ups: int = 100
+    aisle_plus_ai_searches: int = 300
+    # Everyone's AI requests together in a day. Past it, AI features pause until tomorrow
+    # (searches fall back to Aisle's own answers): a backstop on the AI bill.
+    aisle_ai_requests_per_day: int = 30000
     # Accept purchases from Xcode's local StoreKit testing. Ignored on Heroku.
     aisle_plus_allow_xcode: bool = False
     model_config = SettingsConfigDict(

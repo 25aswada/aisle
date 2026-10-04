@@ -13,7 +13,7 @@ from ..schemas import (
 )
 from ..config import get_settings
 from ..limits import rate_limit
-from ..plus.access import FOLLOW_UP, PHOTO_SEARCH, require_signed_in, reserve_allowance
+from ..plus.access import FOLLOW_UP, PHOTO_SEARCH, ai_search_allowance, require_signed_in, reserve_allowance
 from ..search import StoreNotFound, search
 from .auth import CallerDep
 
@@ -30,29 +30,43 @@ def search_item(
     device_id: DeviceID = None,
 ):
     rate_limit(db, caller.subject, "search", get_settings().aisle_searches_per_hour)
+    allowance = ai_search_allowance(db, caller) if model or explainer else None
+    if allowance is None:
+        # Out of AI answers for today (or no AI configured): Aisle's own data and wording.
+        model = explainer = None
     try:
-        return search(db, body.query, body.store_id, model, device_id, explainer)
+        result = search(db, body.query, body.store_id, model, device_id, explainer)
     except StoreNotFound:
+        if allowance:
+            allowance.refund()
         raise HTTPException(status_code=404, detail="Store not found")
+    if allowance and result.explanation is None and result.source != "model":
+        allowance.refund()  # The AI added nothing to this answer.
+    return result
 
 
 # Follow-ups write the reply while working out whether it's a new item to find.
 _follow_up_pool = ThreadPoolExecutor(max_workers=8, thread_name_prefix="aisle-follow-up")
-# Earlier photos in a conversation beyond this many are dropped before it goes to the model.
-MAX_CHAT_PHOTOS = 2
+# How much of a conversation goes to the model: the search and its answer that started
+# it, then the latest turns, each cut to a length real replies stay well under.
+MAX_CHAT_MESSAGES = 11
+MAX_CHAT_MESSAGE_CHARS = 2000
 
 
-def recent_photos_only(messages: list[dict]) -> list[dict]:
-    """The conversation with only its latest photos, which keeps each request's cost down."""
-    kept, trimmed = 0, []
-    for message in reversed(messages):
-        if message.get("image"):
-            kept += 1
-            if kept > MAX_CHAT_PHOTOS:
-                message = {key: value for key, value in message.items() if key != "image"}
-                message["content"] = message.get("content") or "(a photo)"
+def conversation_for_model(messages: list[dict]) -> list[dict]:
+    """The conversation as the model sees it. Only the newest message keeps its photo:
+    that's the one being paid for (the app sends no others), and earlier replies already
+    describe the rest. Long conversations keep their start and their latest turns."""
+    if len(messages) > MAX_CHAT_MESSAGES:
+        messages = messages[:2] + messages[-(MAX_CHAT_MESSAGES - 2):]
+    trimmed = []
+    for index, message in enumerate(messages):
+        message = {**message, "content": message.get("content", "")[:MAX_CHAT_MESSAGE_CHARS]}
+        if message.get("image") and index != len(messages) - 1:
+            del message["image"]
+            message["content"] = message["content"] or "(a photo)"
         trimmed.append(message)
-    return trimmed[::-1]
+    return trimmed
 
 
 @router.post("/chat", response_model=ChatResponse)
@@ -70,10 +84,10 @@ def follow_up(
     if store is None:
         raise HTTPException(status_code=404, detail="Store not found")
     rate_limit(db, caller.subject, "follow_up", get_settings().aisle_follow_ups_per_hour)
-    feature = PHOTO_SEARCH if body.messages[-1].image else FOLLOW_UP
+    messages = conversation_for_model([m.model_dump(exclude_none=True) for m in body.messages])
+    feature = PHOTO_SEARCH if messages[-1].get("image") else FOLLOW_UP
     allowance = reserve_allowance(db, caller, feature)
     place = f"{store.name} ({store.retailer_name}), {store.address}"
-    messages = recent_photos_only([m.model_dump(exclude_none=True) for m in body.messages])
     reply = _follow_up_pool.submit(chat_safely, explainer, follow_up_system_prompt(place), messages)
     item = wanted_item_safely(explainer, messages)
     # The reply already answers in context, so the search skips writing its own.
