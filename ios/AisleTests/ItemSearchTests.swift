@@ -141,14 +141,16 @@ final class DatabaseLocationDecodingTests: XCTestCase {
 
 final class ReplyTextTests: XCTestCase {
     private func result(
-        department: String?, aisle: String? = nil, zoneID: Int? = 1, confidence: Confidence,
-        availability: Availability = .likely, neighbors: [String] = []
+        item: String = "lychee", department: String?, aisle: String? = nil, section: String? = nil,
+        zoneID: Int? = 1, category: String? = nil, confidence: Confidence,
+        availability: Availability = .likely, source: LocationSource = .model,
+        neighbors: [String] = [], reports: ReportCounts? = nil, modifiers: [String] = []
     ) -> ItemSearchResult {
         ItemSearchResult(
-            searchID: nil, query: "lychee", item: "lychee", modifiers: [], quantity: nil, storeID: 2,
-            concept: nil, category: nil,
-            location: ItemLocation(department: department, zoneID: zoneID, aisle: aisle, section: nil, neighbors: neighbors),
-            availability: availability, confidence: confidence, source: .model, reports: nil
+            searchID: nil, query: item, item: item, modifiers: modifiers, quantity: nil, storeID: 2,
+            concept: nil, category: category.map { ItemCategory(slug: $0.lowercased(), name: $0) },
+            location: ItemLocation(department: department, zoneID: zoneID, aisle: aisle, section: section, neighbors: neighbors),
+            availability: availability, confidence: confidence, source: source, reports: reports
         )
     }
 
@@ -156,55 +158,100 @@ final class ReplyTextTests: XCTestCase {
         String(result.replyText(at: retailer).characters)
     }
 
-    func testLowConfidenceNamesTheStore() {
-        let reply = text(result(department: "Flowers & Produce", confidence: .low, neighbors: ["Mangoes"]), at: "Trader Joe's")
+    func testHighConfidenceDescribesAisleShelfNeighboursAndSource() {
+        let reply = text(result(
+            item: "maple syrup", department: "Pantry & Breakfast", aisle: "14", section: "Left side",
+            category: "Syrups & Sweeteners", confidence: .high, source: .database,
+            neighbors: ["Pancake mix", "Honey", "Sweeteners", "Jam"]
+        ), at: "Costco")
         XCTAssertEqual(
             reply,
-            "I'm not certain, but Trader Joe's usually keeps lychee in Flowers & Produce. Look near mangoes. If it's not there, ask an employee."
+            "Found it! Maple syrup is in Aisle 14 · Left side, in the Pantry & Breakfast section at Costco. "
+                + "It's usually shelved with the syrups & sweeteners, near pancake mix, honey and sweeteners. "
+                + "This comes from Costco's own store data."
+        )
+    }
+
+    func testMediumExplainsTypicalLayoutAndShopperReports() {
+        let reply = text(result(
+            item: "cheese", department: "Dairy & Eggs Cooler", category: "Cheese", confidence: .medium,
+            source: .fallback, neighbors: ["Butter"], reports: ReportCounts(found: 2, notHere: 1)
+        ), at: "Costco")
+        XCTAssertEqual(
+            reply,
+            "At Costco, cheese is most likely in Dairy & Eggs Cooler. Look near butter. "
+                + "There's no aisle number on file, so this is based on Costco's typical layout. "
+                + "2 shoppers found it here and 1 didn't."
+        )
+        XCTAssertFalse(reply.contains("shelved with the cheese"))
+    }
+
+    func testLowConfidenceNamesTheStoreAndHedges() {
+        let reply = text(result(
+            department: "Flowers & Produce", category: "Fruit", confidence: .low, neighbors: ["Mangoes"]
+        ), at: "Trader Joe's")
+        XCTAssertEqual(
+            reply,
+            "I'm not certain, but Trader Joe's usually keeps lychee in Flowers & Produce. "
+                + "It's usually shelved with the fruit, near mangoes. "
+                + "This is an AI estimate for Trader Joe's, not a confirmed spot. If it's not there, ask an employee."
         )
         XCTAssertFalse(reply.contains("stores like this"))
     }
 
-    func testUnlikelyWithoutDepartmentSaysStoreDoesNotCarryIt() {
-        let reply = text(result(department: nil, confidence: .low, availability: .unlikely), at: "Trader Joe's")
-        XCTAssertEqual(reply, "Trader Joe's typically doesn't carry lychee, but you can ask an employee.")
+    func testModifiersAreCalledOut() {
+        let reply = text(result(item: "milk", department: "Dairy", confidence: .medium, source: .database, modifiers: ["Organic", "2%"]), at: "Target")
+        XCTAssertTrue(reply.hasSuffix(" You asked for organic and 2%, so check the labels."))
     }
 
-    func testUnlikelyWithDepartmentPointsThereAndToAnEmployee() {
+    func testNotHereReportsAskToDoubleCheck() {
+        let reply = text(result(department: "Produce", confidence: .medium, source: .observations, reports: ReportCounts(found: 0, notHere: 3)), at: "Target")
+        XCTAssertTrue(reply.contains(" Shoppers have confirmed it here. 3 shoppers couldn't find it here, so double-check."))
+    }
+
+    func testUnlikelyExplainsWhyAndPointsToAnEmployee() {
+        let reply = text(result(
+            item: "underwear", department: "Clothing", zoneID: nil, category: "Clothing",
+            confidence: .low, availability: .unlikely, neighbors: ["socks"]
+        ), at: "Trader Joe's")
+        XCTAssertEqual(
+            reply,
+            "Trader Joe's typically doesn't carry underwear. It's usually sold with clothing, which Trader Joe's "
+                + "doesn't normally stock. An employee can tell you for sure, or point you to something similar."
+        )
+    }
+
+    func testUnlikelyWithARealDepartmentPointsThere() {
         let reply = text(result(department: "Frozen", confidence: .low, availability: .unlikely), at: "Costco")
-        XCTAssertEqual(reply, "Costco typically doesn't carry lychee. If this one does, check Frozen, or ask an employee.")
+        XCTAssertEqual(reply, "Costco typically doesn't carry lychee. If this location does have it, check Frozen first, or ask an employee.")
     }
 
     func testUnlikelyCategoryWithoutAZoneIsNotPresentedAsAPlace() {
         // Trader Joe's has no Clothing department; "Clothing" is only the item's category.
         let underwear = result(department: "Clothing", zoneID: nil, confidence: .low, availability: .unlikely, neighbors: ["socks"])
         XCTAssertNil(underwear.placeInStore)
-        XCTAssertEqual(text(underwear, at: "Trader Joe's"), "Trader Joe's typically doesn't carry lychee, but you can ask an employee.")
+        XCTAssertFalse(text(underwear, at: "Trader Joe's").contains("check Clothing"))
     }
 
-    func testUnknownLocationNamesTheStore() {
-        let reply = text(result(department: nil, confidence: .low), at: "Target")
-        XCTAssertEqual(reply, "I'm not sure where lychee is at Target yet. Try a more common name, or ask an employee.")
-    }
-
-    func testMediumNamesTheStore() {
+    func testUnknownLocationNamesTheStoreAndSuggestsTheCategory() {
         XCTAssertEqual(
-            text(result(department: "Produce", confidence: .medium), at: "Walmart"),
-            "At Walmart, lychee is most likely in Produce."
+            text(result(department: nil, category: "Snacks", confidence: .low), at: "Target"),
+            "I'm not sure where lychee is at Target yet. It sounds like snacks, so that part of the store is a good "
+                + "place to start. Try a more common name, or ask an employee."
         )
     }
 
     func testFallsBackToThisStoreWithoutARetailer() {
-        XCTAssertEqual(
-            text(result(department: nil, confidence: .low, availability: .unlikely), at: nil),
-            "This store typically doesn't carry lychee, but you can ask an employee."
-        )
+        XCTAssertTrue(text(result(department: nil, confidence: .low, availability: .unlikely), at: nil).hasPrefix("This store typically doesn't carry lychee."))
         XCTAssertTrue(text(result(department: "Produce", confidence: .low), at: nil).contains("this store usually keeps"))
     }
 
     func testNeverMentionsAnAisleThatIsNotOnFile() {
         for confidence in [Confidence.high, .medium, .low] {
-            XCTAssertFalse(text(result(department: "Produce", confidence: confidence), at: "Costco").contains("Aisle"))
+            for source in [LocationSource.database, .observations, .storeLayout, .model, .fallback] {
+                let reply = text(result(department: "Produce", confidence: confidence, source: source), at: "Costco")
+                XCTAssertFalse(reply.contains("Aisle "), "\(confidence) \(source): \(reply)")
+            }
         }
         XCTAssertTrue(text(result(department: "Produce", aisle: "7", confidence: .high), at: "Costco").contains("Aisle 7"))
     }

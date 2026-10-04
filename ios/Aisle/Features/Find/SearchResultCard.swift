@@ -320,9 +320,10 @@ extension ItemSearchResult {
         return sectionLabel.map { "\(aisle) · \($0)" } ?? aisle
     }
 
-    /// A short, friendly answer composed on the device from the structured fields, naming
-    /// the shopper's store ("Trader Joe's usually keeps…") rather than "stores like this".
-    /// It only restates what the result contains; it never adds an aisle or a place.
+    /// A friendly, descriptive answer composed on the device from the structured fields:
+    /// where to go, what it's shelved with and next to, where that answer came from, and
+    /// what other shoppers reported. It names the shopper's store ("Trader Joe's usually
+    /// keeps…"), and only restates what the result contains; it never adds an aisle or a place.
     func replyText(at retailer: String?) -> AttributedString {
         var reply = AttributedString()
         func plain(_ text: String) { reply.append(AttributedString(text)) }
@@ -333,20 +334,27 @@ extension ItemSearchResult {
         }
 
         let store = retailer ?? "This store"
+        let storeLower = retailer ?? "this store"
+        let possessive = retailer.map { "\($0)'s" } ?? "this store's"
         let atStore = retailer.map { "at \($0)" } ?? "in this store"
         let name = item.prefix(1).uppercased() + item.dropFirst()
         let department = placeInStore
+        let categoryName = category?.name.lowercased()
 
-        // The store probably doesn't stock it: say so, then point to a person.
+        // The store probably doesn't stock it: say so, explain why, point to a person.
         if availability == .unlikely {
             plain("\(store) typically doesn't carry ")
             strong(item)
+            plain(".")
+            if let categoryName, categoryName != item.lowercased() {
+                plain(" It's usually sold with \(categoryName), which \(storeLower) doesn't normally stock.")
+            }
             if let department {
-                plain(". If this one does, check ")
+                plain(" If this location does have it, check ")
                 strong(department)
-                plain(", or ask an employee.")
+                plain(" first, or ask an employee.")
             } else {
-                plain(", but you can ask an employee.")
+                plain(" An employee can tell you for sure, or point you to something similar.")
             }
             return reply
         }
@@ -354,39 +362,92 @@ extension ItemSearchResult {
         guard let department else {
             plain("I'm not sure where ")
             strong(item)
-            plain(" is \(atStore) yet. Try a more common name, or ask an employee.")
+            plain(" is \(atStore) yet.")
+            if let categoryName {
+                plain(" It sounds like \(categoryName), so that part of the store is a good place to start.")
+            }
+            plain(" Try a more common name, or ask an employee.")
             return reply
         }
 
+        // 1. Where to go.
         switch confidence {
         case .high:
             if let aisle = aisleDisplay {
                 plain("Found it! \(name) is in ")
                 strong(aisle)
-                plain(", in \(department).")
+                plain(", in the \(department) section\(retailer.map { " at \($0)" } ?? "").")
             } else {
                 plain("\(name) is in ")
                 strong(department)
-                plain(".")
+                plain(retailer.map { " at \($0)." } ?? ".")
             }
         case .medium:
             plain(retailer.map { "At \($0), \(item) is most likely in " } ?? "\(name) is most likely in ")
             strong(aisleDisplay.map { "\($0), \(department)" } ?? department)
             plain(".")
         case .low:
-            plain("I'm not certain, but \(retailer ?? "this store") usually keeps \(item) in ")
+            plain("I'm not certain, but \(storeLower) usually keeps \(item) in ")
             strong(department)
             plain(".")
         }
 
-        let near = location.neighbors.prefix(2).map { $0.lowercased() }
-        if !near.isEmpty {
-            plain(" Look near \(near.joined(separator: " and ")).")
+        // 2. What it's shelved with and next to.
+        let near = location.neighbors.prefix(3).map { $0.lowercased() }
+        // Skip "shelved with the cheese" when the category just repeats the item.
+        let shelvedWith = categoryName.flatMap { $0 == item.lowercased() ? nil : "shelved with the \($0)" }
+        let lookNear = near.isEmpty ? nil : "near \(Self.list(near))"
+        switch (shelvedWith, lookNear) {
+        case let (with?, near?): plain(" It's usually \(with), \(near).")
+        case let (with?, nil): plain(" It's usually \(with).")
+        case let (nil, near?): plain(" Look \(near).")
+        case (nil, nil): break
+        }
+
+        // 3. Where the answer came from.
+        switch source {
+        case .database:
+            plain(" This comes from \(possessive) own store data.")
+        case .observations:
+            plain(" Shoppers have confirmed it here.")
+        case .storeLayout:
+            plain(" That's from \(possessive) layout.")
+        case .model:
+            plain(" This is an AI estimate for \(storeLower), not a confirmed spot.")
+        case .fallback:
+            if aisleDisplay == nil {
+                plain(" There's no aisle number on file, so this is based on \(possessive) typical layout.")
+            } else {
+                plain(" This is based on \(possessive) typical layout.")
+            }
+        }
+        if let reports {
+            switch (reports.found, reports.notHere) {
+            case (0, 0): break
+            case let (found, 0): plain(" \(Self.shoppers(found)) found it here.")
+            case let (0, notHere): plain(" \(Self.shoppers(notHere)) couldn't find it here, so double-check.")
+            case let (found, notHere): plain(" \(Self.shoppers(found)) found it here and \(notHere) didn't.")
+            }
+        }
+
+        // 4. Anything the shopper asked for specifically.
+        if !modifiers.isEmpty {
+            plain(" You asked for \(Self.list(modifiers.map { $0.lowercased() })), so check the labels.")
         }
         if confidence == .low {
             plain(" If it's not there, ask an employee.")
         }
         return reply
+    }
+
+    /// "a", "a and b", "a, b and c".
+    private static func list(_ items: [String]) -> String {
+        guard items.count > 1 else { return items.first ?? "" }
+        return items.dropLast().joined(separator: ", ") + " and " + items[items.count - 1]
+    }
+
+    private static func shoppers(_ count: Int) -> String {
+        count == 1 ? "1 shopper" : "\(count) shoppers"
     }
 
     /// Shape-only stand-in shown redacted while a search loads.
