@@ -92,15 +92,20 @@ def order_points(points: list[Point], start: Point, end: Point | None) -> list[i
 
 
 def plan_route(
-    db: Session, store: Store, items: list[tuple[str, str]], model: LocationModel | None
+    db: Session, store: Store, items: list[tuple[str, str]], model: LocationModel | None,
+    resolved: dict[str, Resolution] | None = None,
 ) -> Route:
-    limited = LimitedModel(model, MAX_MODEL_CALLS_PER_ROUTE) if model else None
+    """`resolved` reuses placements already worked out for some items (multi-store trips)."""
+    limited = model
+    if model is not None and not isinstance(model, LimitedModel):
+        limited = LimitedModel(model, MAX_MODEL_CALLS_PER_ROUTE)
     zones = {z.id: z for z in db.scalars(select(StoreZone).where(StoreZone.store_id == store.id))}
     by_zone: dict[object, Stop] = {}
     unplaced: list[tuple[PlannedItem, str]] = []
 
     for item_id, text in items:
-        planned = PlannedItem(item_id, text, resolve(db, parse_intent(text), store, limited))
+        resolution = (resolved or {}).get(item_id) or resolve(db, parse_intent(text), store, limited)
+        planned = PlannedItem(item_id, text, resolution)
         res = planned.resolution
         if res.department is None:
             unplaced.append((planned, "unknown"))
@@ -126,3 +131,54 @@ def plan_route(
     distance = path_length([(s.zone.x, s.zone.y) for s in ordered], start, end) if ordered else 0.0
     # Stops without coordinates go last, before checkout, in layout order.
     return Route(stops=ordered + floating, unplaced=unplaced, distance=round(distance, 3))
+
+
+# Multi-store trips cap AI calls across every store.
+MAX_MODEL_CALLS_PER_MULTI_ROUTE = 10
+
+
+@dataclass
+class Leg:
+    store: Store
+    route: Route
+
+
+def plan_multi_store(
+    db: Session, stores: list[Store], items: list[tuple[str, str]], model: LocationModel | None
+) -> tuple[list[Leg], list[tuple[str, str, str]]]:
+    """Each item goes to the first store (in the shopper's order) that likely carries it
+    in a known department, else the first that might. Items no store carries come back
+    as (id, text, reason). Stores without items are dropped; each remaining store gets
+    its own route.
+    """
+    limited = LimitedModel(model, MAX_MODEL_CALLS_PER_MULTI_ROUTE) if model else None
+    assigned: dict[int, list[tuple[str, str]]] = {store.id: [] for store in stores}
+    resolved: dict[int, dict[str, Resolution]] = {store.id: {} for store in stores}
+    nowhere: list[tuple[str, str, str]] = []
+    for item_id, text in items:
+        intent = parse_intent(text)
+        maybe: Store | None = None
+        chosen: Store | None = None
+        reason = "unknown"
+        for store in stores:
+            resolution = resolve(db, intent, store, limited)
+            resolved[store.id][item_id] = resolution
+            if resolution.department is None:
+                continue
+            if resolution.availability == "unlikely":
+                reason = "not_carried"
+                continue
+            if resolution.availability == "likely":
+                chosen = store
+                break
+            maybe = maybe or store
+        target = chosen or maybe
+        if target is None:
+            nowhere.append((item_id, text, reason))
+        else:
+            assigned[target.id].append((item_id, text))
+    legs = [
+        Leg(store=store, route=plan_route(db, store, assigned[store.id], limited, resolved[store.id]))
+        for store in stores if assigned[store.id]
+    ]
+    return legs, nowhere

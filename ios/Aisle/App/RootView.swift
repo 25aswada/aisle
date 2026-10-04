@@ -17,7 +17,7 @@ struct RootView: View {
                 .tabItem { Label("Find", systemImage: "magnifyingglass") }
                 .tag(Tab.find)
 
-            ShoppingListView(api: api, analytics: analytics)
+            ShoppingListView(api: api, location: location, analytics: analytics)
                 .tabItem { Label("List", systemImage: "checklist") }
                 .tag(Tab.list)
 

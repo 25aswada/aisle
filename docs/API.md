@@ -269,6 +269,28 @@ are approximate template positions. Zones without coordinates come last. `unplac
 reasons: `unknown` (no department) or `not_carried` (the store format usually doesn't
 stock it).
 
+### POST /route/multi
+
+One trip across 2–4 stores (Aisle+; 402 with `feature: "multi_store"` otherwise).
+
+```json
+{"store_ids": [2, 9], "items": [{"id": "a", "text": "milk"}, {"id": "b", "text": "hammer"}]}
+```
+
+Each item goes to the first store, in the order sent, that likely carries it in a known
+department; failing that, the first that might. Stores that end up with nothing are left
+out. Each leg is a `/route` response for one store (with `store_name`, `retailer_name`), in
+the shopper's order. Top-level `unplaced` holds items none of the stores would carry. At
+most 10 AI calls across the whole trip. Repeated or unknown stores → 422 / 404.
+
+```json
+{"legs": [{"store_id": 2, "store_name": "Trader Joe's Center City", "retailer_name": "Trader Joe's",
+           "stops": [...], "unplaced": [], "distance": 2.1},
+          {"store_id": 9, "store_name": "Home Depot South Philadelphia", "retailer_name": "Home Depot",
+           "stops": [...], "unplaced": [], "distance": 1.4}],
+ "unplaced": [{"id": "c", "text": "flux capacitor", "reason": "unknown"}]}
+```
+
 ## Accounts
 
 Optional. Sign in with an SMS code (Twilio Verify), an email code (sent with Resend),

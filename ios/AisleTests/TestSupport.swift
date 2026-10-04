@@ -178,6 +178,16 @@ final class StubAPI: AisleAPI, @unchecked Sendable {
         }
         return RoutePlan(storeID: Int(storeID) ?? 0, stops: stops, unplaced: [], distance: 1)
     }
+
+    var multiRouteResult: Result<MultiRoutePlan, Error> = .failure(APIError.plusRequired(
+        feature: "multi_store", message: "Shopping more than one store in a trip is part of Aisle+."
+    ))
+    private(set) var multiRouteRequests: [([String], [ListItem])] = []
+
+    func planMultiRoute(storeIDs: [String], items: [ListItem]) async throws -> MultiRoutePlan {
+        multiRouteRequests.append((storeIDs, items))
+        return try multiRouteResult.get()
+    }
 }
 
 @MainActor

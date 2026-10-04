@@ -4,6 +4,7 @@ import SwiftUI
 /// lists, items grouped by department, and checked items folded into "Done".
 struct ShoppingListView: View {
     let api: AisleAPI
+    let location: LocationProviding
     let analytics: AnalyticsTracking
 
     @Environment(ShoppingListStore.self) private var list
@@ -26,9 +27,10 @@ struct ShoppingListView: View {
 
     /// The list screens' sheets, one at a time.
     enum ListSheet: Identifiable {
-        case share, join(String), rename, signIn
+        case share, join(String), rename, signIn, tripStores
         var id: String {
             switch self {
+            case .tripStores: return "tripStores"
             case .share: return "share"
             case .join(let code): return "join-\(code)"
             case .rename: return "rename"
@@ -37,8 +39,9 @@ struct ShoppingListView: View {
         }
     }
 
-    init(api: AisleAPI, analytics: AnalyticsTracking) {
+    init(api: AisleAPI, location: LocationProviding, analytics: AnalyticsTracking) {
         self.api = api
+        self.location = location
         self.analytics = analytics
         _composer = State(initialValue: ListComposerModel(api: api, analytics: analytics))
     }
@@ -73,7 +76,9 @@ struct ShoppingListView: View {
                         ProgressCard(
                             total: list.items.count, left: list.remaining.count,
                             departments: groups.count, storeName: storeSelection.current?.name,
-                            onStart: startShopping
+                            isPlus: plus.isPlus,
+                            onStart: startShopping,
+                            onMultiStore: multiStoreTapped
                         )
                         .padding(.top, 20)
                         .transition(.opacity.combined(with: .offset(y: 10)))
@@ -113,6 +118,12 @@ struct ShoppingListView: View {
                 case .rename: RenameListSheet().presentationDetents([.medium])
                 case .signIn:
                     if let auth = accounts.auth { AccountSheet(auth: auth) }
+                case .tripStores:
+                    TripStoresSheet(api: api, location: location, first: storeSelection.current) { stores in
+                        composerFocused = false
+                        trip = ShoppingTripModel(api: api, stores: stores, list: list, analytics: analytics)
+                    }
+                    .presentationDetents([.large])
                 }
             }
             .confirmationDialog(deleteTitle, isPresented: $confirmingDelete, titleVisibility: .visible) {
@@ -516,6 +527,16 @@ struct ShoppingListView: View {
         }
         trip = ShoppingTripModel(api: api, store: store, list: list, analytics: analytics)
     }
+
+    /// Several stores in one trip is Aisle+; free shoppers get the offer.
+    private func multiStoreTapped() {
+        composerFocused = false
+        if plus.isPlus {
+            sheet = .tripStores
+        } else {
+            composer.upgradePrompt = "Shopping more than one store in a trip is part of Aisle+."
+        }
+    }
 }
 
 extension ShoppingTripModel: Identifiable {
@@ -533,7 +554,9 @@ private struct ProgressCard: View {
     let left: Int
     let departments: Int
     let storeName: String?
+    let isPlus: Bool
     let onStart: () -> Void
+    let onMultiStore: () -> Void
 
     private var fraction: Double { total == 0 ? 0 : Double(total - left) / Double(total) }
 
@@ -576,6 +599,27 @@ private struct ProgressCard: View {
             .disabled(left == 0)
             .opacity(left == 0 ? 0.5 : 1)
             .accessibilityIdentifier("startShoppingButton")
+
+            Button(action: onMultiStore) {
+                HStack(spacing: 6) {
+                    Image(systemName: "storefront")
+                    Text("Shop at more than one store")
+                    if !isPlus {
+                        Text("Aisle+")
+                            .font(Theme.font(11, .bold, relativeTo: .caption2))
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 2)
+                            .background(Theme.onAccent.opacity(0.14), in: Capsule())
+                    }
+                }
+                .font(Theme.font(14, .semibold, relativeTo: .subheadline))
+                .frame(maxWidth: .infinity, minHeight: 36)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(left == 0)
+            .opacity(left == 0 ? 0.5 : 1)
+            .accessibilityIdentifier("multiStoreButton")
         }
         .foregroundStyle(Theme.onAccent)
         .padding(18)

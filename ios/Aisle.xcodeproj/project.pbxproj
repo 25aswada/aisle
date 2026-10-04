@@ -37,6 +37,7 @@
 		6FA41AB5A696FEBA3B6D4A50 /* LiveOnboarding.swift in Sources */ = {isa = PBXBuildFile; fileRef = 496BBC47AF11D1538DE838C7 /* LiveOnboarding.swift */; };
 		700677C23C091E32EBFABB43 /* AdaptiveStack.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE9FE08311669988290AB5A0 /* AdaptiveStack.swift */; };
 		70DD8615B5FDDF6F0104BEA2 /* SearchingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 277896E81622D909B66024E0 /* SearchingView.swift */; };
+		712081617B6BA93FF828789A /* TripStoresSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22288B5DF451567DC01A8355 /* TripStoresSheet.swift */; };
 		71FE1726CB1EAEF52A8282B6 /* SignUpTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 207430DA22AED8FD50091409 /* SignUpTests.swift */; };
 		727566013F7D8FEE1817F9DF /* StoreMapView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69159DBA44C337CCEF9BDCF2 /* StoreMapView.swift */; };
 		7279D46DDD29BC46B14AD3AF /* AisleApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6470DDB95F2D49F70C7251AD /* AisleApp.swift */; };
@@ -101,6 +102,7 @@
 		1F0F01B66F7546CB39F575F8 /* Aisle.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Aisle.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		207430DA22AED8FD50091409 /* SignUpTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignUpTests.swift; sourceTree = "<group>"; };
 		213EE7135209C2740A08F7EC /* APIClientTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClientTests.swift; sourceTree = "<group>"; };
+		22288B5DF451567DC01A8355 /* TripStoresSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TripStoresSheet.swift; sourceTree = "<group>"; };
 		246C0B69B3F61F328740F91F /* ShoppingModeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShoppingModeView.swift; sourceTree = "<group>"; };
 		26428039EFD4FC4E3023FFCF /* YouView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouView.swift; sourceTree = "<group>"; };
 		277896E81622D909B66024E0 /* SearchingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchingView.swift; sourceTree = "<group>"; };
@@ -440,6 +442,7 @@
 			children = (
 				246C0B69B3F61F328740F91F /* ShoppingModeView.swift */,
 				DDE7419EB2F6E6940BFF3E1A /* ShoppingTripModel.swift */,
+				22288B5DF451567DC01A8355 /* TripStoresSheet.swift */,
 			);
 			path = Shopping;
 			sourceTree = "<group>";
@@ -590,6 +593,7 @@
 				8AA15C7072003E418933C59E /* StoreWayView.swift in Sources */,
 				738E7DD65402B6F914B1110D /* Theme.swift in Sources */,
 				92EC0E9101DF99A6BCD7CF92 /* TokenStore.swift in Sources */,
+				712081617B6BA93FF828789A /* TripStoresSheet.swift in Sources */,
 				364F5C4162973E8B889D6E76 /* WalkInLogo.swift in Sources */,
 				763D77EA551898D70D72C44A /* YouView.swift in Sources */,
 			);

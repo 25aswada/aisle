@@ -60,6 +60,8 @@ protocol AisleAPI: Sendable {
     /// The items on a photographed shopping list (JPEG); empty when there's none to read.
     func scanList(photo: Data) async throws -> [ParsedListItem]
     func planRoute(storeID: String, items: [ListItem]) async throws -> RoutePlan
+    /// One trip across 2–4 stores (Aisle+).
+    func planMultiRoute(storeIDs: [String], items: [ListItem]) async throws -> MultiRoutePlan
     func sendEvents(_ events: [AnalyticsEvent]) async throws
 }
 
@@ -161,6 +163,15 @@ struct APIClient: AisleAPI {
             items: items.map { .init(id: $0.id.uuidString, text: $0.text) }
         )
         return try await post("route", body: body)
+    }
+
+    func planMultiRoute(storeIDs: [String], items: [ListItem]) async throws -> MultiRoutePlan {
+        let ids = storeIDs.compactMap(Int.init)
+        guard ids.count == storeIDs.count else { throw APIError.invalidURL }
+        let body = MultiRouteRequestBody(
+            storeIDs: ids, items: items.map { .init(id: $0.id.uuidString, text: $0.text) }
+        )
+        return try await post("route/multi", body: body, timeout: Self.replyTimeout)
     }
 
     func sendEvents(_ events: [AnalyticsEvent]) async throws {

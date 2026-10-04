@@ -306,6 +306,27 @@ class RouteResponse(BaseModel):
     distance: float
 
 
+class MultiRouteRequest(BaseModel):
+    # Stores in the order the shopper wants to visit them.
+    store_ids: list[int] = Field(min_length=2, max_length=4)
+    items: list[RouteItemIn] = Field(min_length=1, max_length=100)
+
+
+class RouteLeg(BaseModel):
+    store_id: int
+    store_name: str
+    retailer_name: str
+    stops: list[RouteStop]
+    unplaced: list[UnplacedItem]
+    distance: float
+
+
+class MultiRouteResponse(BaseModel):
+    legs: list[RouteLeg]
+    # Items none of the stores is likely to carry.
+    unplaced: list[UnplacedItem]
+
+
 # Event names the app may send. Anything else is rejected so analytics stay a known set.
 ANALYTICS_EVENT_NAMES = (
     "app_opened", "store_selected", "search_submitted", "search_failed", "recent_search_tapped",

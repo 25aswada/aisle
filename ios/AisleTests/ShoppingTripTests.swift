@@ -147,3 +147,73 @@ final class RouteClientTests: XCTestCase {
         XCTAssertEqual(items.first?["text"] as? String, "milk")
     }
 }
+
+// MARK: - Multi-store trips
+
+extension ShoppingTripTests {
+
+    private var homeDepot: Store {
+        Store(id: "9", name: "Home Depot South Philly", address: "", latitude: 0, longitude: 0,
+              distanceMiles: nil, retailerName: "Home Depot")
+    }
+
+    private func multiPlan() -> MultiRoutePlan {
+        let ids = list.items.map { $0.id.uuidString }
+        func item(_ index: Int) -> RouteStopItem {
+            RouteStopItem(id: ids[index], text: list.items[index].text, aisle: nil, section: nil,
+                          neighbors: [], confidence: .medium, source: .fallback)
+        }
+        return MultiRoutePlan(legs: [
+            .init(storeID: 2, storeName: "Trader Joe's", retailerName: "Trader Joe's", stops: [
+                RouteStop(order: 1, zoneID: 10, department: "Dairy & Eggs", x: 0.2, y: 0.9, items: [item(0), item(1)]),
+            ], unplaced: [], distance: 1),
+            .init(storeID: 9, storeName: "Home Depot South Philly", retailerName: "Home Depot", stops: [
+                RouteStop(order: 1, zoneID: 40, department: "Garden", x: 0.5, y: 0.5, items: [item(2)]),
+            ], unplaced: [], distance: 1),
+        ], unplaced: [UnplacedItem(id: ids[3], text: "flux capacitor", reason: .unknown)])
+    }
+
+    func testMultiStoreTripFinishesOneStoreThenMovesOn() async {
+        let api = StubAPI()
+        api.multiRouteResult = .success(multiPlan())
+        let trip = ShoppingTripModel(api: api, stores: [store, homeDepot], list: list)
+        await trip.start()
+        XCTAssertEqual(api.multiRouteRequests.first?.0, ["2", "9"])
+        XCTAssertTrue(trip.isMultiStore)
+        XCTAssertEqual(trip.totalCount, 4)
+        XCTAssertEqual(trip.storeName, "Trader Joe's")
+        XCTAssertNil(trip.nextLeg)
+        XCTAssertTrue(trip.unplaced.isEmpty, "Items no store carries wait for the last store")
+
+        trip.markFound(trip.stops[0].items[0].id)
+        trip.skip(trip.stops[0].items[1].id)
+        XCTAssertTrue(trip.isCurrentLegDone)
+        XCTAssertEqual(trip.nextLeg?.store.id, "9")
+        XCTAssertFalse(trip.isFinished)
+
+        await trip.goToNextStore()
+        XCTAssertEqual(trip.storeName, "Home Depot South Philly")
+        XCTAssertEqual(trip.currentStopIndex, 0)
+        XCTAssertEqual(trip.unplaced.map(\.text), ["flux capacitor"])
+        XCTAssertTrue(trip.isNowhere(trip.unplaced[0].id))
+
+        trip.markFound(trip.stops[0].items[0].id)
+        trip.skip(trip.unplaced[0].id)
+        XCTAssertTrue(trip.isFinished)
+        XCTAssertEqual(trip.skippedTexts, ["eggs", "flux capacitor"])
+
+        // Looking again goes back to the first store with something skipped.
+        trip.retrySkipped()
+        XCTAssertEqual(trip.storeName, "Trader Joe's")
+        XCTAssertEqual(trip.pendingItems(in: trip.stops[0]).map(\.text), ["eggs"])
+    }
+
+    func testMultiStoreTripWithoutAislePlusFails() async {
+        let trip = ShoppingTripModel(api: StubAPI(), stores: [store, homeDepot], list: list)
+        await trip.start()
+        XCTAssertEqual(trip.phase, .failed("Shopping more than one store in a trip is part of Aisle+."))
+        trip.shopWithoutRoute()
+        XCTAssertEqual(trip.phase, .shopping)
+        XCTAssertEqual(trip.totalCount, 4)
+    }
+}

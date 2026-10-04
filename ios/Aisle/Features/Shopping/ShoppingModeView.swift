@@ -61,7 +61,17 @@ struct ShoppingModeView: View {
                 TripProgress(model: model)
             }
 
-            if let layout = model.layout, !model.isUnrouted {
+            if let next = model.nextLeg {
+                Section {
+                    NextStoreCard(done: model.storeName, next: next) {
+                        Task { await model.goToNextStore() }
+                    }
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+                }
+            }
+
+            if let layout = model.layout, !model.isUnrouted, !model.isCurrentLegDone {
                 Section {
                     StoreMapCard(
                         layout: layout,
@@ -88,7 +98,10 @@ struct ShoppingModeView: View {
                         )
                     }
                 } header: {
-                    StopHeader(stop: stop, number: index + 1, count: model.stops.count, unrouted: model.isUnrouted)
+                    StopHeader(
+                        stop: stop, number: index + 1, count: model.stops.count, unrouted: model.isUnrouted,
+                        storeLabel: model.isMultiStore ? model.retailerName : nil
+                    )
                 }
             }
 
@@ -112,7 +125,9 @@ struct ShoppingModeView: View {
                     ForEach(model.pendingUnplaced) { item in
                         TripItemRow(
                             text: item.text,
-                            detail: item.reason == .notCarried
+                            detail: model.isNowhere(item.id)
+                                ? "None of your stores is likely to carry this. Ask an employee."
+                                : item.reason == .notCarried
                                 ? "\(model.retailerName) typically doesn't carry this. Ask an employee."
                                 : "We don't know where this is. Ask a store employee.",
                             onFound: { withAnimation { model.markFound(item.id) } },
@@ -179,10 +194,12 @@ private struct StopHeader: View {
     let number: Int
     let count: Int
     let unrouted: Bool
+    /// The store's name on a multi-store trip.
+    var storeLabel: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(unrouted ? "No route available" : "Stop \(number) of \(count)")
+            Text(unrouted ? "No route available" : [storeLabel, "Stop \(number) of \(count)"].compactMap { $0 }.joined(separator: " · "))
                 .font(.aisleCaption)
                 .foregroundStyle(Theme.secondaryInk)
             // Explicit ink: `.primary` inside a List section header renders muted.
@@ -193,6 +210,58 @@ private struct StopHeader: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityAddTraits(.isHeader)
+    }
+}
+
+/// Done at one store on a multi-store trip: where to go next.
+private struct NextStoreCard: View {
+    let done: String
+    let next: TripLeg
+    let onGo: () -> Void
+
+    private var itemCount: Int {
+        next.stops.reduce(0) { $0 + $1.items.count } + next.unplaced.count
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 12) {
+                RetailerLogo(url: next.store.retailerLogoURL) {
+                    Image(systemName: "storefront")
+                        .font(.system(size: 26, weight: .semibold))
+                        .foregroundStyle(Theme.accentInk)
+                        .frame(width: 44, height: 44)
+                }
+                .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Done at \(done)")
+                        .font(.aisleFootnote)
+                        .foregroundStyle(Theme.secondaryInk)
+                    Text("Next: \(next.store.name)")
+                        .font(.aisleHeadline)
+                        .foregroundStyle(Theme.ink)
+                    Text(itemCount == 1 ? "1 item to find there" : "\(itemCount) items to find there")
+                        .font(.aisleSubheadline)
+                        .foregroundStyle(Theme.secondaryInk)
+                }
+            }
+            Button(action: onGo) {
+                Label("I'm at \(next.store.retailerDisplayName)", systemImage: "arrow.right")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.aisleAccent)
+            .accessibilityIdentifier("nextStoreButton")
+            Button {
+                let address = next.store.address.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+                if let url = URL(string: "maps://?daddr=\(address)") { UIApplication.shared.open(url) }
+            } label: {
+                Label("Directions", systemImage: "car.fill")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.aisleSoft)
+        }
+        .padding(18)
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
     }
 }
 

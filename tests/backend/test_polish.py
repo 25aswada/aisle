@@ -119,5 +119,5 @@ def test_openapi_lists_all_routes():
         "/search", "/chat", "/identify", "/feedback", "/lists/parse", "/lists/scan",
         "/auth/phone/start", "/auth/phone/verify", "/auth/email/start", "/auth/email/verify",
         "/auth/apple", "/auth/google", "/auth/signout", "/me", "/plus/status", "/plus/sync",
-        "/lists", "/lists/join", "/lists/{list_id}", "/lists/{list_id}/changes", "/route", "/events",
+        "/lists", "/lists/join", "/lists/{list_id}", "/lists/{list_id}/changes", "/route", "/route/multi", "/events",
     } == paths

@@ -6,8 +6,13 @@ from sqlalchemy.orm import Session
 from ..ai.providers import LocationModel, get_location_model
 from ..database import get_db
 from ..models import Store
-from ..routing import plan_route
-from ..schemas import RouteRequest, RouteResponse, RouteStop, RouteStopItem, UnplacedItem
+from ..plus.access import require_plus
+from ..routing import Route, plan_multi_store, plan_route
+from ..schemas import (
+    MultiRouteRequest, MultiRouteResponse, RouteLeg, RouteRequest, RouteResponse, RouteStop, RouteStopItem,
+    UnplacedItem,
+)
+from .auth import CallerDep
 
 router = APIRouter()
 Database = Annotated[Session, Depends(get_db)]
@@ -20,8 +25,34 @@ def route(body: RouteRequest, db: Database, model: Model):
     if store is None:
         raise HTTPException(status_code=404, detail="Store not found")
     planned = plan_route(db, store, [(i.id, i.text) for i in body.items], model)
-    return RouteResponse(
-        store_id=store.id,
+    return RouteResponse(store_id=store.id, **route_fields(planned))
+
+
+@router.post("/route/multi", response_model=MultiRouteResponse)
+def multi_route(body: MultiRouteRequest, db: Database, model: Model, caller: CallerDep):
+    """One trip across several stores (Aisle+): each item goes to the first store likely
+    to carry it, and each store gets its own walking route."""
+    require_plus(db, caller, "multi_store", "Shopping more than one store in a trip is part of Aisle+.")
+    if len(set(body.store_ids)) != len(body.store_ids):
+        raise HTTPException(status_code=422, detail="Each store can only be in the trip once.")
+    stores = [db.get(Store, store_id) for store_id in body.store_ids]
+    if any(store is None for store in stores):
+        raise HTTPException(status_code=404, detail="Store not found")
+    legs, nowhere = plan_multi_store(db, stores, [(i.id, i.text) for i in body.items], model)
+    return MultiRouteResponse(
+        legs=[
+            RouteLeg(
+                store_id=leg.store.id, store_name=leg.store.name, retailer_name=leg.store.retailer.name,
+                **route_fields(leg.route),
+            )
+            for leg in legs
+        ],
+        unplaced=[UnplacedItem(id=item_id, text=text, reason=reason) for item_id, text, reason in nowhere],
+    )
+
+
+def route_fields(planned: Route) -> dict:
+    return dict(
         stops=[
             RouteStop(
                 order=index,

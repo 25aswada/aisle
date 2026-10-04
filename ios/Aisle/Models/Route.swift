@@ -15,6 +15,39 @@ struct RouteRequestBody: Encodable {
     }
 }
 
+/// A trip across several stores (Aisle+), in the order the shopper will visit them.
+struct MultiRouteRequestBody: Encodable {
+    let storeIDs: [Int]
+    let items: [RouteRequestBody.Item]
+
+    enum CodingKeys: String, CodingKey {
+        case items
+        case storeIDs = "store_ids"
+    }
+}
+
+struct MultiRoutePlan: Codable, Equatable {
+    struct Leg: Codable, Equatable {
+        let storeID: Int
+        let storeName: String
+        let retailerName: String
+        let stops: [RouteStop]
+        let unplaced: [UnplacedItem]
+        let distance: Double
+
+        enum CodingKeys: String, CodingKey {
+            case stops, unplaced, distance
+            case storeID = "store_id"
+            case storeName = "store_name"
+            case retailerName = "retailer_name"
+        }
+    }
+
+    let legs: [Leg]
+    /// Items none of the stores is likely to carry.
+    let unplaced: [UnplacedItem]
+}
+
 struct RoutePlan: Codable, Equatable {
     let storeID: Int
     let stops: [RouteStop]
