@@ -8,13 +8,45 @@ final class RecentSearches {
     static let defaultsKey = "aisle.recentSearches"
     static let limit = 8
 
+    static let answersKey = "aisle.recentAnswers"
+
     private(set) var queries: [String]
+    /// Where each recent search pointed, per store, so the home screen can show it.
+    private(set) var answers: [String: RecentAnswer]
 
     @ObservationIgnored private let defaults: UserDefaults
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
         self.queries = defaults.stringArray(forKey: Self.defaultsKey) ?? []
+        self.answers = defaults.data(forKey: Self.answersKey)
+            .flatMap { try? JSONDecoder().decode([String: RecentAnswer].self, from: $0) } ?? [:]
+    }
+
+    /// Records the search and remembers where it pointed in this store.
+    func record(_ query: String, result: ItemSearchResult, storeID: String?) {
+        record(query)
+        guard let storeID, let answer = RecentAnswer(result) else { return }
+        answers[Self.answerKey(query, storeID: storeID)] = answer
+        let kept = Set(queries.map { $0.lowercased() })
+        answers = answers.filter { key, _ in kept.contains(String(key.split(separator: "|", maxSplits: 1).last ?? "")) }
+        saveAnswers()
+    }
+
+    /// The remembered answer for a recent search at this store, if any.
+    func answer(for query: String, storeID: String?) -> RecentAnswer? {
+        guard let storeID else { return nil }
+        return answers[Self.answerKey(query, storeID: storeID)]
+    }
+
+    private static func answerKey(_ query: String, storeID: String) -> String {
+        "\(storeID)|\(query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())"
+    }
+
+    private func saveAnswers() {
+        if let data = try? JSONEncoder().encode(answers) {
+            defaults.set(data, forKey: Self.answersKey)
+        }
     }
 
     func record(_ query: String) {
@@ -31,11 +63,36 @@ final class RecentSearches {
     func remove(_ query: String) {
         queries.removeAll { $0 == query }
         defaults.set(queries, forKey: Self.defaultsKey)
+        let lowered = query.lowercased()
+        answers = answers.filter { key, _ in !key.hasSuffix("|\(lowered)") }
+        saveAnswers()
     }
 
     func clear() {
         queries.removeAll()
+        answers.removeAll()
         defaults.removeObject(forKey: Self.defaultsKey)
+        defaults.removeObject(forKey: Self.answersKey)
+    }
+}
+
+/// The short "where it was" for a recent search: "Aisle 12" + "Pantry · Rice".
+struct RecentAnswer: Codable, Equatable {
+    let place: String
+    let detail: String?
+    let confidence: Confidence
+
+    /// Nil when the result had no real place in the store.
+    init?(_ result: ItemSearchResult) {
+        guard let department = result.placeInStore else { return nil }
+        if let aisle = result.aisleLabel {
+            place = aisle
+            detail = [department, result.sectionLabel].compactMap { $0 }.joined(separator: " · ")
+        } else {
+            place = department
+            detail = result.category?.name
+        }
+        confidence = result.confidence
     }
 }
 

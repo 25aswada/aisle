@@ -47,6 +47,7 @@
 		97794A08EF311AE5CCB6C4C1 /* LocationProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDA028F2F6A589486F37BCD /* LocationProvider.swift */; };
 		9D2E919CE99A27853EB7AADD /* Chat.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB9E64F0AE164ADA01052D9F /* Chat.swift */; };
 		A7B8720D41ED741D3BB76D31 /* ShoppingListStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F551FDCD24FEF4163ED9E8A /* ShoppingListStore.swift */; };
+		A7E1151289987C158655821A /* HomeExtras.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7E7DF89169128F720E6B0665 /* HomeExtras.swift */; };
 		A90CB1913D811862FED3E5AA /* APIClientTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 213EE7135209C2740A08F7EC /* APIClientTests.swift */; };
 		AE8870295D3EBF53057C8ABC /* Geist-SemiBold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = FDC36B0007068675A9412E92 /* Geist-SemiBold.ttf */; };
 		B0F19623F2B12E54076048F2 /* Geist-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 1EFBDA882BA0042549AB325F /* Geist-Regular.ttf */; };
@@ -108,6 +109,7 @@
 		69159DBA44C337CCEF9BDCF2 /* StoreMapView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreMapView.swift; sourceTree = "<group>"; };
 		74F5FDC7F39A54D032248234 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RootView.swift; sourceTree = "<group>"; };
 		7CD9378708A70710560FD89A /* AisleTests.xctest */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.cfbundle; path = AisleTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		7E7DF89169128F720E6B0665 /* HomeExtras.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeExtras.swift; sourceTree = "<group>"; };
 		8072BF40B6C9F9F2B7B7E9AD /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		86B371EFE8FBC1EC87453EDF /* RecentSearches.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentSearches.swift; sourceTree = "<group>"; };
 		8C1FC1D0092199083C278E19 /* FeedbackTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedbackTests.swift; sourceTree = "<group>"; };
@@ -304,6 +306,7 @@
 				C86E6E8C381F6BDBCA9E0805 /* FeedbackViews.swift */,
 				DBAA09BB87453751AED5AF8A /* FindModel.swift */,
 				E01BF4868F5ACAD524393D32 /* FindView.swift */,
+				7E7DF89169128F720E6B0665 /* HomeExtras.swift */,
 				277896E81622D909B66024E0 /* SearchingView.swift */,
 				CE4F13834561189FFE9147DE /* SearchResultCard.swift */,
 				3DEE7D5DBFF5496EA378A386 /* StorePickerView.swift */,
@@ -510,6 +513,7 @@
 				EC977C9F37E37640397841CE /* FloorPlanView.swift in Sources */,
 				D6616CAAB960A9619FE58BD8 /* HealthMonitor.swift in Sources */,
 				C6C7BF9D14B046FF82CA31DF /* HealthResponse.swift in Sources */,
+				A7E1151289987C158655821A /* HomeExtras.swift in Sources */,
 				FD061C1F726001F4D851AE4C /* ItemSearch.swift in Sources */,
 				6FA41AB5A696FEBA3B6D4A50 /* LiveOnboarding.swift in Sources */,
 				97794A08EF311AE5CCB6C4C1 /* LocationProvider.swift in Sources */,

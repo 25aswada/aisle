@@ -98,7 +98,7 @@ final class FindModel {
     private func find(_ text: String, storeID: String?) async {
         if let cached = cache.result(query: text, storeID: storeID) {
             phase = .loaded(cached)
-            recents.record(text)
+            recents.record(text, result: cached, storeID: storeID)
             trackResult(cached, storeID: storeID, cached: true)
             return
         }
@@ -107,7 +107,7 @@ final class FindModel {
             let result = try await api.searchItem(query: text, storeID: storeID)
             try Task.checkCancellation()
             cache.store(result, query: text, storeID: storeID)
-            recents.record(text)
+            recents.record(text, result: result, storeID: storeID)
             phase = .loaded(result)
             trackResult(result, storeID: storeID, cached: false)
         } catch is CancellationError {
@@ -197,7 +197,7 @@ final class FindModel {
             if let found = answer.search {
                 // "Was it there?" now asks about this item.
                 feedback = .none
-                recents.record(found.item)
+                recents.record(found.item, result: found, storeID: storeID)
             }
             analytics.track(.followUpSent, ["turns": .int(turns.count / 2), "found_item": .bool(answer.search != nil)])
         } catch is CancellationError {

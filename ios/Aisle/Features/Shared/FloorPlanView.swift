@@ -9,7 +9,8 @@ import SwiftUI
 /// caption it as approximate.
 struct FloorPlanView: View, Animatable {
     let layout: StoreLayout
-    let targetZoneID: Int
+    /// The department to highlight; nil shows the floor on its own (home screen).
+    let targetZoneID: Int?
     /// Text on the pin, e.g. "Aisle 7" or "Breakfast".
     let pinTitle: String
     var tilt: Double = 0
@@ -27,7 +28,7 @@ struct FloorPlanView: View, Animatable {
         GeometryReader { geo in
             let tiles = FloorTile.tiles(for: layout)
             let projector = FloorProjector(size: geo.size, tilt: tilt, yaw: yaw)
-            let target = tiles.first { $0.id == targetZoneID }
+            let target = targetZoneID.flatMap { id in tiles.first { $0.id == id } }
             ZStack {
                 TimelineView(.animation(paused: reduceMotion)) { timeline in
                     let time = reduceMotion ? 0 : timeline.date.timeIntervalSinceReferenceDate
@@ -163,6 +164,7 @@ struct FloorPlanView: View, Animatable {
     }
 
     private var accessibilitySummary: String {
+        guard let targetZoneID else { return "Store map." }
         let name = layout.zones.first { $0.id == targetZoneID }?.name ?? pinTitle
         return "Store map. A path goes from the entrance to \(name)."
     }

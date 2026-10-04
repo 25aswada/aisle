@@ -18,6 +18,7 @@ struct FindView: View {
     @FocusState private var searchFocused: Bool
     @FocusState private var followUpFocused: Bool
     @State private var isTakingPhoto = false
+    @State private var isShowingStoreMap = false
 
     init(api: AisleAPI, location: LocationProviding, analytics: AnalyticsTracking, recents: RecentSearches) {
         self.api = api
@@ -128,12 +129,15 @@ struct FindView: View {
     }
 
     private var title: some View {
-        (Text("What are you ") + Text("looking for?").foregroundStyle(Theme.accentInk))
-            .font(Theme.font(36, .bold, relativeTo: .largeTitle))
-            .tracking(-1)
-            .foregroundStyle(Theme.ink)
-            .fixedSize(horizontal: false, vertical: true)
-            .accessibilityAddTraits(.isHeader)
+        VStack(alignment: .leading, spacing: 4) {
+            TimeGreeting()
+            (Text("What are you ") + Text("looking for?").foregroundStyle(Theme.accentInk))
+                .font(Theme.font(36, .bold, relativeTo: .largeTitle))
+                .tracking(-1)
+                .foregroundStyle(Theme.ink)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+        }
     }
 }
 
@@ -209,9 +213,24 @@ extension FindView {
                     .font(.aisleSubheadline)
                     .foregroundStyle(Theme.secondaryInk)
             } else {
-                RecentSearchList(recents: model.recents) { query in
+                RecentAnswerGrid(recents: model.recents, storeID: store.id) { query in
                     searchFocused = false
                     Task { await model.searchRecent(query, storeID: store.id) }
+                }
+            }
+            if let layout, !layout.placedZones.isEmpty {
+                StoreGlanceCard(
+                    layout: layout, storeName: store.name, retailer: store.retailerDisplayName,
+                    onOpenMap: { isShowingStoreMap = true },
+                    onDepartment: { department in
+                        // Ask where the department itself is.
+                        model.query = department
+                        runSearch(store: store)
+                    }
+                )
+                .padding(.top, 8)
+                .fullScreenCover(isPresented: $isShowingStoreMap) {
+                    StoreGlanceMap(layout: layout, storeName: store.name)
                 }
             }
         case .loading:
@@ -605,7 +624,11 @@ struct ItemSearchField: View {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(Theme.ink)
-            TextField("Ask Aisle, like “maple syrup”", text: $query)
+            TextField("", text: $query)
+                .overlay(alignment: .leading) {
+                    if query.isEmpty { RotatingSearchHint() }
+                }
+                .accessibilityLabel("Ask Aisle")
                 .font(.aisleBody)
                 .foregroundStyle(Theme.ink)
                 .focused(focused)
