@@ -327,7 +327,8 @@ private struct FeatureTile: View {
 
 // MARK: - Paywall
 
-/// The upgrade sheet: why it appeared, benefits, two plans, the button, and the small print.
+/// The upgrade sheet: close and restore, a headline, a scrolling strip of what's included,
+/// Free vs Aisle+, two plan cards side by side, and one big button.
 struct PaywallView: View {
     /// Why the sheet opened, e.g. "You've used today's 5 photo searches." Nil from the tab.
     let reason: String?
@@ -343,27 +344,44 @@ struct PaywallView: View {
 
     /// Your privacy policy page. Apple requires one before Aisle+ can ship; the link hides until it's set.
     static let privacyURL: URL? = nil
+    static let termsURL = URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!
+
+    private static let table: [(String, Bool)] = [
+        ("Find items in any store", true),
+        ("Unlimited photo search", false),
+        ("Unlimited follow-ups", false),
+        ("Shared family lists", false),
+        ("Multi-store trips", false),
+        ("Offline store maps", false),
+    ]
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
+        VStack(spacing: 0) {
+            HStack {
+                CircleButton(systemImage: "xmark", label: "Close") { dismiss() }
+                Spacer()
+                if !welcomed {
+                    Button("Restore") { Task { await restore() } }
+                        .font(Theme.font(15, .semibold, relativeTo: .subheadline))
+                        .foregroundStyle(Theme.ink)
+                        .padding(.horizontal, 20)
+                        .frame(height: 48)
+                        .background(Theme.surface, in: Capsule())
+                        .shadow(color: Theme.ink.opacity(0.08), radius: 12, y: 6)
+                }
+            }
+            .padding(.horizontal, 18)
+            .padding(.top, 14)
+
             if welcomed {
                 PlusWelcome { dismiss() }
                     .transition(.opacity.combined(with: .scale(scale: 0.96)))
             } else {
                 offer.transition(.opacity)
             }
-            Button { dismiss() } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(Theme.ink)
-                    .frame(width: 36, height: 36)
-                    .background(Theme.fill, in: Circle())
-            }
-            .accessibilityLabel("Close")
-            .padding(16)
         }
         .background(AisleBackground())
-        .presentationDragIndicator(.visible)
+        .presentationDragIndicator(.hidden)
         .sensoryFeedback(.success, trigger: welcomed)
         .task {
             await plus.load()
@@ -379,12 +397,13 @@ struct PaywallView: View {
     private var offer: some View {
         ScrollView {
             VStack(spacing: 0) {
-                PlusBadge().padding(.top, 36)
-                (Text("Unlock ") + Text("Aisle+").foregroundStyle(Theme.accentInk))
-                    .font(Theme.font(30, .bold, relativeTo: .largeTitle))
-                    .tracking(-1)
+                (Text("Find everything,\nin ") + Text("every store").fontWeight(.bold).foregroundStyle(Theme.accentInk))
+                    .font(Theme.font(30, .semibold, relativeTo: .largeTitle))
+                    .tracking(-0.9)
+                    .multilineTextAlignment(.center)
                     .foregroundStyle(Theme.ink)
-                    .padding(.top, 18)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 22)
                     .accessibilityAddTraits(.isHeader)
                 if let reason {
                     Text(reason)
@@ -394,60 +413,50 @@ struct PaywallView: View {
                         .padding(.top, 8)
                 }
 
-                VStack(alignment: .leading, spacing: 12) {
-                    ForEach(PlusFeature.allCases) { feature in
-                        HStack(spacing: 12) {
-                            Image(systemName: "checkmark")
-                                .font(.system(size: 11, weight: .heavy))
-                                .foregroundStyle(Theme.onAccent)
-                                .frame(width: 24, height: 24)
-                                .background(Theme.accent, in: Circle())
-                            Text(feature.title)
-                                .font(Theme.font(15, relativeTo: .subheadline))
-                                .foregroundStyle(Theme.ink)
-                        }
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.top, 22)
+                FeatureMarquee()
+                    .padding(.horizontal, -18)
+                    .padding(.top, 18)
 
-                VStack(spacing: 10) {
-                    PlanCard(
+                comparison.padding(.top, 22)
+
+                HStack(spacing: 12) {
+                    PlanTile(
                         title: "Yearly",
-                        detail: "\(plus.yearlyPerMonth) a month, billed \(plus.price(.yearly))",
-                        price: plus.price(.yearly),
-                        badge: "Save \(plus.yearlySavingsPercent)%",
+                        badge: "−\(plus.yearlySavingsPercent)%",
+                        price: plus.price(.yearly), unit: "/yr",
+                        note: "\(plus.yearlyPerMonth)/mo",
                         selected: plan == .yearly
                     ) { select(.yearly) }
-                    PlanCard(
-                        title: "Monthly", detail: "Billed every month",
-                        price: plus.price(.monthly), badge: nil,
+                    PlanTile(
+                        title: "Monthly", badge: nil,
+                        price: plus.price(.monthly), unit: "/mo",
+                        note: "\(plus.monthlyPerYear)/yr",
                         selected: plan == .monthly
                     ) { select(.monthly) }
                 }
-                .padding(.top, 22)
+                .padding(.top, 18)
 
                 Button { Task { await buy() } } label: {
                     ZStack {
                         if isBuying {
                             ProgressView().tint(Theme.onAccent)
                         } else {
-                            Text(ctaTitle).font(Theme.font(17, .bold, relativeTo: .headline))
+                            Text(ctaTitle).font(Theme.font(18, .bold, relativeTo: .headline))
                         }
                     }
                     .foregroundStyle(Theme.onAccent)
-                    .frame(maxWidth: .infinity, minHeight: 56)
+                    .frame(maxWidth: .infinity, minHeight: 58)
                     .background {
                         TimelineView(.animation(minimumInterval: 1 / 20)) { timeline in
                             FlowingGradient(time: timeline.date.timeIntervalSinceReferenceDate)
                         }
                     }
-                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                    .shadow(color: Theme.glow.opacity(0.25), radius: 12, y: 8)
+                    .clipShape(Capsule())
+                    .shadow(color: Theme.glow.opacity(0.28), radius: 14, y: 10)
                 }
                 .buttonStyle(PressableCardStyle())
                 .disabled(isBuying || !plus.canPurchase)
-                .padding(.top, 20)
+                .padding(.top, 18)
                 .accessibilityIdentifier("plusPurchaseButton")
 
                 Text(finePrint)
@@ -457,27 +466,71 @@ struct PaywallView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.top, 10)
 
-                HStack(spacing: 18) {
-                    Button("Restore purchases") { Task { await restore() } }
-                    Button("Terms") { openURL(URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!) }
-                    if let privacy = PaywallView.privacyURL {
+                HStack(spacing: 16) {
+                    Button("Terms") { openURL(Self.termsURL) }
+                    if let privacy = Self.privacyURL {
                         Button("Privacy") { openURL(privacy) }
                     }
                 }
                 .font(Theme.font(12, .semibold, relativeTo: .caption))
                 .foregroundStyle(Theme.secondaryInk)
-                .padding(.top, 16)
+                .padding(.top, 10)
             }
-            .padding(.horizontal, 22)
+            .padding(.horizontal, 18)
             .padding(.bottom, 30)
         }
+        .scrollBounceBehavior(.basedOnSize)
+    }
+
+    private var comparison: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 0) {
+                Text("Features").frame(maxWidth: .infinity, alignment: .leading)
+                Text("Free").frame(width: 52)
+                Text("Aisle+").fontWeight(.bold).foregroundStyle(Theme.accentInk).frame(width: 64)
+            }
+            .font(Theme.font(15, relativeTo: .subheadline))
+            .foregroundStyle(Theme.secondaryInk)
+            .frame(minHeight: 34)
+            .accessibilityHidden(true)
+
+            ForEach(Self.table, id: \.0) { feature, free in
+                HStack(spacing: 0) {
+                    Text(feature)
+                        .font(Theme.font(16, relativeTo: .body))
+                        .foregroundStyle(Theme.ink)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    Group {
+                        if free {
+                            Image(systemName: "checkmark").font(.system(size: 15, weight: .medium))
+                                .foregroundStyle(Theme.secondaryInk)
+                        } else {
+                            Capsule().fill(Theme.secondaryInk.opacity(0.6)).frame(width: 14, height: 1.5)
+                        }
+                    }
+                    .frame(width: 52)
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(Color(hex: 0xDC6F9C))
+                        .frame(width: 64)
+                }
+                .frame(minHeight: 44)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel("\(feature): \(free ? "free and Aisle+" : "Aisle+ only")")
+            }
+        }
+        .padding(.horizontal, 22)
+        .padding(.top, 18)
+        .padding(.bottom, 12)
+        .background(Theme.surface.opacity(0.92), in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .shadow(color: Theme.ink.opacity(0.06), radius: 16, y: 8)
     }
 
     private var ctaTitle: String {
         if !plus.canPurchase { return plus.isLoading ? "Loading…" : "Not available yet" }
         switch plan {
-        case .yearly: return trial.map { "Start \($0) free trial" } ?? "Subscribe for \(plus.price(.yearly)) a year"
-        case .monthly: return "Subscribe for \(plus.price(.monthly)) a month"
+        case .yearly: return trial == nil ? "Get Aisle+" : "Start free week"
+        case .monthly: return "Get Aisle+"
         }
     }
 
@@ -485,15 +538,15 @@ struct PaywallView: View {
         if let error = plus.loadError, !plus.canPurchase { return error }
         switch plan {
         case .yearly:
-            let start = trial.map { "Free for \($0.replacingOccurrences(of: "-", with: " ")), then " } ?? ""
-            return "\(start)\(plus.price(.yearly)) a year. Renews automatically. Cancel anytime in Settings."
+            let start = trial.map { "\($0.replacingOccurrences(of: "-", with: " ")) free, then " } ?? ""
+            return "\(start)\(plus.price(.yearly))/year. Renews automatically. Cancel anytime."
         case .monthly:
-            return "\(plus.price(.monthly)) a month. Renews automatically. Cancel anytime in Settings."
+            return "\(plus.price(.monthly))/month. Renews automatically. Cancel anytime."
         }
     }
 
     private func select(_ newPlan: PlusStore.Plan) {
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) { plan = newPlan }
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) { plan = newPlan }
     }
 
     private func buy() async {
@@ -522,89 +575,146 @@ struct PaywallView: View {
     }
 }
 
-/// The logo on a gradient tile with a soft spinning glow and a "+" badge.
-private struct PlusBadge: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var spin = false
+private struct CircleButton: View {
+    let systemImage: String
+    let label: String
+    let action: () -> Void
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
-            RoundedRectangle(cornerRadius: 30, style: .continuous)
-                .fill(AngularGradient(colors: [Color(hex: 0xE2CFF9), Theme.glow, Color(hex: 0xFFDDC6), Color(hex: 0xFFEDC2), Color(hex: 0xE2CFF9)], center: .center))
-                .rotationEffect(.degrees(spin ? 360 : 0))
-                .blur(radius: 14)
-                .opacity(0.7)
-                .frame(width: 96, height: 96)
-            Image("AisleLogo")
-                .resizable()
-                .renderingMode(.template)
-                .scaledToFit()
-                .foregroundStyle(Theme.onAccent)
-                .frame(width: 46, height: 46)
-                .frame(width: 84, height: 84)
-                .background(Theme.accent, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
-                .frame(width: 96, height: 96)
-            Text("+")
-                .font(Theme.font(18, .bold, relativeTo: .headline))
-                .foregroundStyle(Color(hex: 0xFFEDC2))
-                .frame(width: 30, height: 30)
-                .background(Color(hex: 0x1F1B24), in: Circle())
-                .offset(x: 6, y: -6)
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(Theme.ink)
+                .frame(width: 48, height: 48)
+                .background(Theme.surface, in: Circle())
+                .shadow(color: Theme.ink.opacity(0.08), radius: 12, y: 6)
         }
-        .accessibilityHidden(true)
-        .onAppear {
-            guard !reduceMotion else { return }
-            withAnimation(.linear(duration: 8).repeatForever(autoreverses: false)) { spin = true }
-        }
+        .accessibilityLabel(label)
     }
 }
 
-private struct PlanCard: View {
+/// What's included, scrolling sideways forever with faded edges.
+private struct FeatureMarquee: View {
+    private static let items: [(String, String)] = [
+        ("camera", "Unlimited photos"),
+        ("person.2", "Family lists"),
+        ("point.topleft.down.to.point.bottomright.curvepath", "Multi-store trips"),
+        ("map", "Offline maps"),
+        ("bubble.left", "Unlimited follow-ups"),
+        ("bolt", "Faster answers"),
+    ]
+
+    @State private var rowWidth: CGFloat = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        TimelineView(.animation(paused: reduceMotion)) { timeline in
+            let speed = 22.0   // points per second
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            let offset = rowWidth > 0 && !reduceMotion ? -CGFloat((t * speed).truncatingRemainder(dividingBy: Double(rowWidth))) : 0
+            HStack(spacing: 0) {
+                row.background(GeometryReader { geo in
+                    Color.clear.onAppear { rowWidth = geo.size.width }
+                })
+                row
+            }
+            .offset(x: offset)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(height: 28)
+        .clipped()
+        .mask(LinearGradient(stops: [
+            .init(color: .clear, location: 0), .init(color: .black, location: 0.12),
+            .init(color: .black, location: 0.88), .init(color: .clear, location: 1),
+        ], startPoint: .leading, endPoint: .trailing))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Self.items.map(\.1).joined(separator: ", "))
+    }
+
+    private var row: some View {
+        HStack(spacing: 26) {
+            ForEach(Self.items, id: \.1) { symbol, title in
+                HStack(spacing: 7) {
+                    Image(systemName: symbol)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Color(hex: 0xDC6F9C))
+                    Text(title)
+                        .font(Theme.font(15, .semibold, relativeTo: .subheadline))
+                        .foregroundStyle(Theme.ink)
+                        .fixedSize()
+                }
+            }
+        }
+        .padding(.trailing, 26)
+        .fixedSize()
+    }
+}
+
+/// A plan card; the chosen one gets a gradient outline and a check that pops onto its corner.
+private struct PlanTile: View {
     let title: String
-    let detail: String
-    let price: String
     let badge: String?
+    let price: String
+    let unit: String
+    let note: String
     let selected: Bool
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 14) {
-                Circle()
-                    .strokeBorder(selected ? Color(hex: 0xDC6F9C) : Theme.hairline, lineWidth: selected ? 7 : 2)
-                    .background(Circle().fill(selected ? Color.white : Color.clear))
-                    .frame(width: 22, height: 22)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(title).font(Theme.font(16, .bold, relativeTo: .body))
-                    Text(detail).font(Theme.font(12, relativeTo: .caption)).foregroundStyle(Theme.secondaryInk)
-                }
-                Spacer(minLength: 8)
-                VStack(alignment: .trailing, spacing: 4) {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 6) {
+                    Text(title)
+                        .font(Theme.font(15, relativeTo: .subheadline))
+                        .foregroundStyle(Theme.secondaryInk)
                     if let badge {
                         Text(badge)
                             .font(Theme.font(11, .bold, relativeTo: .caption2))
                             .foregroundStyle(Theme.onAccent)
-                            .padding(.horizontal, 8)
-                            .frame(height: 22)
-                            .background(Theme.accent, in: Capsule())
+                            .padding(.horizontal, 6)
+                            .frame(height: 20)
+                            .background(Theme.accent, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
                     }
-                    Text(price).font(Theme.font(15, .bold, relativeTo: .subheadline))
                 }
+                (Text(price).font(Theme.font(26, .bold, relativeTo: .title))
+                    + Text(" \(unit)").font(Theme.font(14, .medium, relativeTo: .footnote)).foregroundStyle(Theme.secondaryInk))
+                    .foregroundStyle(Theme.ink)
+                    .tracking(-0.6)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .padding(.top, 8)
+                Text(note)
+                    .font(Theme.font(13, relativeTo: .footnote))
+                    .foregroundStyle(Theme.secondaryInk)
+                    .padding(.top, 4)
             }
-            .foregroundStyle(Theme.ink)
             .padding(.horizontal, 16)
-            .frame(minHeight: 72)
-            .background(Theme.surface, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .padding(.top, 16)
+            .padding(.bottom, 14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Theme.surface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .strokeBorder(selected ? AnyShapeStyle(Theme.accentRing) : AnyShapeStyle(Theme.hairline), lineWidth: 2)
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .strokeBorder(selected ? AnyShapeStyle(Theme.accentRing) : AnyShapeStyle(Theme.hairline), lineWidth: 1.5)
             }
-            .shadow(color: Theme.glow.opacity(selected ? 0.18 : 0), radius: 11, y: 8)
-            .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay(alignment: .topTrailing) {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 12, weight: .heavy))
+                    .foregroundStyle(Theme.onAccent)
+                    .frame(width: 28, height: 28)
+                    .background(Theme.accent, in: Circle())
+                    .shadow(color: Theme.glow.opacity(0.3), radius: 5, y: 4)
+                    .scaleEffect(selected ? 1 : 0.4)
+                    .opacity(selected ? 1 : 0)
+                    .offset(x: 8, y: -10)
+            }
+            .shadow(color: Theme.glow.opacity(selected ? 0.18 : 0), radius: 12, y: 10)
+            .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(selected ? [.isSelected] : [])
-        .accessibilityLabel("\(title), \(price). \(detail)")
+        .accessibilityLabel("\(title), \(price) \(unit == "/yr" ? "a year" : "a month"). \(note)")
+        .sensoryFeedback(.selection, trigger: selected)
     }
 }
 

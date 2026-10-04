@@ -60,6 +60,12 @@ final class PlusStore {
         return (yearly.price / 12).formatted(yearly.priceFormatStyle)
     }
 
+    /// Twelve monthly payments, e.g. "$47.88", to compare with yearly.
+    var monthlyPerYear: String {
+        guard let monthly = products[.monthly] else { return "$47.88" }
+        return (monthly.price * 12).formatted(monthly.priceFormatStyle)
+    }
+
     /// Savings of yearly over twelve monthly payments, rounded, e.g. 37.
     var yearlySavingsPercent: Int {
         guard let yearly = products[.yearly], let monthly = products[.monthly], monthly.price > 0 else { return 37 }
