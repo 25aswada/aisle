@@ -33,8 +33,15 @@ SQLAlchemy models live in `backend/app/models.py`; Alembic migrations in
 - `store_zones.x`, `store_zones.y`: approximate floor-plan position (0..1), null when unknown.
 - `stores.entrance_x/_y`, `stores.checkout_x/_y`: route start and end anchors.
 
-Seeding fills these from the store format's layout template and backfills missing
-values on template zones. It never changes `verified` zones.
+Seeding fills these from the store's layout and keeps `template` zones in sync with it
+(positions, categories, order; template zones the layout dropped are removed). It never
+changes `verified` zones.
+
+Layouts are per chain where researched (`backend/app/ai/chain_layouts.py`: Costco, Sam's
+Club, Trader Joe's, Aldi, Walmart, Target, Whole Foods, Kroger, CVS, Walgreens, Home Depot,
+Lowe's), built from public descriptions of each chain's usual pattern with sources noted
+inline. Other retailers use a generic store-format layout from `catalog.py`. None are real
+per-store floor plans, so the app labels maps "Typical <store> layout".
 
 ## Analytics (Milestone 7)
 

@@ -23,9 +23,9 @@ Aisle helps people find items inside physical stores. These documents describe t
 - Find screen search field calls `POST /search` with the query and selected store.
 - `backend/app/ai/intent.py` parses the query (filler words, quantity, modifiers) and
   matches the catalog in `backend/app/ai/catalog.py`.
-- Generic location reasoning maps the category to a department in the store format's
-  layout template (Trader Joe's, warehouse club, supercenter, pharmacy, home improvement,
-  generic grocery).
+- Location reasoning maps the category to a department in the store's layout: a
+  researched chain layout (12 chains, `ai/chain_layouts.py`) or a generic store-format
+  template (warehouse club, supercenter, pharmacy, home improvement, grocery).
 - AI provider (`backend/app/ai/providers.py`): Claude via the Anthropic SDK when
   `ANTHROPIC_API_KEY` is set, or an OpenAI model (default `gpt-6-luna`) when
   `OPENAI_API_KEY` is set. `AISLE_AI_PROVIDER` (`auto`, `anthropic`, `openai`) picks one when

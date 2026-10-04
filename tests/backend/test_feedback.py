@@ -20,7 +20,7 @@ def _feedback(client, device, **body):
 def test_store_zones_list(seeded_client):
     store_id = store_id_for(seeded_client, "Trader Joe's")
     zones = seeded_client.get(f"/stores/{store_id}/zones").json()
-    assert "Breakfast/Pantry" in [z["name"] for z in zones]
+    assert "Pantry Aisles" in [z["name"] for z in zones]
     assert all(z["aisle_label"] is None and z["source"] == "template" for z in zones)
     assert seeded_client.get("/stores/99999/zones").status_code == 404
 
@@ -35,7 +35,7 @@ def test_search_records_event_and_returns_search_id(seeded_client, seeded_engine
     with Session(seeded_engine) as session:
         event = session.get(SearchEvent, data["search_id"])
         assert (event.query, event.store_id, event.department, event.source, event.device_id) == (
-            "maple syrup", store_id, "Breakfast/Pantry", "fallback", "dev-1"
+            "maple syrup", store_id, "Pantry Aisles", "fallback", "dev-1"
         )
 
 
@@ -55,18 +55,18 @@ def test_found_it_records_observation(seeded_client, seeded_engine):
 
 def test_one_report_does_not_change_the_answer(seeded_client):
     store_id = store_id_for(seeded_client, "Trader Joe's")
-    frozen = _zone(seeded_client, store_id, "Frozen")
+    frozen = _zone(seeded_client, store_id, "Frozen Foods")
     _feedback(seeded_client, "dev-1", store_id=store_id, item="maple syrup", verdict="found",
               zone_id=frozen["id"], aisle="Aisle 9")
     data = seeded_client.post("/search", json={"query": "maple syrup", "store_id": store_id}).json()
     assert data["source"] == "fallback"
-    assert data["location"]["department"] == "Breakfast/Pantry"
+    assert data["location"]["department"] == "Pantry Aisles"
     assert data["location"]["aisle"] is None
 
 
 def test_agreeing_corrections_become_the_answer(seeded_client):
     store_id = store_id_for(seeded_client, "Trader Joe's")
-    frozen = _zone(seeded_client, store_id, "Frozen")
+    frozen = _zone(seeded_client, store_id, "Frozen Foods")
     for device in ("dev-1", "dev-2"):
         _feedback(seeded_client, device, store_id=store_id, item="maple syrup", verdict="found",
                   zone_id=frozen["id"], aisle=" aisle 9 ")
@@ -74,7 +74,7 @@ def test_agreeing_corrections_become_the_answer(seeded_client):
     _feedback(seeded_client, "dev-2", store_id=store_id, item="maple syrup", verdict="found", zone_id=frozen["id"])
     data = seeded_client.post("/search", json={"query": "organic maple syrup", "store_id": store_id}).json()
     assert data["source"] == "observations"
-    assert data["location"]["department"] == "Frozen"
+    assert data["location"]["department"] == "Frozen Foods"
     assert data["location"]["aisle"] == "aisle 9"
     assert data["confidence"] == "medium"
     assert data["reports"] == {"found": 2, "not_here": 0}
@@ -86,12 +86,12 @@ def test_agreeing_corrections_become_the_answer(seeded_client):
 
 def test_disagreeing_aisle_text_is_not_shown(seeded_client):
     store_id = store_id_for(seeded_client, "Trader Joe's")
-    frozen = _zone(seeded_client, store_id, "Frozen")
+    frozen = _zone(seeded_client, store_id, "Frozen Foods")
     for device, aisle in (("dev-1", "Aisle 9"), ("dev-2", "Aisle 3")):
         _feedback(seeded_client, device, store_id=store_id, item="maple syrup", verdict="found",
                   zone_id=frozen["id"], aisle=aisle)
     data = seeded_client.post("/search", json={"query": "maple syrup", "store_id": store_id}).json()
-    assert data["location"]["department"] == "Frozen"
+    assert data["location"]["department"] == "Frozen Foods"
     assert data["location"]["aisle"] is None
 
 
@@ -110,15 +110,15 @@ def test_database_row_still_beats_observations(seeded_client, seeded_engine):
     from backend.app.import_locations import import_rows
 
     store_id = store_id_for(seeded_client, "Trader Joe's")
-    frozen = _zone(seeded_client, store_id, "Frozen")
+    frozen = _zone(seeded_client, store_id, "Frozen Foods")
     for device in ("dev-1", "dev-2", "dev-3"):
         _feedback(seeded_client, device, store_id=store_id, item="maple syrup", verdict="found", zone_id=frozen["id"])
     with Session(seeded_engine) as session:
         import_rows(session, [{"store_id": str(store_id), "item": "maple syrup", "source": "verified",
-                               "department": "Breakfast/Pantry"}])
+                               "department": "Pantry Aisles"}])
     data = seeded_client.post("/search", json={"query": "maple syrup", "store_id": store_id}).json()
     assert data["source"] == "database"
-    assert data["location"]["department"] == "Breakfast/Pantry"
+    assert data["location"]["department"] == "Pantry Aisles"
 
 
 def test_unknown_items_can_be_reported(seeded_client):

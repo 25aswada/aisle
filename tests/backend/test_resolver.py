@@ -22,7 +22,7 @@ class RecordingModel:
     def locate(self, intent, retailer_name, layout):
         self.calls.append(intent.raw)
         return guess_from_model_output({
-            "item": intent.item, "category": "frozen", "department": "Frozen",
+            "item": intent.item, "category": "frozen", "department": "Frozen Foods",
             "neighbors": ["ice cream"], "carried": "likely", "confidence": "medium",
         }, intent, layout)
 
@@ -54,12 +54,12 @@ def test_database_exact_location_beats_the_model(seeded_client, seeded_engine, m
     model = RecordingModel()
     app.dependency_overrides[get_location_model] = lambda: model
     store_id = _add_location(seeded_engine, "Trader Joe's", "maple syrup", "verified",
-                             department="Breakfast/Pantry", aisle="Aisle 4", section="Top shelf")
+                             department="Pantry Aisles", aisle="Aisle 4", section="Top shelf")
 
     data = seeded_client.post("/search", json={"query": "maple syrup", "store_id": store_id}).json()
     assert data["source"] == "database"
     assert data["confidence"] == "high"
-    assert data["location"]["department"] == "Breakfast/Pantry"
+    assert data["location"]["department"] == "Pantry Aisles"
     assert data["location"]["aisle"] == "Aisle 4"
     assert data["location"]["section"] == "Top shelf"
     assert model.calls == []
@@ -77,7 +77,7 @@ def test_verified_beats_retailer(seeded_client, seeded_engine):
     data = seeded_client.post("/search", json={"query": "ketchup", "store_id": store_id}).json()
     assert data["location"]["aisle"] == "G14"
     # Department falls back to the store's zone for the category.
-    assert data["location"]["department"] == "Pasta, Rice & Canned Goods"
+    assert data["location"]["department"] == "Pantry"
 
 
 def test_location_rows_are_store_specific(seeded_client, seeded_engine):

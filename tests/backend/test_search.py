@@ -20,7 +20,7 @@ def test_trader_joes_maple_syrup(seeded_client):
     response = seeded_client.post("/search", json={"query": "maple syrup", "store_id": store_id})
     assert response.status_code == 200
     data = response.json()
-    assert data["location"]["department"] == "Breakfast/Pantry"
+    assert data["location"]["department"] == "Pantry Aisles"
     assert {"pancake mix", "sweeteners"} <= set(data["location"]["neighbors"])
     assert data["confidence"] == "medium"
     assert data["location"]["aisle"] is None
@@ -38,7 +38,7 @@ def test_natural_language_query_is_parsed(seeded_client):
     ).json()
     assert data["item"] == "maple syrup"
     assert data["modifiers"] == ["organic"]
-    assert data["location"]["department"] == "Breakfast/Pantry"
+    assert data["location"]["department"] == "Pantry Aisles"
 
 
 def test_search_without_store_uses_generic_grocery_layout(seeded_client):
@@ -111,10 +111,10 @@ def test_model_output_cannot_add_aisle_numbers_or_off_list_departments():
 
 def test_model_output_maps_to_layout_department():
     guess = guess_from_model_output({
-        "item": "dragon fruit", "category": "produce-fruit", "department": "Flowers & Produce",
+        "item": "dragon fruit", "category": "produce-fruit", "department": "Produce",
         "neighbors": ["mangoes", "papaya"], "carried": "likely", "confidence": "medium",
     }, parse_intent("dragon fruit"), LAYOUTS["trader_joes"])
-    assert (guess.department, guess.confidence, guess.source) == ("Flowers & Produce", "medium", "model")
+    assert (guess.department, guess.confidence, guess.source) == ("Produce", "medium", "model")
 
 
 class FakeModel:
@@ -165,7 +165,7 @@ def test_model_first_strategy(seeded_client, monkeypatch):
     store_id = store_id_for(seeded_client, "Trader Joe's")
     data = seeded_client.post("/search", json={"query": "maple syrup", "store_id": store_id}).json()
     assert model.calls == ["maple syrup"]
-    assert data["location"]["department"] == "Breakfast/Pantry"
+    assert data["location"]["department"] == "Pantry Aisles"
 
 
 def test_no_api_key_means_no_model(monkeypatch):
@@ -200,7 +200,7 @@ def test_openai_model_parses_structured_output():
     from backend.app.ai.providers import OpenAILocationModel
 
     content = json.dumps({
-        "item": "maple syrup", "category": "syrups-sweeteners", "department": "Breakfast/Pantry",
+        "item": "maple syrup", "category": "syrups-sweeteners", "department": "Pantry Aisles",
         "neighbors": ["pancake mix"], "carried": "likely", "confidence": "medium",
     })
     sent = {}
@@ -215,5 +215,5 @@ def test_openai_model_parses_structured_output():
     guess = model.locate(parse_intent("maple syrup"), "Trader Joe's", LAYOUTS["trader_joes"])
     assert sent["model"] == "gpt-6-luna"
     assert sent["response_format"]["json_schema"]["strict"] is True
-    assert guess.department == "Breakfast/Pantry"
+    assert guess.department == "Pantry Aisles"
     assert guess.source == "model"

@@ -7,7 +7,7 @@ from conftest import store_id_for
 def facts(**overrides):
     base = dict(
         item="maple syrup", retailer="Costco", store_name="Costco King of Prussia",
-        department="Pantry & Breakfast", aisle=None, section=None, category="Syrups & Sweeteners",
+        department="Pantry Grocery", aisle=None, section=None, category="Syrups & Sweeteners",
         neighbors=("pancake mix", "honey"), confidence="medium", availability="likely", source="fallback",
     )
     base.update(overrides)
@@ -32,20 +32,20 @@ def test_rejects_an_invented_aisle_number():
 def test_allows_the_aisle_on_file_and_plain_department_text():
     on_file = facts(aisle="14", section="Left side", confidence="high", source="database")
     assert validate("At Costco, maple syrup is in **Aisle 14**, on the left side.", on_file)
-    text = "At Costco, maple syrup is usually in **Pantry & Breakfast**, near the pancake mix and honey."
+    text = "At Costco, maple syrup is usually in **Pantry Grocery**, near the pancake mix and honey."
     assert validate(text, facts()) == text
 
 
 def test_rejects_formatting_and_bad_lengths():
-    assert validate("- At Costco it's in Pantry & Breakfast, near honey.", facts()) is None
-    assert validate("At Costco it's in **Pantry & Breakfast, near honey.", facts()) is None
+    assert validate("- At Costco it's in Pantry Grocery, near honey.", facts()) is None
+    assert validate("At Costco it's in **Pantry Grocery, near honey.", facts()) is None
     assert validate("Pantry.", facts()) is None
     assert validate(None, facts()) is None
 
 
 def test_whitespace_is_normalised():
-    assert validate("At Costco,\n\nit's in  Pantry & Breakfast near honey.", facts()) == \
-        "At Costco, it's in Pantry & Breakfast near honey."
+    assert validate("At Costco,\n\nit's in  Pantry Grocery near honey.", facts()) == \
+        "At Costco, it's in Pantry Grocery near honey."
 
 
 def test_provider_errors_fall_back_to_none():
@@ -58,7 +58,7 @@ def test_provider_errors_fall_back_to_none():
 
 
 def test_cache_reuses_valid_answers_and_retries_failures():
-    good = FakeExplainer("At Costco, maple syrup is usually in Pantry & Breakfast, near honey.")
+    good = FakeExplainer("At Costco, maple syrup is usually in Pantry Grocery, near honey.")
     cached = CachedExplainer(good)
     assert cached.explain(facts()) == cached.explain(facts())
     assert good.calls == 1
@@ -84,7 +84,7 @@ def test_position_words():
 
 
 def test_search_returns_a_checked_explanation(seeded_client):
-    fake = FakeExplainer("At Costco, maple syrup is usually in **Pantry & Breakfast**, near the pancake mix.")
+    fake = FakeExplainer("At Costco, maple syrup is usually in **Pantry Grocery**, near the pancake mix.")
     app.dependency_overrides[get_explainer] = lambda: fake
     store_id = store_id_for(seeded_client, "Costco")
     data = seeded_client.post("/search", json={"query": "maple syrup", "store_id": store_id}).json()
@@ -106,6 +106,6 @@ def test_layout_endpoint(seeded_client):
     layout = seeded_client.get(f"/stores/{store_id}/layout").json()
     assert layout["approximate"] is True
     assert layout["entrance"] and layout["checkout"]
-    assert any(z["name"] == "Pantry & Breakfast" for z in layout["zones"])
+    assert any(z["name"] == "Pantry Grocery" for z in layout["zones"])
     assert all(0 <= z["x"] <= 1 and 0 <= z["y"] <= 1 for z in layout["zones"] if z["x"] is not None)
     assert seeded_client.get("/stores/999999/layout").status_code == 404
