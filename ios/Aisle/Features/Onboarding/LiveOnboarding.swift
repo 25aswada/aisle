@@ -248,7 +248,7 @@ private struct IntroStage: View {
                 // Shelves stock from the vanishing point outward, then follow the phone's tilt.
                 StockingLogo(size: logoSize, stocked: assembled)
             }
-            .frame(height: 220)
+            .frame(height: 180)
             .accessibilityHidden(true)
 
             HStack(spacing: 0) {
@@ -304,7 +304,7 @@ private struct IntroStage: View {
         }
         guard await pause(250) else { return }
         withAnimation(.spring(response: 0.7, dampingFraction: 0.72)) { assembled = true }
-        guard await pause(450) else { return }
+        guard await pause(900) else { return }
         thump.toggle()
         withAnimation(.easeOut(duration: 0.8)) { bloom = true }
         for index in 1...word.count {

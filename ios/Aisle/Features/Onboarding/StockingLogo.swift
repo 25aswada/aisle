@@ -27,7 +27,7 @@ struct StockingLogo: View {
                     .scaleEffect(stocked ? 1 : 0.35, anchor: .center)
                     .opacity(stocked ? 1 : 0)
                     .animation(
-                        reduceMotion ? nil : .spring(response: 0.55, dampingFraction: 0.72).delay(Double(panel.tier) * 0.09),
+                        reduceMotion ? nil : .spring(response: 1.0, dampingFraction: 0.78).delay(Double(panel.tier) * 0.22),
                         value: stocked
                     )
                     .offset(
