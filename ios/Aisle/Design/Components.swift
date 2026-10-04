@@ -71,22 +71,33 @@ struct AisleMark: View {
     }
 }
 
-/// The shopper's question, right-aligned like a chat message.
+/// The shopper's question, right-aligned like a chat message, with their photo above it.
 struct QueryBubble: View {
     let text: String
+    var photo: Data? = nil
 
     var body: some View {
-        HStack {
-            Spacer(minLength: 48)
-            Text(text)
-                .font(.aisleBody)
-                .foregroundStyle(Theme.ink)
-                .padding(.horizontal, 18)
-                .padding(.vertical, 12)
-                .background(Theme.bubble, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        VStack(alignment: .trailing, spacing: 6) {
+            if let photo, let image = UIImage(data: photo) {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 180, height: 180)
+                    .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+            }
+            if !text.isEmpty {
+                Text(text)
+                    .font(.aisleBody)
+                    .foregroundStyle(Theme.ink)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 12)
+                    .background(Theme.bubble, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            }
         }
+        .padding(.leading, 48)
+        .frame(maxWidth: .infinity, alignment: .trailing)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("You asked: \(text)")
+        .accessibilityLabel(photo == nil ? "You asked: \(text)" : "You sent a photo\(text.isEmpty ? "" : ": \(text)")")
     }
 }
 

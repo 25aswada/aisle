@@ -23,7 +23,7 @@ targets:
         # Near-black ink accent with a light variant for dark mode (Assets.xcassets).
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         # No app icon until the TestFlight milestone.
-        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         GENERATE_INFOPLIST_FILE: NO
     info:
       path: Aisle/Info.plist
@@ -35,6 +35,9 @@ targets:
         UIAppFonts: [Geist-Regular.ttf, Geist-Medium.ttf, Geist-SemiBold.ttf, Geist-Bold.ttf]
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         AisleAPIBaseURL: $(AISLE_API_BASE_URL)
+        NSCameraUsageDescription: >-
+          Aisle uses the camera when you take a photo of something you want to find,
+          so it can tell what it is and where it is in the store.
         NSLocationWhenInUseUsageDescription: >-
           Aisle uses your location only to show stores near you. This is
           optional: you can always search for a store by name or address instead.

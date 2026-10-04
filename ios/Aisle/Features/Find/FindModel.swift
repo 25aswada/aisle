@@ -25,8 +25,19 @@ final class FindModel {
     }
 
     var query = ""
+    /// A photo attached to whichever ask bar is showing (downsized JPEG).
+    var photo: Data?
+    /// The photo the current result was searched from, shown in the question bubble.
+    private(set) var searchPhoto: Data?
     private(set) var phase: Phase = .idle
     private(set) var feedback: FeedbackState = .none
+
+    /// The follow-up being typed once a result is showing.
+    var followUp = ""
+    /// The conversation after the result: the shopper's follow-ups and Aisle's replies.
+    private(set) var turns: [ChatTurn] = []
+    private(set) var isReplying = false
+    private(set) var followUpError: String?
 
     @ObservationIgnored private let api: AisleAPI
     @ObservationIgnored private let analytics: AnalyticsTracking
@@ -51,11 +62,40 @@ final class FindModel {
 
     func search(storeID: String?) async {
         let text = trimmedQuery
-        guard !text.isEmpty else {
+        let photo = photo
+        guard !text.isEmpty || photo != nil else {
             phase = .idle
             return
         }
         feedback = .none
+        resetConversation()
+        searchPhoto = photo
+        self.photo = nil
+        guard let photo else {
+            await find(text, storeID: storeID)
+            return
+        }
+        // A photo: name what's in it, then search for that like any other item.
+        phase = .loading
+        do {
+            let item = try await api.identify(photo: photo, note: text.isEmpty ? nil : text, storeID: storeID)
+            try Task.checkCancellation()
+            guard let item else {
+                self.photo = photo
+                phase = .failed("Aisle couldn't tell what's in that photo. Try a closer shot, or type what you're looking for.")
+                return
+            }
+            query = item
+            await find(item, storeID: storeID)
+        } catch is CancellationError {
+            // A newer search replaced this one.
+        } catch {
+            self.photo = photo
+            fail(with: error)
+        }
+    }
+
+    private func find(_ text: String, storeID: String?) async {
         if let cached = cache.result(query: text, storeID: storeID) {
             phase = .loaded(cached)
             recents.record(text)
@@ -72,10 +112,16 @@ final class FindModel {
             trackResult(result, storeID: storeID, cached: false)
         } catch is CancellationError {
             // A newer search replaced this one.
-        } catch APIError.httpStatus(404) {
+        } catch {
+            fail(with: error)
+        }
+    }
+
+    private func fail(with error: Error) {
+        if case APIError.httpStatus(404) = error {
             phase = .failed("This store is no longer available. Choose another store.")
             analytics.track(.searchFailed, ["error": "store_not_found"])
-        } catch {
+        } else {
             phase = .failed((error as? LocalizedError)?.errorDescription ?? "Something went wrong.")
             analytics.track(.searchFailed, ["error": .string((error as? APIError)?.kind ?? "unknown")])
         }
@@ -84,6 +130,7 @@ final class FindModel {
     /// Runs a recent search again.
     func searchRecent(_ query: String, storeID: String?) async {
         self.query = query
+        photo = nil
         analytics.track(.recentSearchTapped)
         await search(storeID: storeID)
     }
@@ -100,20 +147,96 @@ final class FindModel {
 
     func clear() {
         query = ""
+        photo = nil
+        searchPhoto = nil
         phase = .idle
         feedback = .none
+        resetConversation()
+    }
+
+    // MARK: - Follow-ups
+
+    var trimmedFollowUp: String {
+        followUp.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Sends the typed follow-up with the whole conversation so far: the search, Aisle's
+    /// answer to it, then every turn since. On failure the message goes back in the field.
+    func sendFollowUp(storeID: String, retailer: String?) async {
+        let text = trimmedFollowUp
+        let photo = photo
+        guard !text.isEmpty || photo != nil, !isReplying, let result = currentResult else { return }
+        followUp = ""
+        self.photo = nil
+        followUpError = nil
+        let turn = ChatTurn(role: .shopper, text: text, photo: photo)
+        turns.append(turn)
+        isReplying = true
+        defer { isReplying = false }
+
+        let question = result.query.isEmpty ? result.item : result.query
+        var messages = [
+            ChatMessage(role: .shopper, content: searchPhoto == nil ? question : "(a photo of \(question))"),
+            ChatMessage(role: .aisle, content: String(result.reply(at: retailer).characters)),
+        ]
+        // Only the newest photo goes along; Aisle's earlier replies already describe the rest.
+        messages += turns.map { past in
+            let content = past.photo != nil && past.id != turn.id && past.text.isEmpty ? "(sent a photo)" : past.text
+            return ChatMessage(role: past.role, content: content, photo: past.id == turn.id ? past.photo : nil)
+        }
+        do {
+            let answer = try await api.chat(storeID: storeID, messages: messages)
+            try Task.checkCancellation()
+            // A new item's search can stand in for a missing reply with the app's own wording.
+            let reply = answer.reply.flatMap { $0.isEmpty ? nil : $0 }
+                ?? answer.search.map { String($0.reply(at: retailer).characters) }
+            guard let reply else {
+                throw APIError.invalidResponse
+            }
+            turns.append(ChatTurn(role: .aisle, text: reply, result: answer.search))
+            if let found = answer.search {
+                // "Was it there?" now asks about this item.
+                feedback = .none
+                recents.record(found.item)
+            }
+            analytics.track(.followUpSent, ["turns": .int(turns.count / 2), "found_item": .bool(answer.search != nil)])
+        } catch is CancellationError {
+            // A new search started; the conversation was reset.
+        } catch {
+            turns.removeAll { $0.id == turn.id }
+            if followUp.isEmpty { followUp = text }
+            if self.photo == nil { self.photo = photo }
+            followUpError = error as? APIError == .invalidResponse
+                ? "Aisle couldn't answer that right now. Try again in a moment."
+                : (error as? LocalizedError)?.errorDescription ?? "Something went wrong."
+        }
+    }
+
+    private func resetConversation() {
+        followUp = ""
+        searchPhoto = nil
+        turns = []
+        isReplying = false
+        followUpError = nil
     }
 
     // MARK: - Feedback
 
+    /// The result the conversation started from.
     var currentResult: ItemSearchResult? {
         if case .loaded(let result) = phase { return result }
         return nil
     }
 
+    /// The newest result on screen: a follow-up's new item, or the first search. Feedback
+    /// ("Was it there?") is about this one.
+    var latestResult: ItemSearchResult? {
+        turns.last { $0.result != nil }?.result ?? currentResult
+    }
+
     /// "Found it": confirms the suggested zone.
     func confirmFound(storeID: String) async {
-        guard let result = currentResult else { return }
+        guard let result = latestResult else { return }
         await send(storeID: storeID, verdict: .found, zoneID: result.location.zoneID, aisle: nil) {
             .confirmed
         }
@@ -121,7 +244,7 @@ final class FindModel {
 
     /// "Not here": the item wasn't in the suggested zone.
     func reportNotHere(storeID: String) async {
-        guard let result = currentResult else { return }
+        guard let result = latestResult else { return }
         await send(storeID: storeID, verdict: .notHere, zoneID: result.location.zoneID, aisle: nil) {
             .reportedMissing
         }
@@ -139,7 +262,7 @@ final class FindModel {
         storeID: String, verdict: FeedbackVerdict, zoneID: Int?, aisle: String?,
         onSuccess: () -> FeedbackState
     ) async {
-        guard let result = currentResult, let store = Int(storeID) else { return }
+        guard let result = latestResult, let store = Int(storeID) else { return }
         let previous = feedback
         feedback = .sending
         let body = FeedbackBody(

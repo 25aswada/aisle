@@ -230,14 +230,15 @@ struct StoreWayView: View {
 
 // MARK: - Pieces
 
-/// Capsule segmented control: Map · 3D · Steps.
-private struct ModePicker: View {
+/// Capsule segmented control: Map · 3D · Steps, or just some of them.
+struct ModePicker: View {
     @Binding var mode: StoreWayView.Mode
+    var modes: [StoreWayView.Mode] = StoreWayView.Mode.allCases
     @Namespace private var selection
 
     var body: some View {
         HStack(spacing: 2) {
-            ForEach(StoreWayView.Mode.allCases) { item in
+            ForEach(modes) { item in
                 Button { mode = item } label: {
                     Text(item.title)
                         .font(Theme.font(13, .semibold, relativeTo: .footnote))

@@ -55,6 +55,21 @@ final class ItemSearchClientTests: XCTestCase {
         XCTAssertEqual(json["query"] as? String, "maple syrup")
         XCTAssertEqual(json["store_id"] as? Int, 2)
     }
+
+    func testChatPostsTheConversationAndReadsTheReply() async throws {
+        StubURLProtocol.respond(json: #"{"reply":"Try the bakery tables.","search":null}"#)
+        let client = APIClient(baseURL: URL(string: "http://127.0.0.1:8000")!, session: StubURLProtocol.makeSession())
+        let answer = try await client.chat(storeID: "2", messages: [ChatMessage(role: .shopper, content: "cookies")])
+        XCTAssertEqual(answer, ChatReply(reply: "Try the bakery tables.", search: nil))
+
+        let request = try XCTUnwrap(StubURLProtocol.requests.first)
+        XCTAssertEqual(request.url?.path, "/chat")
+        XCTAssertEqual(request.timeoutInterval, APIClient.replyTimeout)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: XCTUnwrap(request.bodyData)) as? [String: Any])
+        XCTAssertEqual(json["store_id"] as? Int, 2)
+        let messages = try XCTUnwrap(json["messages"] as? [[String: String]])
+        XCTAssertEqual(messages, [["role": "user", "content": "cookies"]])
+    }
 }
 
 @MainActor
@@ -94,6 +109,151 @@ final class FindModelTests: XCTestCase {
         model.query = "milk"
         await model.search(storeID: "1")
         guard case .failed = model.phase else { return XCTFail("Expected failure") }
+    }
+
+    func testFollowUpSendsTheWholeConversation() async throws {
+        let api = StubAPI()
+        let model = FindModel(api: api)
+        model.query = "maple syrup"
+        await model.search(storeID: "2")
+
+        model.followUp = " I don't see it "
+        await model.sendFollowUp(storeID: "2", retailer: "Target")
+        XCTAssertEqual(model.turns.map(\.role), [.shopper, .aisle])
+        XCTAssertEqual(model.turns.map(\.text), ["I don't see it", "Check the bakery tables by the muffins."])
+        XCTAssertEqual(model.followUp, "")
+
+        let (storeID, messages) = try XCTUnwrap(api.chats.first)
+        XCTAssertEqual(storeID, "2")
+        XCTAssertEqual(messages.map(\.role), ["user", "assistant", "user"])
+        XCTAssertEqual(messages.first?.content, "maple syrup")
+        XCTAssertEqual(messages.last?.content, "I don't see it")
+
+        model.followUp = "where's the milk"
+        await model.sendFollowUp(storeID: "2", retailer: "Target")
+        XCTAssertEqual(api.chats.last?.1.count, 5)
+    }
+
+    func testFailedFollowUpPutsTheMessageBack() async {
+        let api = StubAPI()
+        api.chatResult = .success(ChatReply(reply: nil))
+        let model = FindModel(api: api)
+        model.query = "maple syrup"
+        await model.search(storeID: "2")
+        model.followUp = "is it organic?"
+        await model.sendFollowUp(storeID: "2", retailer: nil)
+        XCTAssertTrue(model.turns.isEmpty)
+        XCTAssertEqual(model.followUp, "is it organic?")
+        XCTAssertNotNil(model.followUpError)
+        XCTAssertFalse(model.isReplying)
+    }
+
+    func testNewSearchClearsTheConversation() async {
+        let api = StubAPI()
+        let model = FindModel(api: api)
+        model.query = "maple syrup"
+        await model.search(storeID: "2")
+        model.followUp = "anything else nearby?"
+        await model.sendFollowUp(storeID: "2", retailer: nil)
+        XCTAssertFalse(model.turns.isEmpty)
+        model.clear()
+        XCTAssertTrue(model.turns.isEmpty)
+        XCTAssertEqual(model.phase, .idle)
+    }
+
+    func testPhotoSearchIdentifiesThenSearches() async {
+        let api = StubAPI()
+        let model = FindModel(api: api)
+        let photo = Data([0xFF, 0xD8, 0x01])
+        model.photo = photo
+        model.query = "the blue one"
+        await model.search(storeID: "2")
+        XCTAssertEqual(api.identified.first?.0, photo)
+        XCTAssertEqual(api.identified.first?.1, "the blue one")
+        XCTAssertEqual(api.itemSearches.first?.0, "maple syrup")
+        XCTAssertEqual(model.phase, .loaded(Fixtures.mapleSyrup))
+        XCTAssertEqual(model.searchPhoto, photo)
+        XCTAssertNil(model.photo)
+    }
+
+    func testUnrecognisedPhotoKeepsThePhotoToRetry() async {
+        let api = StubAPI()
+        api.identifyResult = .success(nil)
+        let model = FindModel(api: api)
+        model.photo = Data([0xFF, 0xD8])
+        await model.search(storeID: "2")
+        guard case .failed = model.phase else { return XCTFail("Expected failure") }
+        XCTAssertNotNil(model.photo)
+        XCTAssertTrue(api.itemSearches.isEmpty)
+    }
+
+    func testFollowUpPhotoGoesWithTheNewestMessageOnly() async throws {
+        let api = StubAPI()
+        let model = FindModel(api: api)
+        model.query = "maple syrup"
+        await model.search(storeID: "2")
+
+        let first = Data([0xFF, 0xD8, 0x01])
+        model.photo = first
+        await model.sendFollowUp(storeID: "2", retailer: nil)
+        XCTAssertEqual(model.turns.first?.photo, first)
+        XCTAssertEqual(api.chats.last?.1.last?.image, first.base64EncodedString())
+
+        model.followUp = "and this one?"
+        model.photo = Data([0xFF, 0xD8, 0x02])
+        await model.sendFollowUp(storeID: "2", retailer: nil)
+        let messages = try XCTUnwrap(api.chats.last?.1)
+        XCTAssertEqual(messages.compactMap(\.image).count, 1)
+        XCTAssertEqual(messages[2].content, "(sent a photo)")
+        XCTAssertNil(model.photo)
+    }
+
+    func testChatReplyDecodesANewItemsSearch() throws {
+        let json = #"{"reply":"Over by the nuts.","search":"# + Fixtures.mapleSyrupJSON + "}"
+        let answer = try JSONDecoder().decode(ChatReply.self, from: Data(json.utf8))
+        XCTAssertEqual(answer.search, Fixtures.mapleSyrup)
+    }
+
+    func testFollowUpForANewItemShowsItsResultAndTakesFeedback() async throws {
+        let api = StubAPI()
+        let model = FindModel(api: api)
+        model.query = "cookies"
+        await model.search(storeID: "2")
+        await model.confirmFound(storeID: "2")
+        XCTAssertEqual(model.feedback, .confirmed)
+
+        let found = try JSONDecoder().decode(
+            ItemSearchResult.self,
+            from: Data(Fixtures.mapleSyrupJSON.replacingOccurrences(of: "evt-1", with: "follow-up-search").utf8)
+        )
+        api.chatResult = .success(ChatReply(reply: "Syrup's in the center aisles.", search: found))
+        model.followUp = "where's the maple syrup?"
+        await model.sendFollowUp(storeID: "2", retailer: nil)
+
+        XCTAssertEqual(model.turns.last?.result, found)
+        XCTAssertEqual(model.latestResult, found)
+        XCTAssertEqual(model.feedback, .none)
+        await model.reportNotHere(storeID: "2")
+        XCTAssertEqual(api.feedbackBodies.last?.searchID, "follow-up-search")
+    }
+
+    func testConversationalFollowUpKeepsFeedbackOnTheSearch() async {
+        let api = StubAPI()
+        let model = FindModel(api: api)
+        model.query = "maple syrup"
+        await model.search(storeID: "2")
+        model.followUp = "how much is it?"
+        await model.sendFollowUp(storeID: "2", retailer: nil)
+        XCTAssertNil(model.turns.last?.result)
+        XCTAssertEqual(model.latestResult, model.currentResult)
+    }
+
+    func testFollowUpNeedsAResult() async {
+        let api = StubAPI()
+        let model = FindModel(api: api)
+        model.followUp = "hello"
+        await model.sendFollowUp(storeID: "2", retailer: nil)
+        XCTAssertTrue(api.chats.isEmpty)
     }
 }
 
@@ -292,5 +452,28 @@ final class ReplyTextTests: XCTestCase {
         XCTAssertEqual(LocationSource.model.label(for: "Trader Joe's"), "AI estimate for Trader Joe's")
         XCTAssertEqual(LocationSource.fallback.label(for: "Costco"), "Typical Costco layout")
         XCTAssertEqual(LocationSource.model.label(for: nil), "AI estimate")
+    }
+}
+
+final class PhotoPreparationTests: XCTestCase {
+    func testDownsizesToJPEG() throws {
+        let big = UIGraphicsImageRenderer(size: CGSize(width: 3000, height: 2000)).image { context in
+            UIColor.orange.setFill()
+            context.fill(CGRect(x: 0, y: 0, width: 3000, height: 2000))
+        }
+        let data = try XCTUnwrap(PhotoPreparation.jpeg(from: XCTUnwrap(big.pngData())))
+        let image = try XCTUnwrap(UIImage(data: data))
+        XCTAssertEqual(max(image.size.width, image.size.height), 1024, accuracy: 1)
+        XCTAssertEqual(Array(data.prefix(2)), [0xFF, 0xD8])
+        XCTAssertNil(PhotoPreparation.jpeg(from: Data("not an image".utf8)))
+    }
+}
+
+final class CameraZoomLabelTests: XCTestCase {
+    func testLabelsLikeTheSystemCamera() {
+        XCTAssertEqual(CameraSheet.zoomLabel(0.5), "0.5")
+        XCTAssertEqual(CameraSheet.zoomLabel(1), "1")
+        XCTAssertEqual(CameraSheet.zoomLabel(2.04), "2")
+        XCTAssertEqual(CameraSheet.zoomLabel(2.36), "2.4")
     }
 }

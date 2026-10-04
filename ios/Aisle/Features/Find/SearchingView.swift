@@ -5,6 +5,8 @@ import SwiftUI
 /// The chips are paced to the wait for a single request; they don't report server progress.
 struct SearchingView: View {
     let query: String
+    /// The photo being searched from, if any.
+    var photo: Data? = nil
     let storeName: String
     /// Chain name for "Checking Costco's layout".
     let retailer: String
@@ -13,12 +15,12 @@ struct SearchingView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var statuses: [String] {
-        ["Reading “\(query)”", "Checking \(retailer)’s layout", "Finding the aisle"]
+        [photo == nil ? "Reading “\(query)”" : "Looking at your photo", "Checking \(retailer)’s layout", "Finding the aisle"]
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            QueryBubble(text: query)
+            QueryBubble(text: query, photo: photo)
             TimelineView(.animation(paused: reduceMotion)) { timeline in
                 let time = reduceMotion ? 0.6 : timeline.date.timeIntervalSinceReferenceDate
                 VStack(alignment: .leading, spacing: 16) {
@@ -29,7 +31,7 @@ struct SearchingView: View {
         }
         .task { await pace() }
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Finding \(query) in \(storeName)")
+        .accessibilityLabel(photo == nil ? "Finding \(query) in \(storeName)" : "Finding what's in your photo in \(storeName)")
         .accessibilityAddTraits(.updatesFrequently)
     }
 
@@ -223,7 +225,7 @@ private struct StageChip: View {
 
 // MARK: - Shimmer
 
-private extension View {
+extension View {
     /// A pink-to-peach shine sweeping across the view, driven by the timeline's clock.
     func shimmer(time: TimeInterval) -> some View {
         modifier(ShimmerEffect(time: time))

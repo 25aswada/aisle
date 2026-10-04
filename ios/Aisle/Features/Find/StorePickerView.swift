@@ -3,6 +3,8 @@ import SwiftUI
 struct StorePickerView: View {
     @State var model: StorePickerModel
     let selected: Store?
+    /// Ask for location as soon as the picker opens (the user tapped "Find stores near me").
+    var startsWithLocation = false
     let onSelect: (Store) -> Void
 
     @Environment(\.dismiss) private var dismiss
@@ -36,7 +38,13 @@ struct StorePickerView: View {
                     Button("Cancel") { dismiss() }
                 }
             }
-            .task { await model.start() }
+            .task {
+                if startsWithLocation, model.locationAuthorization == .notDetermined {
+                    await model.requestLocationAndLoadNearby()
+                } else {
+                    await model.start()
+                }
+            }
             .task(id: query) {
                 // Debounce keystrokes; `.task(id:)` cancels the previous run.
                 try? await Task.sleep(for: .milliseconds(300))

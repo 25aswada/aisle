@@ -95,6 +95,10 @@ final class StubAPI: AisleAPI, @unchecked Sendable {
     var searchResult: Result<[Store], Error> = .success([Fixtures.store])
     var searchItemResult: Result<ItemSearchResult, Error> = .success(Fixtures.mapleSyrup)
     private(set) var itemSearches: [(String, String?)] = []
+    var chatResult: Result<ChatReply, Error> = .success(ChatReply(reply: "Check the bakery tables by the muffins."))
+    private(set) var chats: [(String, [ChatMessage])] = []
+    var identifyResult: Result<String?, Error> = .success("maple syrup")
+    private(set) var identified: [(Data, String?)] = []
     var zonesResult: Result<[StoreZone], Error> = .success(Fixtures.zones)
     var feedbackResult: Result<FeedbackReceipt, Error> = .success(
         FeedbackReceipt(id: 1, verdict: .found, zoneID: 17, reports: nil)
@@ -126,6 +130,16 @@ final class StubAPI: AisleAPI, @unchecked Sendable {
     func searchItem(query: String, storeID: String?) async throws -> ItemSearchResult {
         itemSearches.append((query, storeID))
         return try searchItemResult.get()
+    }
+
+    func chat(storeID: String, messages: [ChatMessage]) async throws -> ChatReply {
+        chats.append((storeID, messages))
+        return try chatResult.get()
+    }
+
+    func identify(photo: Data, note: String?, storeID: String?) async throws -> String? {
+        identified.append((photo, note))
+        return try identifyResult.get()
     }
 
     func zones(storeID: String) async throws -> [StoreZone] { try zonesResult.get() }

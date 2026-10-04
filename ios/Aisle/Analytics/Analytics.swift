@@ -13,6 +13,7 @@ enum AnalyticsEventName: String, Codable, CaseIterable {
     case shoppingItemFound = "shopping_item_found"
     case shoppingItemSkipped = "shopping_item_skipped"
     case shoppingFinished = "shopping_finished"
+    case followUpSent = "follow_up_sent"
 }
 
 /// Property values are small scalars. Never put item text or queries in analytics.

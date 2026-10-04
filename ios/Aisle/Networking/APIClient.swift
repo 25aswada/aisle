@@ -44,6 +44,11 @@ protocol AisleAPI: Sendable {
     func searchStores(query: String) async throws -> [Store]
     func store(id: String) async throws -> Store
     func searchItem(query: String, storeID: String?) async throws -> ItemSearchResult
+    /// The next Aisle reply in a conversation that started with a search, with a search
+    /// result when the shopper asked where to find a new item.
+    func chat(storeID: String, messages: [ChatMessage]) async throws -> ChatReply
+    /// A search phrase for the product in a photo (JPEG); nil when there's none to name.
+    func identify(photo: Data, note: String?, storeID: String?) async throws -> String?
     func zones(storeID: String) async throws -> [StoreZone]
     func storeLayout(storeID: String) async throws -> StoreLayout
     func sendFeedback(_ body: FeedbackBody) async throws -> FeedbackReceipt
@@ -93,7 +98,23 @@ struct APIClient: AisleAPI {
     }
 
     func searchItem(query: String, storeID: String?) async throws -> ItemSearchResult {
-        try await post("search", body: SearchRequestBody(query: query, storeID: storeID.flatMap(Int.init)))
+        try await post(
+            "search", body: SearchRequestBody(query: query, storeID: storeID.flatMap(Int.init)),
+            timeout: Self.replyTimeout
+        )
+    }
+
+    func chat(storeID: String, messages: [ChatMessage]) async throws -> ChatReply {
+        guard let store = Int(storeID) else { throw APIError.invalidURL }
+        return try await post(
+            "chat", body: ChatRequestBody(storeID: store, messages: messages), timeout: Self.replyTimeout
+        )
+    }
+
+    func identify(photo: Data, note: String?, storeID: String?) async throws -> String? {
+        let body = IdentifyRequestBody(storeID: storeID.flatMap(Int.init), image: photo.base64EncodedString(), note: note)
+        let response: IdentifyResponse = try await post("identify", body: body, timeout: Self.replyTimeout)
+        return response.item
     }
 
     func zones(storeID: String) async throws -> [StoreZone] {
@@ -126,6 +147,9 @@ struct APIClient: AisleAPI {
         let _: AnalyticsAccepted = try await post("events", body: AnalyticsBatchBody(events: events))
     }
 
+    /// Requests that wait on a written AI reply get longer than the default 10 seconds.
+    static let replyTimeout: TimeInterval = 40
+
     // MARK: - Request building
 
     func makeURL(path: String, query: [URLQueryItem] = []) throws -> URL {
@@ -148,21 +172,23 @@ struct APIClient: AisleAPI {
         return try await send(request)
     }
 
-    private func post<Body: Encodable, T: Decodable>(_ path: String, body: Body) async throws -> T {
+    private func post<Body: Encodable, T: Decodable>(
+        _ path: String, body: Body, timeout: TimeInterval = 10
+    ) async throws -> T {
         var request = URLRequest(url: try makeURL(path: path))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(body)
-        return try await send(request)
+        return try await send(request, timeout: timeout)
     }
 
-    private func send<T: Decodable>(_ request: URLRequest) async throws -> T {
+    private func send<T: Decodable>(_ request: URLRequest, timeout: TimeInterval = 10) async throws -> T {
         var request = request
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         if let deviceID {
             request.setValue(deviceID, forHTTPHeaderField: "X-Aisle-Device")
         }
-        request.timeoutInterval = 10
+        request.timeoutInterval = timeout
 
         let data: Data
         let response: URLResponse

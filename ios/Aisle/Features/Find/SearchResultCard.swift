@@ -14,22 +14,9 @@ struct SearchResultCard: View {
         VStack(alignment: .leading, spacing: 12) {
             ConfidenceHero(result: result)
             if let layout, let zoneID = mappedZone(in: layout) {
-                Button { showingWay = true } label: {
-                    StoreMapCard(layout: layout, retailer: retailer, highlighted: [zoneID], height: 200)
-                        .overlay(alignment: .topTrailing) {
-                            Label("Show me the way", systemImage: "figure.walk")
-                                .font(Theme.font(13, .semibold, relativeTo: .footnote))
-                                .foregroundStyle(Theme.onAccent)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 8)
-                                .background(Theme.accent, in: Capsule())
-                                .shadow(color: Theme.glow.opacity(0.25), radius: 8, y: 4)
-                                .padding(20)
-                        }
+                FloorPreviewCard(layout: layout, zoneID: zoneID, result: result, retailer: retailer) {
+                    showingWay = true
                 }
-                .buttonStyle(.plain)
-                .accessibilityHint("Opens the map, a 3D view and step-by-step directions")
-                .accessibilityIdentifier("showMeTheWay")
                 .fullScreenCover(isPresented: $showingWay) {
                     StoreWayView(layout: layout, zoneID: zoneID, result: result, retailer: retailer)
                 }
@@ -482,22 +469,10 @@ extension ItemSearchResult {
         count == 1 ? "1 shopper" : "\(count) shoppers"
     }
 
-    /// What Aisle says: the server's AI explanation when there is one (its **bold** place
-    /// drawn semibold), otherwise the reply composed on the device.
+    /// What Aisle says: the server's AI explanation when there is one, otherwise the reply
+    /// composed on the device.
     func reply(at retailer: String?) -> AttributedString {
-        guard let explanation,
-              var text = try? AttributedString(
-                markdown: explanation,
-                options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-              )
-        else { return replyText(at: retailer) }
-        let bold = text.runs
-            .filter { $0.inlinePresentationIntent?.contains(.stronglyEmphasized) == true }
-            .map(\.range)
-        for range in bold {
-            text[range].font = Theme.font(16, .semibold, relativeTo: .callout)
-        }
-        return text
+        explanation.flatMap(AttributedString.aisleReply(markdown:)) ?? replyText(at: retailer)
     }
 
     /// Shape-only stand-in shown redacted while a search loads.
@@ -510,4 +485,64 @@ extension ItemSearchResult {
         ),
         availability: .likely, confidence: .medium, source: .fallback, reports: nil
     )
+}
+
+/// The result's floor, top-down or 3D (the same choice Show me the way opens in), with the
+/// way in below it. Tapping the floor opens it too.
+private struct FloorPreviewCard: View {
+    let layout: StoreLayout
+    let zoneID: Int
+    let result: ItemSearchResult
+    let retailer: String?
+    let onShowWay: () -> Void
+
+    @AppStorage(StoreWayView.modeKey) private var mode: StoreWayView.Mode = .model
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var isFlat: Bool { mode == .map }
+
+    private var pinTitle: String {
+        result.aisleLabel ?? result.placeInStore ?? layout.zones.first { $0.id == zoneID }?.name ?? "Here"
+    }
+
+    private var caption: String {
+        layout.approximate ? "Typical \(retailer ?? "store") layout · approximate" : "This store's layout"
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            ZStack(alignment: .topTrailing) {
+                Button(action: onShowWay) {
+                    FloorPlanView(layout: layout, targetZoneID: zoneID, pinTitle: pinTitle, tilt: isFlat ? 0 : 1)
+                        .frame(height: 300)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Opens the map, a 3D view and step-by-step directions")
+
+                ModePicker(
+                    mode: Binding(
+                        get: { isFlat ? .map : .model },
+                        set: { newMode in
+                            withAnimation(reduceMotion ? .easeInOut(duration: 0.25) : .spring(response: 0.8, dampingFraction: 0.86)) {
+                                mode = newMode
+                            }
+                        }
+                    ),
+                    modes: [.map, .model]
+                )
+                .padding(4)
+            }
+            Label(caption, systemImage: "map")
+                .font(.aisleFootnote)
+                .foregroundStyle(Theme.secondaryInk)
+            Button(action: onShowWay) {
+                Label("Show me the way", systemImage: "figure.walk")
+            }
+            .buttonStyle(.aisleAccent)
+            .accessibilityHint("Opens the map, a 3D view and step-by-step directions")
+            .accessibilityIdentifier("showMeTheWay")
+        }
+        .aisleCard(padding: 12)
+    }
 }
