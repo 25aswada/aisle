@@ -38,6 +38,8 @@ final class FindModel {
     private(set) var turns: [ChatTurn] = []
     private(set) var isReplying = false
     private(set) var followUpError: String?
+    /// Set when a free-tier limit is hit, to open the Aisle+ sheet saying why.
+    var upgradePrompt: String?
 
     @ObservationIgnored private let api: AisleAPI
     @ObservationIgnored private let analytics: AnalyticsTracking
@@ -119,6 +121,11 @@ final class FindModel {
     }
 
     private func fail(with error: Error) {
+        if case APIError.plusRequired(_, let message) = error {
+            phase = .failed(message)
+            upgradePrompt = message
+            return
+        }
         if case APIError.httpStatus(404) = error {
             phase = .failed("This store is no longer available. Choose another store.")
             analytics.track(.searchFailed, ["error": "store_not_found"])
@@ -207,6 +214,11 @@ final class FindModel {
             turns.removeAll { $0.id == turn.id }
             if followUp.isEmpty { followUp = text }
             if self.photo == nil { self.photo = photo }
+            if case APIError.plusRequired(_, let message) = error {
+                followUpError = message
+                upgradePrompt = message
+                return
+            }
             followUpError = error as? APIError == .invalidResponse
                 ? "Aisle couldn't answer that right now. Try again in a moment."
                 : (error as? LocalizedError)?.errorDescription ?? "Something went wrong."

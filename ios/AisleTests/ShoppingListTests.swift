@@ -131,6 +131,14 @@ final class ListComposerTests: XCTestCase {
         XCTAssertNil(composer.photoNotice)
     }
 
+    func testScanOverTheFreeLimitOpensTheUpgrade() async {
+        let api = StubAPI()
+        api.scanListResult = .failure(APIError.plusRequired(feature: "photo_search", message: "Out of free photo searches."))
+        let composer = ListComposerModel(api: api)
+        await composer.add(photo: Data([0xFF, 0xD8]), to: ShoppingListStore(defaults: .fresh("AisleTests.ScanLimit")))
+        XCTAssertEqual(composer.upgradePrompt, "Out of free photo searches.")
+    }
+
     func testPhotoWithoutAListSaysSo() async {
         let api = StubAPI()
         let store = ShoppingListStore(defaults: .fresh("AisleTests.ComposerPhoto2"))

@@ -60,7 +60,7 @@
               "locale" : "en_US"
             }
           ],
-          "productID" : "com.aisle.plus.yearly",
+          "productID" : "app.shopaisle.plus.yearly",
           "recurringSubscriptionPeriod" : "P1Y",
           "referenceName" : "Aisle+ Yearly",
           "subscriptionGroupID" : "21500001",
@@ -87,7 +87,7 @@
               "locale" : "en_US"
             }
           ],
-          "productID" : "com.aisle.plus.monthly",
+          "productID" : "app.shopaisle.plus.monthly",
           "recurringSubscriptionPeriod" : "P1M",
           "referenceName" : "Aisle+ Monthly",
           "subscriptionGroupID" : "21500001",

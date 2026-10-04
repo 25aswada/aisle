@@ -408,3 +408,24 @@ class ProfileUpdate(BaseModel):
         if value is not None and not value.strip():
             raise ValueError("first_name must not be blank")
         return value.strip() if value else value
+
+
+# --- Aisle+ ---
+
+class PlusSync(BaseModel):
+    # StoreKit 2 `jwsRepresentation` of each current Aisle+ entitlement.
+    transactions: list[str] = Field(default_factory=list, max_length=20)
+
+
+class UsageOut(BaseModel):
+    used: int
+    limit: int
+
+
+class PlusStatus(BaseModel):
+    is_plus: bool
+    expires_at: datetime | None = None
+    product_id: str | None = None
+    # Today's use of the free tier's limited features (not counted for Aisle+).
+    photo_search: UsageOut
+    follow_up: UsageOut

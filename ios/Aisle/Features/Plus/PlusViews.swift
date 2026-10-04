@@ -293,6 +293,18 @@ private struct FeatureTile: View {
     }
 }
 
+// MARK: - Upgrade prompts
+
+extension View {
+    /// Opens the Aisle+ offer as a sheet when `reason` is set (e.g. a free-tier limit was
+    /// hit), with the reason above it, and clears it when the sheet closes.
+    func plusUpgradeSheet(reason: Binding<String?>) -> some View {
+        sheet(isPresented: Binding(get: { reason.wrappedValue != nil }, set: { if !$0 { reason.wrappedValue = nil } })) {
+            PaywallView(reason: reason.wrappedValue)
+        }
+    }
+}
+
 // MARK: - Paywall
 
 /// The upgrade sheet: close and restore, a headline, a scrolling strip of what's included,

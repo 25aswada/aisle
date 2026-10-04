@@ -23,7 +23,8 @@ struct AisleApp: App {
         let api = APIClient(
             baseURL: AppConfig.current.apiBaseURL,
             session: URLSession(configuration: configuration),
-            deviceID: DeviceIdentity.current()
+            deviceID: DeviceIdentity.current(),
+            authToken: { KeychainTokenStore().token }
         )
         self.api = api
         let auth = RemoteAuthService(client: api, googleClientID: AppConfig.current.googleClientID)
@@ -35,7 +36,9 @@ struct AisleApp: App {
         _shoppingList = State(initialValue: ShoppingListStore())
         _recentSearches = State(initialValue: RecentSearches())
         _accounts = State(initialValue: AccountStore(auth: auth))
-        _plus = State(initialValue: PlusStore())
+        let plus = PlusStore()
+        plus.client = api
+        _plus = State(initialValue: plus)
         Theme.applyAppearance()
     }
 
@@ -59,6 +62,10 @@ struct AisleApp: App {
                 .preferredColorScheme(appearance.colorScheme)
                 .task {
                     await accounts.refresh()
+                }
+                .onChange(of: accounts.account?.id) {
+                    // Aisle+ follows the account once signed in.
+                    Task { await plus.syncWithServer() }
                 }
                 .task {
                     analytics.track(.appOpened)

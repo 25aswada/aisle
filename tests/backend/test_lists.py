@@ -77,11 +77,22 @@ class ListReader:
 
 
 @pytest.fixture
-def reader():
+def reader(engine):
+    from sqlalchemy.orm import Session
+
+    from backend.app.database import get_db
+
+    def override_db():
+        with Session(engine) as session:
+            yield session
+
     fake = ListReader("2 lbs chicken\nhalf and half\nbananas")
     app.dependency_overrides[get_explainer] = lambda: fake
+    # Scans count against the free tier's daily photo searches.
+    app.dependency_overrides[get_db] = override_db
     yield fake
     app.dependency_overrides.pop(get_explainer, None)
+    app.dependency_overrides.pop(get_db, None)
 
 
 def test_scan_reads_the_photo_then_parses_it_like_typed_text(api, reader):

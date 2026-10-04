@@ -56,6 +56,22 @@ final class ItemSearchClientTests: XCTestCase {
         XCTAssertEqual(json["store_id"] as? Int, 2)
     }
 
+    func testPaymentRequiredBecomesPlusRequired() async throws {
+        StubURLProtocol.respond(
+            status: 402,
+            json: #"{"detail":{"code":"plus_required","feature":"photo_search","message":"Out of free photo searches."}}"#
+        )
+        let client = APIClient(baseURL: URL(string: "http://127.0.0.1:8000")!, session: StubURLProtocol.makeSession(),
+                               authToken: { "session-token" })
+        do {
+            _ = try await client.identify(photo: Data([0xFF]), note: nil, storeID: nil)
+            XCTFail("expected plusRequired")
+        } catch let error as APIError {
+            XCTAssertEqual(error, .plusRequired(feature: "photo_search", message: "Out of free photo searches."))
+        }
+        XCTAssertEqual(StubURLProtocol.requests.first?.value(forHTTPHeaderField: "Authorization"), "Bearer session-token")
+    }
+
     func testChatPostsTheConversationAndReadsTheReply() async throws {
         StubURLProtocol.respond(json: #"{"reply":"Try the bakery tables.","search":null}"#)
         let client = APIClient(baseURL: URL(string: "http://127.0.0.1:8000")!, session: StubURLProtocol.makeSession())
@@ -246,6 +262,29 @@ final class FindModelTests: XCTestCase {
         await model.sendFollowUp(storeID: "2", retailer: nil)
         XCTAssertNil(model.turns.last?.result)
         XCTAssertEqual(model.latestResult, model.currentResult)
+    }
+
+    func testPhotoSearchOverTheFreeLimitOpensTheUpgrade() async {
+        let api = StubAPI()
+        api.identifyResult = .failure(APIError.plusRequired(feature: "photo_search", message: "You've used today's 5 free photo searches."))
+        let model = FindModel(api: api)
+        model.photo = Data([0xFF, 0xD8])
+        await model.search(storeID: "2")
+        XCTAssertEqual(model.upgradePrompt, "You've used today's 5 free photo searches.")
+        XCTAssertNotNil(model.photo, "the photo stays, ready to send after upgrading")
+    }
+
+    func testFollowUpOverTheFreeLimitOpensTheUpgrade() async {
+        let api = StubAPI()
+        let model = FindModel(api: api)
+        model.query = "maple syrup"
+        await model.search(storeID: "2")
+        api.chatResult = .failure(APIError.plusRequired(feature: "follow_up", message: "You've used today's 10 free follow-ups."))
+        model.followUp = "and pancakes?"
+        await model.sendFollowUp(storeID: "2", retailer: nil)
+        XCTAssertEqual(model.upgradePrompt, "You've used today's 10 free follow-ups.")
+        XCTAssertEqual(model.followUp, "and pancakes?")
+        XCTAssertTrue(model.turns.isEmpty)
     }
 
     func testFollowUpNeedsAResult() async {

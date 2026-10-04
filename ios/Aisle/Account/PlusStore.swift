@@ -11,8 +11,8 @@ import StoreKit
 @Observable
 final class PlusStore {
     enum Plan: String, CaseIterable, Identifiable {
-        case yearly = "com.aisle.plus.yearly"
-        case monthly = "com.aisle.plus.monthly"
+        case yearly = "app.shopaisle.plus.yearly"
+        case monthly = "app.shopaisle.plus.monthly"
 
         var id: String { rawValue }
 
@@ -31,7 +31,12 @@ final class PlusStore {
     private(set) var isPlus = false
     private(set) var isLoading = false
     private(set) var loadError: String?
+    /// What the server sees: Aisle+ and today's free photo searches and follow-ups.
+    private(set) var serverStatus: PlusServerStatus?
 
+    /// Where the App Store's signed transactions are sent so the server can verify
+    /// Aisle+ and lift the free tier's limits. Nil in tests and previews.
+    @ObservationIgnored var client: APIClient?
     @ObservationIgnored private var updates: Task<Void, Never>?
 
     init() {
@@ -133,14 +138,43 @@ final class PlusStore {
 
     func refreshEntitlement() async {
         var active = false
+        var signed: [String] = []
         for await result in Transaction.currentEntitlements {
             if case .verified(let transaction) = result,
                Plan(rawValue: transaction.productID) != nil,
                transaction.revocationDate == nil {
                 active = true
+                signed.append(result.jwsRepresentation)
             }
         }
         isPlus = active
+        await syncWithServer(signed)
+    }
+
+    /// Tells the server about this device's subscription (or none), and picks up today's
+    /// free-tier use. Call again after signing in so Aisle+ follows the account.
+    func syncWithServer(_ signed: [String]? = nil) async {
+        guard let client else { return }
+        var transactions = signed ?? []
+        if signed == nil {
+            for await result in Transaction.currentEntitlements {
+                if case .verified(let transaction) = result, Plan(rawValue: transaction.productID) != nil {
+                    transactions.append(result.jwsRepresentation)
+                }
+            }
+        }
+        do {
+            serverStatus = try await client.syncPlus(transactions: transactions)
+        } catch {
+            // Offline or not yet verifiable: the App Store's word still unlocks the app's own screens.
+            serverStatus = try? await client.plusStatus()
+        }
+    }
+
+    /// Picks up today's free use after a photo search or follow-up.
+    func refreshUsage() async {
+        guard let client else { return }
+        if let status = try? await client.plusStatus() { serverStatus = status }
     }
 }
 

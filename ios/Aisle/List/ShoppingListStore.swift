@@ -100,6 +100,8 @@ final class ListComposerModel {
     private(set) var notice: String?
     private(set) var isReadingPhoto = false
     private(set) var photoNotice: PhotoNotice?
+    /// Set when a free-tier limit is hit, to open the Aisle+ sheet saying why.
+    var upgradePrompt: String?
 
     @ObservationIgnored private let api: AisleAPI
     @ObservationIgnored private let analytics: AnalyticsTracking
@@ -162,6 +164,7 @@ final class ListComposerModel {
             photoNotice = PhotoNotice(
                 message: (error as? LocalizedError)?.errorDescription ?? "Couldn't read that photo.", added: []
             )
+            if case APIError.plusRequired(_, let message) = error { upgradePrompt = message }
         }
     }
 

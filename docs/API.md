@@ -304,6 +304,32 @@ sign-in created the account, so the app asks for a first name (`PATCH /me`).
 - A method without keys in `backend/.env` answers 503 with a message to try another way.
 - Errors carry `{"detail": "…"}` meant for the shopper.
 
+## Aisle+
+
+The subscription is bought with StoreKit 2 in the app; the server only trusts it after
+checking the App Store's signature.
+
+- `POST /plus/sync` `{"transactions": ["<jws>", …]}`: each StoreKit `jwsRepresentation` of a
+  current Aisle+ entitlement. A transaction counts when its certificate chain leads to the
+  pinned Apple Root CA - G3, the leaf and intermediate carry Apple's marker extensions,
+  the ES256 signature verifies, and it's for `APPLE_BUNDLE_ID` and an Aisle+ product
+  (`app.shopaisle.plus.yearly`, `.monthly`). Xcode's local StoreKit test purchases count
+  only with `AISLE_PLUS_ALLOW_XCODE=true`. It applies to the sending device and, with a
+  session, the account. All rejected → 400. Returns the status below.
+- `GET /plus/status` →
+  `{"is_plus": false, "expires_at": null, "product_id": null,
+    "photo_search": {"used": 2, "limit": 5}, "follow_up": {"used": 0, "limit": 10}}`
+
+Free limits, per UTC day, counted per account when signed in and otherwise per device:
+5 photo searches (`/identify`, `/lists/scan`, and `/chat` messages with a photo) and 10
+follow-ups (other `/chat` messages). A request only counts when it got an answer.
+Over the limit, or for an Aisle+-only feature, the server answers **402**:
+
+```json
+{"detail": {"code": "plus_required", "feature": "photo_search", "limit": 5,
+            "message": "You've used today's 5 free photo searches. Aisle+ has unlimited."}}
+```
+
 ## Analytics and errors (Milestone 7)
 
 ### POST /events

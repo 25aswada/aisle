@@ -8,6 +8,8 @@ enum APIError: Error, Equatable, LocalizedError {
     case transport(String)
     case offline
     case timeout
+    /// A free-tier limit or an Aisle+ feature (HTTP 402). `message` says why, for the upgrade sheet.
+    case plusRequired(feature: String, message: String)
 
     var errorDescription: String? {
         switch self {
@@ -19,6 +21,7 @@ enum APIError: Error, Equatable, LocalizedError {
         case .transport: return "Couldn't reach the Aisle server."
         case .offline: return "You're offline. Check your connection and try again."
         case .timeout: return "The request took too long. Try again."
+        case .plusRequired(_, let message): return message
         }
     }
 
@@ -32,6 +35,7 @@ enum APIError: Error, Equatable, LocalizedError {
         case .transport: return "transport"
         case .offline: return "offline"
         case .timeout: return "timeout"
+        case .plusRequired: return "plus_required"
         }
     }
 }
@@ -64,11 +68,18 @@ struct APIClient: AisleAPI {
     let session: URLSession
     /// Sent as `X-Aisle-Device` so the server can count repeat reports once.
     let deviceID: String?
+    /// The signed-in session, sent as a bearer token so Aisle+ and the free tier's limits
+    /// follow the account. Nil (or returning nil) when signed out.
+    let authToken: (@Sendable () -> String?)?
 
-    init(baseURL: URL = AppConfig.current.apiBaseURL, session: URLSession = .shared, deviceID: String? = nil) {
+    init(
+        baseURL: URL = AppConfig.current.apiBaseURL, session: URLSession = .shared, deviceID: String? = nil,
+        authToken: (@Sendable () -> String?)? = nil
+    ) {
         self.baseURL = baseURL
         self.session = session
         self.deviceID = deviceID
+        self.authToken = authToken
     }
 
     func health() async throws -> HealthResponse {
@@ -197,6 +208,9 @@ struct APIClient: AisleAPI {
         if let deviceID {
             request.setValue(deviceID, forHTTPHeaderField: "X-Aisle-Device")
         }
+        if request.value(forHTTPHeaderField: "Authorization") == nil, let token = authToken?() {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
         request.timeoutInterval = timeout
 
         let data: Data
@@ -217,6 +231,9 @@ struct APIClient: AisleAPI {
         }
 
         guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
+        if http.statusCode == 402 {
+            throw Self.plusRequired(from: data)
+        }
         guard (200..<300).contains(http.statusCode) else { throw APIError.httpStatus(http.statusCode) }
 
         do {
@@ -224,6 +241,55 @@ struct APIClient: AisleAPI {
         } catch {
             throw APIError.decoding(String(describing: error))
         }
+    }
+}
+
+// MARK: - Aisle+
+
+/// `GET /plus/status`, `POST /plus/sync`: whether the server sees Aisle+, and today's free use.
+struct PlusServerStatus: Decodable, Equatable {
+    struct Usage: Decodable, Equatable {
+        let used: Int
+        let limit: Int
+        var left: Int { max(0, limit - used) }
+    }
+
+    let isPlus: Bool
+    let photoSearch: Usage
+    let followUp: Usage
+
+    enum CodingKeys: String, CodingKey {
+        case isPlus = "is_plus"
+        case photoSearch = "photo_search"
+        case followUp = "follow_up"
+    }
+}
+
+extension APIClient {
+    /// Sends the App Store's signed transactions so the server can verify Aisle+.
+    func syncPlus(transactions: [String]) async throws -> PlusServerStatus {
+        struct Body: Encodable { let transactions: [String] }
+        return try await post("plus/sync", body: Body(transactions: transactions))
+    }
+
+    func plusStatus() async throws -> PlusServerStatus {
+        try await get("plus/status")
+    }
+
+    /// The 402 body: {"detail": {"code": "plus_required", "feature": "...", "message": "..."}}.
+    static func plusRequired(from data: Data) -> APIError {
+        struct Body: Decodable {
+            struct Detail: Decodable {
+                let feature: String?
+                let message: String?
+            }
+            let detail: Detail
+        }
+        let detail = (try? JSONDecoder().decode(Body.self, from: data))?.detail
+        return .plusRequired(
+            feature: detail?.feature ?? "plus",
+            message: detail?.message ?? "That's part of Aisle+."
+        )
     }
 }
 

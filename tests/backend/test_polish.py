@@ -118,5 +118,5 @@ def test_openapi_lists_all_routes():
         "/stores/{store_id}/layout",
         "/search", "/chat", "/identify", "/feedback", "/lists/parse", "/lists/scan",
         "/auth/phone/start", "/auth/phone/verify", "/auth/email/start", "/auth/email/verify",
-        "/auth/apple", "/auth/google", "/auth/signout", "/me", "/route", "/events",
+        "/auth/apple", "/auth/google", "/auth/signout", "/me", "/plus/status", "/plus/sync", "/route", "/events",
     } == paths

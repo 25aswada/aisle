@@ -96,6 +96,7 @@ struct FindView: View {
                 .onChange(of: model.isReplying) { scrollToEnd(scroller) }
             }
             .cameraOverlay(isPresented: $isTakingPhoto) { photo in model.photo = photo }
+            .plusUpgradeSheet(reason: $model.upgradePrompt)
             .onChange(of: isTakingPhoto) { _, taking in
                 // Photo in: open the keyboard in its composer, ready for a note or send.
                 guard !taking, model.photo != nil else { return }
@@ -416,6 +417,16 @@ struct PhotoComposer: View {
     let onSend: () -> Void
     var onNewSearch: (() -> Void)? = nil
 
+    @Environment(PlusStore.self) private var plus
+
+    /// "3 of 5 free photo searches left today", for free shoppers.
+    private var allowance: String? {
+        guard !plus.isPlus, let usage = plus.serverStatus?.photoSearch, usage.limit > 0 else { return nil }
+        return usage.left == 0
+            ? "No free photo searches left today"
+            : "\(usage.left) of \(usage.limit) free photo searches left today"
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             if let image = UIImage(data: photo) {
@@ -445,6 +456,11 @@ struct PhotoComposer: View {
                 .submitLabel(.send)
                 .onSubmit { if canSend { onSend() } }
                 .accessibilityIdentifier("photoComposerField")
+            if let allowance {
+                Label(allowance, systemImage: "sparkles")
+                    .font(.aisleFootnote)
+                    .foregroundStyle(Theme.secondaryInk)
+            }
             HStack(spacing: 4) {
                 if let onNewSearch {
                     Button(action: onNewSearch) {
@@ -473,6 +489,7 @@ struct PhotoComposer: View {
         .background(RoundedRectangle(cornerRadius: 28, style: .continuous).fill(Theme.surface))
         .overlay(RoundedRectangle(cornerRadius: 28, style: .continuous).strokeBorder(Theme.accentRing, lineWidth: 1.5))
         .shadow(color: Theme.glow.opacity(0.12), radius: 14, y: 6)
+        .task { await plus.refreshUsage() }
     }
 }
 

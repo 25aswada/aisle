@@ -265,3 +265,35 @@ class CodeRequest(Base):
     device_id: Mapped[str | None] = mapped_column(String(64), index=True)
     ip: Mapped[str | None] = mapped_column(String(45), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+
+class PlusEntitlement(Base):
+    """An Aisle+ subscription the app proved with a signed App Store transaction.
+
+    Keyed by the subscription's original transaction id; renewals update expires_at.
+    It applies to the device that sent it and, when signed in, to that account.
+    """
+    __tablename__ = "plus_entitlements"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    original_transaction_id: Mapped[str] = mapped_column(String(64), unique=True)
+    product_id: Mapped[str] = mapped_column(String(100))
+    environment: Mapped[str] = mapped_column(String(20))
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    device_id: Mapped[str | None] = mapped_column(String(64), index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class UsageCounter(Base):
+    """How many times a free shopper used a limited feature on a (UTC) day."""
+    __tablename__ = "usage_counters"
+    __table_args__ = (UniqueConstraint("subject", "feature", "day", name="uq_usage_subject_feature_day"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # "user:7", "device:<install id>" or "ip:<address>".
+    subject: Mapped[str] = mapped_column(String(80))
+    feature: Mapped[str] = mapped_column(String(20))  # photo_search or follow_up
+    day: Mapped[str] = mapped_column(String(10))  # YYYY-MM-DD
+    count: Mapped[int] = mapped_column(default=0)

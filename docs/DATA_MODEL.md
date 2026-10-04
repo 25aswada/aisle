@@ -64,6 +64,14 @@ Names come from a fixed list; properties are small scalars with no user text.
 Deleting a user deletes its identities and revokes its sessions. Searches, reports and
 analytics stay anonymous and are not linked to users.
 
+## Aisle+
+
+- `plus_entitlements(id, original_transaction_id unique, product_id, environment,
+  expires_at, revoked_at, device_id, user_id null, updated_at)`: subscriptions proved with
+  signed App Store transactions; renewals update the same row.
+- `usage_counters(id, subject, feature, day, count)`, unique on `(subject, feature, day)`:
+  the free tier's daily use. `subject` is `user:<id>`, `device:<install id>` or `ip:<addr>`.
+
 ### Seeding and imports
 
 `python -m backend.app.seed` loads demo stores, the catalog (categories, concepts,

@@ -86,6 +86,7 @@ struct ShoppingListView: View {
             .cameraOverlay(isPresented: $isScanning) { photo in
                 Task { await composer.add(photo: photo, to: list) }
             }
+            .plusUpgradeSheet(reason: $composer.upgradePrompt)
             .sensoryFeedback(.impact(weight: .light), trigger: list.remaining.count)
             .fullScreenCover(item: $trip) { trip in
                 ShoppingModeView(model: trip)

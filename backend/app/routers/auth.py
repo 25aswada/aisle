@@ -15,6 +15,7 @@ from ..auth.codes import (
     record_code_request,
 )
 from ..auth.identity import IdentityVerifier, InvalidToken, JWKSIdentityVerifier
+from ..plus.access import Caller
 from ..config import get_settings
 from ..database import get_db
 from ..models import AuthSession, User
@@ -66,6 +67,24 @@ def current_session(
 
 
 SignedIn = Annotated[tuple[User, AuthSession], Depends(current_session)]
+
+
+def optional_user(db: Database, authorization: Annotated[str | None, Header()] = None) -> User | None:
+    """The signed-in user, or None. Never fails: these routes work signed out too."""
+    scheme, _, token = (authorization or "").partition(" ")
+    if scheme.lower() != "bearer" or not token.strip():
+        return None
+    found = user_for_token(db, token.strip())
+    return found[0] if found else None
+
+
+def get_caller(
+    request: Request, user: Annotated[User | None, Depends(optional_user)], device_id: DeviceID = None,
+) -> Caller:
+    return Caller(user=user, device_id=device_id, ip=client_ip(request))
+
+
+CallerDep = Annotated[Caller, Depends(get_caller)]
 
 
 def user_out(user: User) -> UserOut:

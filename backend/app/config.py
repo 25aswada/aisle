@@ -37,6 +37,12 @@ class Settings(BaseSettings):
     google_ios_client_id: str | None = None
     # Sign in with Apple: the app's bundle ID its identity tokens are issued to.
     apple_bundle_id: str = "app.shopaisle.aisle"
+
+    # Aisle+. The free tier's daily limits (per account, or per device when signed out).
+    aisle_free_photo_searches: int = 5
+    aisle_free_follow_ups: int = 10
+    # Accept purchases from Xcode's local StoreKit testing (never in production).
+    aisle_plus_allow_xcode: bool = False
     model_config = SettingsConfigDict(
         env_file=Path(__file__).resolve().parents[1] / ".env", extra="ignore"
     )
