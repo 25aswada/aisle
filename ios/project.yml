@@ -38,7 +38,6 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"
         # Near-black ink accent with a light variant for dark mode (Assets.xcassets).
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
-        # No app icon until the TestFlight milestone.
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         GENERATE_INFOPLIST_FILE: NO
     entitlements:
@@ -62,8 +61,12 @@ targets:
         NSLocationWhenInUseUsageDescription: >-
           Aisle uses your location only to show stores near you. This is
           optional: you can always search for a store by name or address instead.
+        # Only test builds pointed at a server on this network use it; the App Store app
+        # talks to the HTTPS server.
         NSLocalNetworkUsageDescription: >-
-          Aisle connects to its server on your local network while it's in development.
+          Aisle can connect to a test server on your local network.
+        # Only standard HTTPS and hashing, which are exempt from export paperwork.
+        ITSAppUsesNonExemptEncryption: false
         # aisle://join/CODE opens a shared-list invite.
         CFBundleURLTypes:
           - CFBundleURLName: app.shopaisle.aisle

@@ -266,17 +266,6 @@ struct YouView: View {
 
     private var preferences: some View {
         YouSection("Preferences") {
-            if let account = accounts.account {
-                SettingRow(systemImage: "envelope", title: "Shopping tips by email", subtitle: "Occasional, never more than monthly") {
-                    Toggle("", isOn: Binding(
-                        get: { account.wantsTips },
-                        set: { value in accounts.update { $0.wantsTips = value } }
-                    ))
-                    .labelsHidden()
-                    .tint(Theme.glow)
-                }
-                RowDivider()
-            }
             SettingRow(systemImage: "lock.shield", title: "Share anonymous usage", subtitle: "Counts only, never what you search") {
                 Toggle("", isOn: $analyticsEnabled)
                     .labelsHidden()
@@ -472,7 +461,7 @@ private struct SignedOutCard: View {
                 Text("Make Aisle yours")
                     .font(Theme.font(20, .bold, relativeTo: .title3))
             }
-            Text("A free account keeps your list and recent finds across devices. Everything works without one.")
+            Text("Aisle needs a free account. Sign in to share lists with family and keep Aisle+ on a new phone.")
                 .font(Theme.font(15, relativeTo: .subheadline))
                 .foregroundStyle(Theme.secondaryInk)
                 .fixedSize(horizontal: false, vertical: true)

@@ -947,7 +947,7 @@ private struct DoneStage: View {
                 .multilineTextAlignment(.center)
                 Text(accounts.isSignedIn
                      ? "That's the tour. Happy shopping."
-                     : "Last step: make your free account. It keeps your lists and recent finds on every device.")
+                     : "Last step: make your free account. Then you're ready to shop.")
                     .font(Theme.font(17, relativeTo: .body))
                     .foregroundStyle(Theme.secondaryInk)
                     .multilineTextAlignment(.center)

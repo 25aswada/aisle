@@ -30,7 +30,10 @@ final class RemoteAuthService: AuthService {
         switch provider {
         case .apple:
             let credential = try await apple.signIn(hashedNonce: Nonce.sha256(nonce))
-            return try await api.apple(identityToken: credential.identityToken, nonce: nonce, firstName: credential.firstName)
+            return try await api.apple(
+                identityToken: credential.identityToken, nonce: nonce, firstName: credential.firstName,
+                authorizationCode: credential.authorizationCode
+            )
         case .google:
             guard let googleClientID else { throw AuthError.providerUnavailable(.google) }
             let flow = GoogleSignIn(clientID: googleClientID)
@@ -97,6 +100,8 @@ final class AppleSignIn: NSObject, ASAuthorizationControllerDelegate, ASAuthoriz
     struct Credential {
         let identityToken: String
         let firstName: String?
+        /// One-time code the server trades for a token it revokes if the account is deleted.
+        var authorizationCode: String?
     }
 
     private var continuation: CheckedContinuation<Credential, Error>?
@@ -118,9 +123,10 @@ final class AppleSignIn: NSObject, ASAuthorizationControllerDelegate, ASAuthoriz
         let credential = authorization.credential as? ASAuthorizationAppleIDCredential
         let token = credential?.identityToken.flatMap { String(data: $0, encoding: .utf8) }
         let firstName = credential?.fullName?.givenName
+        let code = credential?.authorizationCode.flatMap { String(data: $0, encoding: .utf8) }
         Task { @MainActor in
             if let token {
-                self.finish(.success(Credential(identityToken: token, firstName: firstName)))
+                self.finish(.success(Credential(identityToken: token, firstName: firstName, authorizationCode: code)))
             } else {
                 self.finish(.failure(AuthError.providerUnavailable(.apple)))
             }

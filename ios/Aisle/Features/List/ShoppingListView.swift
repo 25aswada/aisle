@@ -645,7 +645,7 @@ private struct ProgressCard: View {
 
     private var summary: String {
         let depts = "\(departments) \(departments == 1 ? "department" : "departments")"
-        return storeName.map { "\(depts) · sorted for \($0)" } ?? depts
+        return storeName.map { "\(depts) · at \($0)" } ?? depts
     }
 }
 

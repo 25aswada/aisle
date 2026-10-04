@@ -66,6 +66,11 @@ final class APIClientTests: XCTestCase {
         XCTAssertNil(components.queryItems?.first { $0.name == "lat" })
     }
 
+    func testLocationsAreRoundedToAboutACityBlock() {
+        XCTAssertEqual(APIClient.coarse(41.319_876_5), "41.32")
+        XCTAssertEqual(APIClient.coarse(-81.648_712), "-81.649")
+    }
+
     func testSearchNearALocationSendsIt() async throws {
         StubURLProtocol.respond(json: "[]")
         _ = try await client.searchStores(query: "giant eagle", near: Coordinate(latitude: 41.31, longitude: -81.67))

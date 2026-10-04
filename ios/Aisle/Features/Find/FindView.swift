@@ -645,57 +645,6 @@ private struct ReplyingIndicator: View {
     }
 }
 
-struct RecentSearchList: View {
-    let recents: RecentSearches
-    let onSelect: (String) -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Recent")
-                    .font(Theme.font(22, .bold, relativeTo: .title2))
-                    .foregroundStyle(Theme.ink)
-                Spacer()
-                Button("Clear") { recents.clear() }
-                    .font(.aisleSubheadline)
-                    .foregroundStyle(Theme.secondaryInk)
-                    .accessibilityLabel("Clear recent searches")
-            }
-            VStack(spacing: 0) {
-                ForEach(Array(recents.queries.enumerated()), id: \.element) { index, query in
-                    Button { onSelect(query) } label: {
-                        HStack(spacing: 14) {
-                            Image(systemName: "clock.arrow.circlepath")
-                                .font(.system(size: 16, weight: .semibold))
-                                .foregroundStyle(Theme.secondaryInk)
-                                .frame(width: 22)
-                            Text(query)
-                                .font(.aisleBody)
-                                .foregroundStyle(Theme.ink)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(Theme.secondaryInk)
-                        }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityHint("Searches again")
-                    .contextMenu { Button("Remove", systemImage: "trash", role: .destructive) { recents.remove(query) } }
-                    if index < recents.queries.count - 1 {
-                        Divider().overlay(Theme.ink.opacity(0.08)).padding(.leading, 50)
-                    }
-                }
-            }
-            .padding(.vertical, 4)
-            .background(Theme.accentWash, in: RoundedRectangle(cornerRadius: Theme.Radius.card, style: .continuous))
-        }
-        .accessibilityIdentifier("recentSearches")
-    }
-}
-
 struct ItemSearchField: View {
     @Binding var query: String
     var photo: Data? = nil

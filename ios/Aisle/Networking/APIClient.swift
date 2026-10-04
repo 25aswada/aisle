@@ -89,10 +89,16 @@ struct APIClient: AisleAPI {
         try await get("health")
     }
 
+    /// A coordinate rounded to three decimals (about a city block), which is plenty to find
+    /// nearby stores and is all that leaves the phone.
+    static func coarse(_ degrees: Double) -> String {
+        String((degrees * 1000).rounded() / 1000)
+    }
+
     func nearbyStores(latitude: Double, longitude: Double, limit: Int? = nil) async throws -> [Store] {
         var query = [
-            URLQueryItem(name: "lat", value: String(latitude)),
-            URLQueryItem(name: "lon", value: String(longitude)),
+            URLQueryItem(name: "lat", value: Self.coarse(latitude)),
+            URLQueryItem(name: "lon", value: Self.coarse(longitude)),
         ]
         if let limit {
             query.append(URLQueryItem(name: "limit", value: String(limit)))
@@ -104,8 +110,8 @@ struct APIClient: AisleAPI {
     func searchStores(query: String, near: Coordinate?) async throws -> [Store] {
         var items = [URLQueryItem(name: "q", value: query)]
         if let near {
-            items.append(URLQueryItem(name: "lat", value: String(near.latitude)))
-            items.append(URLQueryItem(name: "lon", value: String(near.longitude)))
+            items.append(URLQueryItem(name: "lat", value: Self.coarse(near.latitude)))
+            items.append(URLQueryItem(name: "lon", value: Self.coarse(near.longitude)))
         }
         let response: StoresResponse = try await get("stores/search", query: items)
         return response.stores
