@@ -61,6 +61,21 @@ struct ShoppingModeView: View {
                 TripProgress(model: model)
             }
 
+            if let layout = model.layout, !model.isUnrouted {
+                Section {
+                    StoreMapCard(
+                        layout: layout,
+                        retailer: model.retailerName,
+                        highlighted: Set(model.currentStopIndex.flatMap { model.stops[$0].zoneID }.map { [$0] } ?? []),
+                        completed: Set(model.stops.filter { model.pendingItems(in: $0).isEmpty }.compactMap(\.zoneID)),
+                        route: model.stops.compactMap(\.zoneID),
+                        height: 240
+                    )
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+                }
+            }
+
             if let index = model.currentStopIndex {
                 let stop = model.stops[index]
                 Section {

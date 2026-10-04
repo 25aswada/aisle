@@ -10,6 +10,7 @@ struct FindView: View {
     @State private var isPickingStore = false
     @State private var model: FindModel
     @State private var isCorrecting = false
+    @State private var layout: StoreLayout?
     @FocusState private var searchFocused: Bool
 
     init(api: AisleAPI, location: LocationProviding, analytics: AnalyticsTracking, recents: RecentSearches) {
@@ -65,6 +66,11 @@ struct FindView: View {
             .toolbar(.hidden, for: .navigationBar)
             .onChange(of: storeSelection.current?.id) { model.clear() }
             .task { await refreshSelectedStore() }
+            .task(id: storeSelection.current?.id) {
+                layout = nil
+                guard let id = storeSelection.current?.id else { return }
+                layout = try? await api.storeLayout(storeID: id)
+            }
             .sheet(isPresented: $isPickingStore) {
                 StorePickerView(
                     model: StorePickerModel(api: api, location: location),
@@ -130,9 +136,9 @@ extension FindView {
         case .loaded(let result):
             QueryBubble(text: result.query.isEmpty ? result.item : result.query)
             AisleReply {
-                Text(result.replyText(at: store.retailerDisplayName))
+                Text(result.reply(at: store.retailerDisplayName))
             }
-            SearchResultCard(result: result, retailer: store.retailerDisplayName)
+            SearchResultCard(result: result, retailer: store.retailerDisplayName, layout: layout)
             FeedbackBar(
                 state: model.feedback,
                 onFound: { Task { await model.confirmFound(storeID: store.id) } },

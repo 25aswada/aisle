@@ -45,6 +45,7 @@ protocol AisleAPI: Sendable {
     func store(id: String) async throws -> Store
     func searchItem(query: String, storeID: String?) async throws -> ItemSearchResult
     func zones(storeID: String) async throws -> [StoreZone]
+    func storeLayout(storeID: String) async throws -> StoreLayout
     func sendFeedback(_ body: FeedbackBody) async throws -> FeedbackReceipt
     func parseList(text: String) async throws -> [ParsedListItem]
     func planRoute(storeID: String, items: [ListItem]) async throws -> RoutePlan
@@ -97,6 +98,10 @@ struct APIClient: AisleAPI {
 
     func zones(storeID: String) async throws -> [StoreZone] {
         try await get("stores/\(storeID)/zones")
+    }
+
+    func storeLayout(storeID: String) async throws -> StoreLayout {
+        try await get("stores/\(storeID)/layout")
     }
 
     func sendFeedback(_ body: FeedbackBody) async throws -> FeedbackReceipt {
@@ -184,5 +189,12 @@ struct APIClient: AisleAPI {
         } catch {
             throw APIError.decoding(String(describing: error))
         }
+    }
+}
+
+extension AisleAPI {
+    /// Stand-ins without a map; the app just hides it.
+    func storeLayout(storeID: String) async throws -> StoreLayout {
+        throw URLError(.unsupportedURL)
     }
 }

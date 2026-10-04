@@ -7,6 +7,7 @@ from typing import Protocol
 
 from ..config import get_settings
 from .catalog import CATEGORIES, LayoutDef
+from .explain import EXPLAIN_SYSTEM_PROMPT, CachedExplainer, Explainer, ExplainFacts, facts_prompt
 from .intent import Intent
 from .reasoning import (
     LocationGuess,
@@ -112,6 +113,17 @@ class AnthropicLocationModel:
             log.warning("AI provider failed; using deterministic fallback", exc_info=True)
             return None
 
+    def explain(self, facts: ExplainFacts) -> str | None:
+        response = self._client.messages.create(
+            model=self._model,
+            max_tokens=400,
+            system=EXPLAIN_SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": facts_prompt(facts)}],
+        )
+        if response.stop_reason in ("refusal", "max_tokens"):
+            return None
+        return "".join(block.text for block in response.content if block.type == "text").strip() or None
+
 
 class OpenAILocationModel:
     name = "openai"
@@ -148,6 +160,20 @@ class OpenAILocationModel:
         except Exception:  # Provider problems must never break search.
             log.warning("AI provider failed; using deterministic fallback", exc_info=True)
             return None
+
+
+    def explain(self, facts: ExplainFacts) -> str | None:
+        response = self._client.chat.completions.create(
+            model=self._model,
+            messages=[
+                {"role": "system", "content": EXPLAIN_SYSTEM_PROMPT},
+                {"role": "user", "content": facts_prompt(facts)},
+            ],
+        )
+        choice = response.choices[0]
+        if choice.finish_reason != "stop" or choice.message.refusal:
+            return None
+        return (choice.message.content or "").strip() or None
 
 
 DEFAULT_MODELS = {"anthropic": "claude-opus-5-5", "openai": "gpt-6-luna"}
@@ -190,3 +216,27 @@ def get_location_model() -> LocationModel | None:
             log.warning("%s package not installed; using deterministic fallback", name)
     _cached_model = (key, model)
     return model
+
+
+_cached_explainer: tuple[tuple, Explainer | None] | None = None
+
+
+def get_explainer() -> Explainer | None:
+    """AI explanations for search results, or None without a key or when turned off."""
+    global _cached_explainer
+    settings = get_settings()
+    choice = _choose_provider(settings) if settings.aisle_ai_explain else None
+    key = (choice, settings.aisle_ai_model, settings.aisle_ai_timeout_seconds)
+    if _cached_explainer is not None and _cached_explainer[0] == key:
+        return _cached_explainer[1]
+    explainer: Explainer | None = None
+    if choice:
+        name, api_key = choice
+        try:
+            explainer = CachedExplainer(PROVIDERS[name](
+                api_key, settings.aisle_ai_model or DEFAULT_MODELS[name], settings.aisle_ai_timeout_seconds
+            ))
+        except ImportError:
+            log.warning("%s package not installed; no AI explanations", name)
+    _cached_explainer = (key, explainer)
+    return explainer

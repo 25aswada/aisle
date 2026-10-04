@@ -21,6 +21,8 @@ final class ShoppingTripModel {
     private(set) var status: [String: ItemStatus] = [:]
     /// True when the trip uses list order because the route couldn't be planned.
     private(set) var isUnrouted = false
+    /// The store's floor plan for the route map; nil until loaded or if unavailable.
+    private(set) var layout: StoreLayout?
 
     @ObservationIgnored private let api: AisleAPI
     @ObservationIgnored private let store: Store
@@ -99,6 +101,8 @@ final class ShoppingTripModel {
             isUnrouted = false
             phase = .shopping
             trackStart()
+            // The map is a nice-to-have: load it after the route, and ignore failures.
+            layout = try? await api.storeLayout(storeID: store.id)
         } catch is CancellationError {
             return
         } catch {

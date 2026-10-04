@@ -233,3 +233,20 @@ Basic, anonymous product analytics. Status 202.
 - The server caches AI answers in memory for 6 hours per (store format, retailer, item).
 - The app caches search results for 5 minutes per store and query, and drops an item's
   entry after feedback for it.
+
+
+## AI explanations and store layout
+
+- `POST /search` responses include `explanation` (string | null): two or three
+  AI-written sentences on where to find the item at this store. The model is given
+  only the resolved fields (department, aisle/section on file, neighbours, confidence,
+  availability, source, shopper reports, rough position) and its text is rejected if
+  it names an aisle number not on file, uses formatting other than `**bold**`, or is
+  empty or too long. Null without an AI key, with `AISLE_AI_EXPLAIN=false`, or when the
+  text fails checks; the app then composes its own reply. Cached in memory for 6 hours.
+- `GET /stores/{store_id}/layout` → `{store_id, entrance, checkout, zones, approximate}`
+  for drawing a schematic map. `entrance`/`checkout` are `{x, y}` or null; each zone is
+  `{id, name, x, y, source}` with `x` 0..1 left to right and `y` 0..1 front to back.
+  `approximate` is true when any position comes from the store format's template (the
+  same for every store of that format), so clients should label the map as typical.
+  404 for an unknown store.

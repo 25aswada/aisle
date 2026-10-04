@@ -94,6 +94,9 @@ class SearchResponse(BaseModel):
     source: LocationSource
     # Shopper reports for the suggested zone at this store; null without a store or zone.
     reports: ReportCountsOut | None = None
+    # AI-written "where to find it" text, checked against the facts above; null without a
+    # model or when the text didn't pass checks (the app then writes its own).
+    explanation: str | None = None
 
 
 class FeedbackRequest(BaseModel):
@@ -128,6 +131,29 @@ class FeedbackResponse(BaseModel):
     zone_id: int | None
     concept_id: int | None
     reports: ReportCountsOut | None
+
+
+class LayoutPoint(BaseModel):
+    x: float
+    y: float
+
+
+class LayoutZoneOut(BaseModel):
+    id: int
+    name: str
+    # Approximate floor-plan position (x 0..1 left to right, y 0..1 front to back).
+    x: float | None
+    y: float | None
+    source: str
+
+
+class StoreLayoutOut(BaseModel):
+    store_id: int
+    entrance: LayoutPoint | None
+    checkout: LayoutPoint | None
+    zones: list[LayoutZoneOut]
+    # True when any position comes from the store format's template, not this store.
+    approximate: bool
 
 
 class StoreZoneOut(BaseModel):

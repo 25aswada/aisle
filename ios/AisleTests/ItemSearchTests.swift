@@ -256,6 +256,38 @@ final class ReplyTextTests: XCTestCase {
         XCTAssertTrue(text(result(department: "Produce", aisle: "7", confidence: .high), at: "Costco").contains("Aisle 7"))
     }
 
+    func testPrefersTheAIExplanationAndBoldsItsPlace() {
+        var withAI = result(department: "Produce", confidence: .low)
+        withAI.explanation = "At Costco, lychee is usually in **Produce**, near the mangoes."
+        let reply = withAI.reply(at: "Costco")
+        XCTAssertEqual(String(reply.characters), "At Costco, lychee is usually in Produce, near the mangoes.")
+        let boldRuns = reply.runs.filter { $0.inlinePresentationIntent?.contains(.stronglyEmphasized) == true }
+        XCTAssertEqual(boldRuns.map { String(reply[$0.range].characters) }, ["Produce"])
+    }
+
+    func testFallsBackToOwnWordingWithoutAnExplanation() {
+        let plain = result(department: "Produce", confidence: .low)
+        XCTAssertEqual(String(plain.reply(at: "Costco").characters), text(plain, at: "Costco"))
+    }
+
+    func testDecodesExplanationAndLayout() throws {
+        let search = try JSONDecoder().decode(ItemSearchResult.self, from: Data("""
+        {"query":"lychee","item":"lychee","modifiers":[],"quantity":null,"store_id":1,"concept":null,
+         "category":null,"location":{"department":"Produce","zone_id":3,"neighbors":[]},
+         "availability":"likely","confidence":"low","source":"model","explanation":"At Costco, try **Produce**."}
+        """.utf8))
+        XCTAssertEqual(search.explanation, "At Costco, try **Produce**.")
+
+        let layout = try JSONDecoder().decode(StoreLayout.self, from: Data("""
+        {"store_id":1,"entrance":{"x":0.5,"y":0},"checkout":null,"approximate":true,
+         "zones":[{"id":3,"name":"Produce","x":0.8,"y":0.9,"source":"template"},
+                  {"id":4,"name":"Pharmacy","x":null,"y":null,"source":"template"}]}
+        """.utf8))
+        XCTAssertEqual(layout.entrance, StoreLayout.Point(x: 0.5, y: 0))
+        XCTAssertNil(layout.checkout)
+        XCTAssertEqual(layout.placedZones.map(\.name), ["Produce"])
+    }
+
     func testSourceLabelsNameTheStore() {
         XCTAssertEqual(LocationSource.model.label(for: "Trader Joe's"), "AI estimate for Trader Joe's")
         XCTAssertEqual(LocationSource.fallback.label(for: "Costco"), "Typical Costco layout")

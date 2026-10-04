@@ -9,7 +9,9 @@ from ..database import get_db
 from ..models import LocationObservation, SearchEvent, Store, StoreZone
 from ..observations import counts_by_zone, observations_for
 from ..resolver import find_concept
-from ..schemas import FeedbackRequest, FeedbackResponse, ReportCountsOut, StoreZoneOut
+from ..schemas import (
+    FeedbackRequest, FeedbackResponse, LayoutPoint, LayoutZoneOut, ReportCountsOut, StoreLayoutOut, StoreZoneOut,
+)
 
 router = APIRouter()
 Database = Annotated[Session, Depends(get_db)]
@@ -25,6 +27,30 @@ def store_zones(store_id: int, db: Database, response: Response):
     return db.scalars(
         select(StoreZone).where(StoreZone.store_id == store_id).order_by(StoreZone.sort_order, StoreZone.id)
     ).all()
+
+
+@router.get("/stores/{store_id}/layout", response_model=StoreLayoutOut)
+def store_layout(store_id: int, db: Database, response: Response):
+    """Approximate floor plan for drawing a schematic map: zone positions plus the
+    entrance and checkout. Template positions are per store format, not real plans."""
+    store = db.get(Store, store_id)
+    if store is None:
+        raise HTTPException(status_code=404, detail="Store not found")
+    response.headers["Cache-Control"] = "public, max-age=300"
+    zones = db.scalars(
+        select(StoreZone).where(StoreZone.store_id == store_id).order_by(StoreZone.sort_order, StoreZone.id)
+    ).all()
+
+    def point(x, y):
+        return LayoutPoint(x=x, y=y) if x is not None and y is not None else None
+
+    return StoreLayoutOut(
+        store_id=store.id,
+        entrance=point(store.entrance_x, store.entrance_y),
+        checkout=point(store.checkout_x, store.checkout_y),
+        zones=[LayoutZoneOut(id=z.id, name=z.name, x=z.x, y=z.y, source=z.source) for z in zones],
+        approximate=any(z.source == "template" for z in zones) or not zones,
+    )
 
 
 @router.post("/feedback", response_model=FeedbackResponse, status_code=201)

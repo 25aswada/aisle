@@ -5,14 +5,26 @@ struct SearchResultCard: View {
     let result: ItemSearchResult
     /// Chain name ("Trader Joe's") used in place of "this store"; nil for the loading placeholder.
     let retailer: String?
+    /// The store's floor plan, when loaded; the map shows only if the result's zone is on it.
+    var layout: StoreLayout? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             ConfidenceHero(result: result)
+            if let layout, let zoneID = mappedZone(in: layout) {
+                StoreMapCard(layout: layout, retailer: retailer, highlighted: [zoneID], height: 200)
+            }
             details
         }
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("searchResultCard")
+    }
+
+    /// The zone to highlight, if the result points somewhere real that the map can place.
+    private func mappedZone(in layout: StoreLayout) -> Int? {
+        guard result.placeInStore != nil, let zoneID = result.location.zoneID,
+              layout.placedZones.contains(where: { $0.id == zoneID }) else { return nil }
+        return zoneID
     }
 
     private var details: some View {
@@ -448,6 +460,24 @@ extension ItemSearchResult {
 
     private static func shoppers(_ count: Int) -> String {
         count == 1 ? "1 shopper" : "\(count) shoppers"
+    }
+
+    /// What Aisle says: the server's AI explanation when there is one (its **bold** place
+    /// drawn semibold), otherwise the reply composed on the device.
+    func reply(at retailer: String?) -> AttributedString {
+        guard let explanation,
+              var text = try? AttributedString(
+                markdown: explanation,
+                options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+              )
+        else { return replyText(at: retailer) }
+        let bold = text.runs
+            .filter { $0.inlinePresentationIntent?.contains(.stronglyEmphasized) == true }
+            .map(\.range)
+        for range in bold {
+            text[range].font = Theme.font(16, .semibold, relativeTo: .callout)
+        }
+        return text
     }
 
     /// Shape-only stand-in shown redacted while a search loads.

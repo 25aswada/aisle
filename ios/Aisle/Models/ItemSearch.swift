@@ -1,6 +1,8 @@
 import Foundation
 
-/// Structured result of `POST /search`. The app renders these fields; the server never sends prose.
+/// Structured result of `POST /search`. The app renders these fields. The only prose is
+/// `explanation`, which the server has checked against these fields (it never names an
+/// aisle that isn't on file); without it the app writes its own reply.
 struct ItemSearchResult: Codable, Equatable, Hashable {
     let searchID: String?
     let query: String
@@ -16,10 +18,12 @@ struct ItemSearchResult: Codable, Equatable, Hashable {
     let source: LocationSource
     /// Shopper reports for the suggested zone at this store.
     let reports: ReportCounts?
+    /// AI-written "where to find it" text; may contain **bold** for the key place.
+    var explanation: String? = nil
 
     enum CodingKeys: String, CodingKey {
         case query, item, modifiers, quantity, concept, category, location, availability, confidence, source
-        case reports
+        case reports, explanation
         case searchID = "search_id"
         case storeID = "store_id"
     }
