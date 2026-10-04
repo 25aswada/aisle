@@ -34,6 +34,8 @@ final class ShoppingTripModel {
     private(set) var status: [String: ItemStatus] = [:]
     /// True when the trip uses list order because the route couldn't be planned.
     private(set) var isUnrouted = false
+    /// True when the route came from maps saved on the phone (Aisle+ offline).
+    private(set) var isOfflineRoute = false
 
     @ObservationIgnored private let api: AisleAPI
     @ObservationIgnored private let stores: [Store]
@@ -148,10 +150,12 @@ final class ShoppingTripModel {
                 // Nothing matched any store: keep the first so there's somewhere to stand.
                 legs = planned.isEmpty ? [TripLeg(store: stores[0], stops: [], unplaced: [])] : planned
                 nowhere = plan.unplaced
+                isOfflineRoute = plan.isOffline
             } else {
                 let plan = try await api.planRoute(storeID: stores[0].id, items: items)
                 legs = [TripLeg(store: stores[0], stops: plan.stops, unplaced: plan.unplaced)]
                 nowhere = []
+                isOfflineRoute = plan.isOffline
             }
             legIndex = 0
             isUnrouted = false
@@ -197,6 +201,7 @@ final class ShoppingTripModel {
         legIndex = 0
         nowhere = []
         isUnrouted = true
+        isOfflineRoute = false
         phase = .shopping
         trackStart()
     }

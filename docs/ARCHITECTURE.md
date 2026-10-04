@@ -121,3 +121,28 @@ are checked against the providers' published keys. Sessions are random bearer to
 stored only as SHA-256 hashes; the app keeps its token in the Keychain. Only `/me` and
 `/auth/signout` need one; every other route is public, and the app still sends an
 anonymous install id in `X-Aisle-Device`. The SwiftUI app is the client, so browser CORS is unused.
+
+## Aisle+
+
+The subscription is bought with StoreKit 2 (`ios/Aisle/Account/PlusStore.swift`). The app
+sends each current transaction's signed JWS to `POST /plus/sync`; the server checks it
+against the pinned Apple root (`backend/app/plus/appstore.py`) and only then lifts limits
+(`backend/app/plus/access.py`). What it covers, and where it's enforced:
+
+| Feature | Free | Aisle+ | Enforced |
+| --- | --- | --- | --- |
+| Photo searches (`/identify`, `/lists/scan`, photo `/chat`) | 5 a day | Unlimited | Server, 402 `photo_search` |
+| Follow-up questions (`/chat`) | 10 a day | Unlimited | Server, 402 `follow_up` |
+| Lists | 1 | Unlimited | App |
+| Shared family lists (`/lists`) | Join only | Share | Server, 402 `shared_lists` |
+| Multi-store trips (`/route/multi`) | — | 2–4 stores | Server, 402 `multi_store` |
+| Offline store maps | — | ✓ | App (`ios/Aisle/Offline/`) |
+
+Offline maps are an `AisleAPI` wrapper (`OfflineAwareAPI`). While Aisle+ is on, it saves
+each store's layout, the spot of every item routed or searched there, and search answers
+under Application Support. When a request fails for lack of a connection (offline,
+timeout, transport, 5xx; never a 4xx such as 402), it answers from what's saved; a route
+is then planned on the phone from the saved spots, nearest-first from the entrance.
+
+Every 402 carries `{"code": "plus_required", "feature", "message"}`; the app turns it
+into `APIError.plusRequired` and opens the Aisle+ page with the message.

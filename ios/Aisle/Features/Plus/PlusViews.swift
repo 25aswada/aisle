@@ -49,6 +49,9 @@ struct PlusTabView: View {
 /// What a subscriber sees on the Aisle+ tab: a living gradient card, what they get, and Free vs Aisle+.
 private struct PlusMemberView: View {
     @Environment(PlusStore.self) private var plus
+    @Environment(\.offlineMaps) private var offlineMaps
+    @State private var savedMaps = 0
+    @State private var confirmingRemove = false
 
     private let comparison: [(String, String, String)] = [
         ("Find items in any store", "✓", "✓"),
@@ -72,6 +75,9 @@ private struct PlusMemberView: View {
                     }
                 }
 
+                sectionTitle("Offline maps").padding(.top, 30)
+                offlineCard
+
                 sectionTitle("Free vs Aisle+").padding(.top, 30)
                 comparisonTable
                 Text("Everything that helps you find an item stays free. Aisle+ adds more photos, sharing and bigger trips.")
@@ -85,6 +91,44 @@ private struct PlusMemberView: View {
             .padding(.top, 8)
             .padding(.bottom, 32)
         }
+        .onAppear { savedMaps = offlineMaps?.savedStoreIDs.count ?? 0 }
+        .confirmationDialog("Remove saved maps?", isPresented: $confirmingRemove, titleVisibility: .visible) {
+            Button("Remove", role: .destructive) {
+                offlineMaps?.removeAll()
+                savedMaps = 0
+            }
+        } message: {
+            Text("They'll save again the next time you open each store.")
+        }
+    }
+
+    private var offlineCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                Image(systemName: "map")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(Theme.accentInk)
+                    .accessibilityHidden(true)
+                Text(savedMaps == 0
+                     ? "No stores saved yet"
+                     : savedMaps == 1 ? "1 store saved on this phone" : "\(savedMaps) stores saved on this phone")
+                    .font(.aisleHeadline)
+                    .foregroundStyle(Theme.ink)
+            }
+            Text("Every store you open is saved automatically: its map, the spots of items you've looked for, and your answers. With no signal, the map still shows, past searches still answer, and Start Shopping still plans a route.")
+                .font(.aisleFootnote)
+                .foregroundStyle(Theme.secondaryInk)
+                .fixedSize(horizontal: false, vertical: true)
+            if savedMaps > 0 {
+                Button("Remove saved maps", role: .destructive) { confirmingRemove = true }
+                    .font(.aisleFootnote.weight(.semibold))
+                    .foregroundStyle(Color(hex: 0xE0607E))
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(18)
+        .background(Theme.surface.opacity(0.92), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .shadow(color: Theme.ink.opacity(0.06), radius: 14, y: 8)
     }
 
     private func sectionTitle(_ text: String) -> some View {
@@ -596,7 +640,7 @@ private struct FeatureMarquee: View {
         ("point.topleft.down.to.point.bottomright.curvepath", "Multi-store trips"),
         ("map", "Offline maps"),
         ("bubble.left", "Unlimited follow-ups"),
-        ("bolt", "Faster answers"),
+        ("doc.text.viewfinder", "Unlimited list scans"),
     ]
 
     @State private var rowWidth: CGFloat = 0

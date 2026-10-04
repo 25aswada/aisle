@@ -12,6 +12,7 @@ struct AisleApp: App {
     @AppStorage(AppearancePreference.defaultsKey) private var appearance = AppearancePreference.system
     @Environment(\.scenePhase) private var scenePhase
     private let api: AisleAPI
+    private let offlineMaps: OfflineMaps
     private let location: LocationProvider
     private let analytics: AnalyticsClient
     private let auth: AuthService
@@ -26,7 +27,10 @@ struct AisleApp: App {
             deviceID: DeviceIdentity.current(),
             authToken: { KeychainTokenStore().token }
         )
-        self.api = api
+        // Aisle+ saves store maps and answers on the phone for when there's no signal.
+        let offlineMaps = OfflineMaps()
+        self.offlineMaps = offlineMaps
+        self.api = OfflineAwareAPI(base: api, maps: offlineMaps)
         let auth = RemoteAuthService(client: api, googleClientID: AppConfig.current.googleClientID)
         self.auth = auth
         self.location = LocationProvider()
@@ -59,9 +63,17 @@ struct AisleApp: App {
                 .environment(storeSelection)
                 .environment(shoppingList)
                 .environment(recentSearches)
+                .environment(\.offlineMaps, offlineMaps)
                 .preferredColorScheme(appearance.colorScheme)
                 .task {
                     await accounts.refresh()
+                }
+                .onChange(of: plus.isPlus, initial: true) {
+                    offlineMaps.isEnabled = plus.isPlus
+                    // Save the current store's map right away.
+                    if plus.isPlus, let id = storeSelection.current?.id {
+                        Task { _ = try? await api.storeLayout(storeID: id) }
+                    }
                 }
                 .onChange(of: accounts.account?.id) {
                     // Aisle+ follows the account once signed in.

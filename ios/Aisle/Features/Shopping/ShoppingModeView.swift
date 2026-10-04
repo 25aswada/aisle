@@ -59,6 +59,11 @@ struct ShoppingModeView: View {
         List {
             Section {
                 TripProgress(model: model)
+                if model.isOfflineRoute {
+                    Label("No connection. This route uses the map and spots saved on your phone.", systemImage: "wifi.slash")
+                        .font(.aisleFootnote)
+                        .foregroundStyle(Theme.secondaryInk)
+                }
             }
 
             if let next = model.nextLeg {
