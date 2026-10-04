@@ -7,6 +7,15 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		C4A1F0E2B7D94C3A8E51A131 /* ItemIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A1F0E2B7D94C3A8E51A031 /* ItemIcon.swift */; };
+		C4A1F0E2B7D94C3A8E51A132 /* ActivityHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A1F0E2B7D94C3A8E51A032 /* ActivityHistory.swift */; };
+		C4A1F0E2B7D94C3A8E51A133 /* MoreComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A1F0E2B7D94C3A8E51A033 /* MoreComponents.swift */; };
+		C4A1F0E2B7D94C3A8E51A134 /* StoreDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A1F0E2B7D94C3A8E51A034 /* StoreDetailView.swift */; };
+		C4A1F0E2B7D94C3A8E51A135 /* SearchHistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A1F0E2B7D94C3A8E51A035 /* SearchHistoryView.swift */; };
+		C4A1F0E2B7D94C3A8E51A136 /* PastTripsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A1F0E2B7D94C3A8E51A036 /* PastTripsView.swift */; };
+		C4A1F0E2B7D94C3A8E51A137 /* ListItemDetailSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A1F0E2B7D94C3A8E51A037 /* ListItemDetailSheet.swift */; };
+		C4A1F0E2B7D94C3A8E51A138 /* ContributionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A1F0E2B7D94C3A8E51A038 /* ContributionsView.swift */; };
+		C4A1F0E2B7D94C3A8E51A139 /* AcknowledgementsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4A1F0E2B7D94C3A8E51A039 /* AcknowledgementsView.swift */; };
 		05FC12E8D3FA74F6B4A657B8 /* OnboardingFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = B99C6CB8AF8BD5464965C162 /* OnboardingFlow.swift */; };
 		0868B5944EF7F2E05CAEEABD /* StoreDirections.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14F4ABCC18B7416BA4E13EF5 /* StoreDirections.swift */; };
 		0CD8E5664EA53D0FB2FEE253 /* ShopperStats.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B6177DDB775035FB051DAD6 /* ShopperStats.swift */; };
@@ -98,6 +107,15 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		C4A1F0E2B7D94C3A8E51A031 /* ItemIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ItemIcon.swift; sourceTree = "<group>"; };
+		C4A1F0E2B7D94C3A8E51A032 /* ActivityHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityHistory.swift; sourceTree = "<group>"; };
+		C4A1F0E2B7D94C3A8E51A033 /* MoreComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoreComponents.swift; sourceTree = "<group>"; };
+		C4A1F0E2B7D94C3A8E51A034 /* StoreDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreDetailView.swift; sourceTree = "<group>"; };
+		C4A1F0E2B7D94C3A8E51A035 /* SearchHistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchHistoryView.swift; sourceTree = "<group>"; };
+		C4A1F0E2B7D94C3A8E51A036 /* PastTripsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PastTripsView.swift; sourceTree = "<group>"; };
+		C4A1F0E2B7D94C3A8E51A037 /* ListItemDetailSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListItemDetailSheet.swift; sourceTree = "<group>"; };
+		C4A1F0E2B7D94C3A8E51A038 /* ContributionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContributionsView.swift; sourceTree = "<group>"; };
+		C4A1F0E2B7D94C3A8E51A039 /* AcknowledgementsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcknowledgementsView.swift; sourceTree = "<group>"; };
 		02E7A088040A8D4C88097DFB /* Aisle.storekit */ = {isa = PBXFileReference; path = Aisle.storekit; sourceTree = "<group>"; };
 		0B6177DDB775035FB051DAD6 /* ShopperStats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShopperStats.swift; sourceTree = "<group>"; };
 		114B9F5E2D9792C6C3AFA19F /* TermsStep.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TermsStep.swift; sourceTree = "<group>"; };
@@ -185,6 +203,20 @@
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
+		C4A1F0E2B7D94C3A8E51A0FF /* More */ = {
+			isa = PBXGroup;
+			children = (
+				C4A1F0E2B7D94C3A8E51A033 /* MoreComponents.swift */,
+				C4A1F0E2B7D94C3A8E51A034 /* StoreDetailView.swift */,
+				C4A1F0E2B7D94C3A8E51A035 /* SearchHistoryView.swift */,
+				C4A1F0E2B7D94C3A8E51A036 /* PastTripsView.swift */,
+				C4A1F0E2B7D94C3A8E51A037 /* ListItemDetailSheet.swift */,
+				C4A1F0E2B7D94C3A8E51A038 /* ContributionsView.swift */,
+				C4A1F0E2B7D94C3A8E51A039 /* AcknowledgementsView.swift */,
+			);
+			path = More;
+			sourceTree = "<group>";
+		};
 		078A76FCF37C12CD9C30D916 /* Networking */ = {
 			isa = PBXGroup;
 			children = (
@@ -222,6 +254,7 @@
 		0F4685A4FEFC48A0989998D2 /* Design */ = {
 			isa = PBXGroup;
 			children = (
+				C4A1F0E2B7D94C3A8E51A031 /* ItemIcon.swift */,
 				27AD420D9DA4F00D8D2F8E95 /* Components.swift */,
 				327AC850D80060DC07A58341 /* Theme.swift */,
 			);
@@ -386,6 +419,7 @@
 		9F3CF642282EF47A0BCCBF39 /* Features */ = {
 			isa = PBXGroup;
 			children = (
+				C4A1F0E2B7D94C3A8E51A0FF /* More */,
 				9A8C1EA4ACACE94BF66EEC19 /* Find */,
 				0F73C214918171DE8E0753ED /* List */,
 				0F9E0A14F29071222142CC12 /* Onboarding */,
@@ -400,6 +434,7 @@
 		A54E00E85B30F2DF6EB8C34A /* Account */ = {
 			isa = PBXGroup;
 			children = (
+				C4A1F0E2B7D94C3A8E51A032 /* ActivityHistory.swift */,
 				4E28133ACF05710EB0935DF3 /* Account.swift */,
 				B503C058E388DA73173ED85C /* LegalText.swift */,
 				578DE87EE9D1C26D8DF5BC97 /* MemberActivity.swift */,
@@ -578,6 +613,15 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C4A1F0E2B7D94C3A8E51A131 /* ItemIcon.swift in Sources */,
+				C4A1F0E2B7D94C3A8E51A132 /* ActivityHistory.swift in Sources */,
+				C4A1F0E2B7D94C3A8E51A133 /* MoreComponents.swift in Sources */,
+				C4A1F0E2B7D94C3A8E51A134 /* StoreDetailView.swift in Sources */,
+				C4A1F0E2B7D94C3A8E51A135 /* SearchHistoryView.swift in Sources */,
+				C4A1F0E2B7D94C3A8E51A136 /* PastTripsView.swift in Sources */,
+				C4A1F0E2B7D94C3A8E51A137 /* ListItemDetailSheet.swift in Sources */,
+				C4A1F0E2B7D94C3A8E51A138 /* ContributionsView.swift in Sources */,
+				C4A1F0E2B7D94C3A8E51A139 /* AcknowledgementsView.swift in Sources */,
 				1FBC1F5288442ABEF0433DED /* APIClient.swift in Sources */,
 				159DB262AB1B4E9FC1376D5E /* Account.swift in Sources */,
 				9123D3FA51940A018E770562 /* AccountAPI.swift in Sources */,

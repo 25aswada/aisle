@@ -1,4 +1,5 @@
 import SwiftUI
+import StoreKit
 
 struct FindView: View {
     let api: AisleAPI
@@ -21,6 +22,9 @@ struct FindView: View {
     /// How far the page has scrolled up under the status bar, in points.
     @State private var scrolledUnderStatusBar: CGFloat = 0
     @State private var isShowingStoreMap = false
+    @State private var isShowingStoreDetail = false
+    @State private var isShowingHistory = false
+    @Environment(\.requestReview) private var requestReview
 
     init(api: AisleAPI, location: LocationProviding, analytics: AnalyticsTracking, recents: RecentSearches) {
         self.api = api
@@ -37,8 +41,22 @@ struct FindView: View {
                         AisleWordmark()
                             .trackingScrollUnderStatusBar($scrolledUnderStatusBar)
 
-                        CurrentStoreCard(store: storeSelection.current) {
-                            isPickingStore = true
+                        HStack(spacing: 10) {
+                            CurrentStoreCard(store: storeSelection.current) {
+                                isPickingStore = true
+                            }
+                            if storeSelection.current != nil {
+                                Button { isShowingStoreDetail = true } label: {
+                                    Image(systemName: "info")
+                                        .font(.system(size: 15, weight: .bold))
+                                        .foregroundStyle(Theme.ink)
+                                        .frame(width: 40, height: 40)
+                                        .background(Theme.surface.opacity(0.92), in: Circle())
+                                        .shadow(color: Theme.ink.opacity(0.06), radius: 10, y: 5)
+                                }
+                                .accessibilityLabel("Store details")
+                                .accessibilityIdentifier("storeDetailsButton")
+                            }
                         }
 
                         if model.phase == .idle {
@@ -106,6 +124,21 @@ struct FindView: View {
             .navigationTitle("Find")
             .toolbar(.hidden, for: .navigationBar)
             .onChange(of: storeSelection.current?.id) { model.clear() }
+            .onChange(of: model.phase) { _, phase in recordSearch(phase) }
+            .onChange(of: model.feedback) { _, feedback in recordContribution(feedback) }
+            .sheet(isPresented: $isShowingStoreDetail) {
+                if let store = storeSelection.current {
+                    StoreDetailView(store: store, layout: layout)
+                }
+            }
+            .sheet(isPresented: $isShowingHistory) {
+                SearchHistoryView(currentStoreID: storeSelection.current?.id) { query in
+                    isShowingHistory = false
+                    guard let store = storeSelection.current else { return }
+                    searchFocused = false
+                    Task { await model.searchRecent(query, storeID: store.id) }
+                }
+            }
             .task { await refreshSelectedStore() }
             .task(id: storeSelection.current?.id) {
                 layout = nil
@@ -218,7 +251,7 @@ extension FindView {
                     .font(.aisleSubheadline)
                     .foregroundStyle(Theme.secondaryInk)
             } else {
-                RecentAnswerGrid(recents: model.recents, storeID: store.id) { query in
+                RecentAnswerGrid(recents: model.recents, storeID: store.id, onSeeAll: { isShowingHistory = true }) { query in
                     searchFocused = false
                     Task { await model.searchRecent(query, storeID: store.id) }
                 }
@@ -267,6 +300,36 @@ extension FindView {
 }
 
 extension FindView {
+    /// Keeps every answered search for Search history (on this phone only).
+    private func recordSearch(_ phase: FindModel.Phase) {
+        guard case .loaded(let result) = phase, let store = storeSelection.current else { return }
+        let query = result.query.isEmpty ? model.trimmedQuery : result.query
+        SearchHistory.shared.record(result, query: query, store: store, isPhoto: model.searchPhoto != nil)
+    }
+
+    /// Logs "Found it" / "Not here" / corrections for Your contributions, and after a few
+    /// "Found it"s asks for a rating with Apple's own prompt.
+    private func recordContribution(_ feedback: FindModel.FeedbackState) {
+        guard let result = model.latestResult, let store = storeSelection.current else { return }
+        let log = ContributionLog.shared
+        switch feedback {
+        case .confirmed:
+            log.record(item: result.item, store: store, kind: .found, place: result.aisleLabel ?? result.placeInStore)
+            if ReviewPrompter.shouldAsk(afterConfirmations: log.confirmedCount) {
+                Task {
+                    try? await Task.sleep(for: .seconds(1.5))
+                    requestReview()
+                }
+            }
+        case .reportedMissing:
+            log.record(item: result.item, store: store, kind: .notHere, place: result.aisleLabel ?? result.placeInStore)
+        case .corrected(let place):
+            log.record(item: result.item, store: store, kind: .corrected, place: place)
+        default:
+            break
+        }
+    }
+
     /// Follow-ups after the result, then Aisle typing, then anything that went wrong. A reply
     /// that found a new item gets that item's card, like a first search.
     @ViewBuilder

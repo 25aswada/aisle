@@ -70,6 +70,8 @@ struct RotatingSearchHint: View {
 struct RecentAnswerGrid: View {
     let recents: RecentSearches
     let storeID: String?
+    /// Opens the full search history.
+    var onSeeAll: (() -> Void)? = nil
     let onSelect: (String) -> Void
 
     private let columns = [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
@@ -82,12 +84,20 @@ struct RecentAnswerGrid: View {
                     .foregroundStyle(Theme.ink)
                     .accessibilityAddTraits(.isHeader)
                 Spacer()
-                Button("Clear") {
-                    withAnimation(.easeInOut(duration: 0.25)) { recents.clear() }
+                if let onSeeAll {
+                    Button("See all", action: onSeeAll)
+                        .font(Theme.font(15, .semibold, relativeTo: .subheadline))
+                        .foregroundStyle(Theme.ink)
+                        .accessibilityLabel("See all searches")
+                        .accessibilityIdentifier("seeAllSearches")
+                } else {
+                    Button("Clear") {
+                        withAnimation(.easeInOut(duration: 0.25)) { recents.clear() }
+                    }
+                    .font(.aisleSubheadline)
+                    .foregroundStyle(Theme.secondaryInk)
+                    .accessibilityLabel("Clear recent searches")
                 }
-                .font(.aisleSubheadline)
-                .foregroundStyle(Theme.secondaryInk)
-                .accessibilityLabel("Clear recent searches")
             }
             LazyVGrid(columns: columns, spacing: 10) {
                 ForEach(Array(recents.queries.prefix(6)), id: \.self) { query in
@@ -115,6 +125,7 @@ private struct RecentAnswerCard: View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 6) {
+                    ItemIconView(text: query, size: 20)
                     Text(query)
                         .font(Theme.font(14, .semibold, relativeTo: .subheadline))
                         .lineLimit(1)

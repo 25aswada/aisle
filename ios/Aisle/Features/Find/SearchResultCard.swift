@@ -74,7 +74,13 @@ struct ConfidenceHero: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            ConfidenceBadge(confidence: result.confidence)
+            HStack(alignment: .top) {
+                ConfidenceBadge(confidence: result.confidence)
+                Spacer(minLength: 8)
+                // The item's picture, when there is one; nothing otherwise.
+                ItemIconView(text: result.item, size: 64, tile: true)
+                    .shadow(color: Color.black.opacity(0.10), radius: 10, y: 5)
+            }
             VStack(alignment: .leading, spacing: 4) {
                 if let department = result.placeInStore {
                     if let aisle = result.aisleLabel {

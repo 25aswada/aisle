@@ -162,6 +162,22 @@ final class ShoppingListStore {
         }
     }
 
+    /// Saves the item sheet: quantity, brand, note and department. Empty text clears a field.
+    func updateDetails(_ id: UUID, quantity: String?, brand: String?, note: String?, categoryName: String?) {
+        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+        func clean(_ value: String?) -> String? {
+            let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return trimmed.isEmpty ? nil : String(trimmed.prefix(120))
+        }
+        var item = items[index]
+        item.quantity = clean(quantity)
+        item.brand = clean(brand)
+        item.note = clean(note)
+        item.categoryName = clean(categoryName)
+        guard item != items[index] else { return }
+        items[index] = item
+    }
+
     func setDone(_ id: UUID, _ done: Bool) {
         guard let index = items.firstIndex(where: { $0.id == id }) else { return }
         items[index].isDone = done
@@ -334,6 +350,14 @@ final class ShoppingListStore {
                 items.insert(item, at: min(position, items.count))
             case .delete(let id):
                 items.removeAll { $0.id == id }
+            }
+        }
+        // Brand and note live only on this phone; keep them across a sync.
+        let local = Dictionary(lists[index].items.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        for i in items.indices {
+            if let mine = local[items[i].id] {
+                items[i].brand = items[i].brand ?? mine.brand
+                items[i].note = items[i].note ?? mine.note
             }
         }
         lists[index].items = items

@@ -43,6 +43,8 @@ final class ShoppingTripModel {
     @ObservationIgnored private var items: [ListItem] = []
     @ObservationIgnored private let analytics: AnalyticsTracking
     @ObservationIgnored private var reportedFinish = false
+    /// When the shopper started walking the route, for Past trips.
+    @ObservationIgnored private var startedAt: Date?
 
     convenience init(api: AisleAPI, store: Store, list: ShoppingListStore, analytics: AnalyticsTracking? = nil) {
         self.init(api: api, stores: [store], list: list, analytics: analytics)
@@ -208,6 +210,7 @@ final class ShoppingTripModel {
     }
 
     private func trackStart() {
+        if startedAt == nil { startedAt = .now }
         analytics.track(.shoppingStarted, [
             "items": .int(totalCount), "stops": .int(legs.reduce(0) { $0 + $1.stops.count }),
             "unrouted": .bool(isUnrouted), "stores": .int(legs.count),
@@ -217,9 +220,22 @@ final class ShoppingTripModel {
     private func trackFinishIfNeeded() {
         guard isFinished, !reportedFinish else { return }
         reportedFinish = true
+        recordTrip()
         analytics.track(.shoppingFinished, [
             "found": .int(foundCount), "skipped": .int(skippedCount), "total": .int(totalCount),
         ])
+    }
+
+    /// Saves the finished trip on the phone so it shows in Past trips.
+    private func recordTrip() {
+        TripHistory.shared.record(TripHistory.Trip(
+            listName: list.current.name,
+            storeNames: legs.map(\.store.name),
+            logoURLs: legs.map(\.store.retailerLogoURL),
+            items: items.map { TripHistory.Item(text: $0.text, found: status[$0.id.uuidString] == .found) },
+            startedAt: startedAt ?? .now,
+            endedAt: .now
+        ))
     }
 
     func markFound(_ id: String) {

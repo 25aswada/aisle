@@ -27,10 +27,11 @@ struct ShoppingListView: View {
 
     /// The list screens' sheets, one at a time.
     enum ListSheet: Identifiable {
-        case share, join(String), rename, signIn, tripStores
+        case share, join(String), rename, signIn, tripStores, pastTrips
         var id: String {
             switch self {
             case .tripStores: return "tripStores"
+            case .pastTrips: return "pastTrips"
             case .share: return "share"
             case .join(let code): return "join-\(code)"
             case .rename: return "rename"
@@ -124,6 +125,8 @@ struct ShoppingListView: View {
                         trip = ShoppingTripModel(api: api, stores: stores, list: list, analytics: analytics)
                     }
                     .presentationDetents([.large])
+                case .pastTrips:
+                    PastTripsView()
                 }
             }
             .confirmationDialog(deleteTitle, isPresented: $confirmingDelete, titleVisibility: .visible) {
@@ -214,6 +217,7 @@ struct ShoppingListView: View {
                         sheet = accounts.isSignedIn ? .join("") : .signIn
                     }
                     Button("Rename list…", systemImage: "pencil") { sheet = .rename }
+                    Button("Past trips", systemImage: "clock.arrow.circlepath") { sheet = .pastTrips }
                     Divider()
                     Button("Clear checked items", systemImage: "checkmark.circle") { list.clearCompleted() }
                         .disabled(done.isEmpty)
@@ -686,6 +690,7 @@ struct ListItemRow: View {
 
     @Environment(ShoppingListStore.self) private var list
     @State private var text = ""
+    @State private var showingDetails = false
     @FocusState private var editing: Bool
 
     var body: some View {
@@ -716,14 +721,26 @@ struct ListItemRow: View {
             .buttonStyle(.plain)
             .accessibilityLabel(item.isDone ? "Mark \(item.text) as not done" : "Mark \(item.text) as done")
 
-            TextField("Item", text: $text)
-                .font(Theme.font(17, relativeTo: .body))
-                .focused($editing)
-                .strikethrough(item.isDone, color: Color(hex: 0xDC6F9C).opacity(0.7))
-                .foregroundStyle(item.isDone ? Theme.secondaryInk : Theme.ink)
-                .submitLabel(.done)
-                .onSubmit { list.rename(item.id, to: text) }
-                .accessibilityLabel("Item name")
+            // The item's picture when there is one; no placeholder otherwise.
+            ItemIconView(text: item.text, size: 26)
+                .opacity(item.isDone ? 0.45 : 1)
+
+            VStack(alignment: .leading, spacing: 1) {
+                TextField("Item", text: $text)
+                    .font(Theme.font(17, relativeTo: .body))
+                    .focused($editing)
+                    .strikethrough(item.isDone, color: Color(hex: 0xDC6F9C).opacity(0.7))
+                    .foregroundStyle(item.isDone ? Theme.secondaryInk : Theme.ink)
+                    .submitLabel(.done)
+                    .onSubmit { list.rename(item.id, to: text) }
+                    .accessibilityLabel("Item name")
+                if let detail = detailLine {
+                    Text(detail)
+                        .font(Theme.font(12, relativeTo: .caption))
+                        .foregroundStyle(Theme.secondaryInk)
+                        .lineLimit(1)
+                }
+            }
 
             if let quantity = item.quantity, !quantity.isEmpty {
                 Text(quantity)
@@ -734,6 +751,16 @@ struct ListItemRow: View {
                     .background(Theme.fill, in: Capsule())
                     .accessibilityLabel("Quantity \(quantity)")
             }
+
+            Button { showingDetails = true } label: {
+                Image(systemName: "info.circle")
+                    .font(.system(size: 16, weight: .regular))
+                    .foregroundStyle(Theme.secondaryInk.opacity(0.8))
+                    .frame(width: 30, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Details for \(item.text)")
 
             Button {
                 withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) { list.remove(item.id) }
@@ -751,13 +778,25 @@ struct ListItemRow: View {
         .padding(.trailing, 6)
         .frame(minHeight: 56)
         .contextMenu {
+            Button("Details", systemImage: "info.circle") { showingDetails = true }
             Button("Remove", systemImage: "trash", role: .destructive) { list.remove(item.id) }
+        }
+        .sheet(isPresented: $showingDetails) {
+            ListItemDetailSheet(itemID: item.id)
         }
         .onAppear { text = item.text }
         .onChange(of: item.text) { text = item.text }
         .onChange(of: editing) { _, isEditing in
             if !isEditing { list.rename(item.id, to: text) }
         }
+    }
+}
+
+extension ListItemRow {
+    /// "Horizon Organic · lactose-free" under the name, when the item has details.
+    var detailLine: String? {
+        let parts = [item.brand, item.note].compactMap { $0 }.filter { !$0.isEmpty }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 }
 

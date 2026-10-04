@@ -7,13 +7,19 @@ struct ListItem: Codable, Equatable, Hashable, Identifiable {
     var quantity: String?
     var categoryName: String?
     var isDone: Bool
+    /// Optional details from the item sheet. Kept on this phone (not synced to shared lists yet).
+    var brand: String?
+    var note: String?
 
-    init(id: UUID = UUID(), text: String, quantity: String? = nil, categoryName: String? = nil, isDone: Bool = false) {
+    init(id: UUID = UUID(), text: String, quantity: String? = nil, categoryName: String? = nil, isDone: Bool = false,
+         brand: String? = nil, note: String? = nil) {
         self.id = id
         self.text = text
         self.quantity = quantity
         self.categoryName = categoryName
         self.isDone = isDone
+        self.brand = brand
+        self.note = note
     }
 }
 

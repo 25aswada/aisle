@@ -22,6 +22,11 @@ struct YouView: View {
     @State private var isPickingStore = false
     @State private var showHowItWorks = false
     @State private var showLegal = false
+    @State private var showHistory = false
+    @State private var showTrips = false
+    @State private var showContributions = false
+    @State private var showAcknowledgements = false
+    @Environment(\.openURL) private var openURL
     @State private var confirmSignOut = false
     @State private var isSigningIn = false
     @State private var confirmDelete = false
@@ -93,6 +98,10 @@ struct YouView: View {
                 }
             }
             .sheet(isPresented: $showLegal) { LegalDocumentSheet() }
+            .sheet(isPresented: $showHistory) { SearchHistoryView(currentStoreID: storeSelection.current?.id) }
+            .sheet(isPresented: $showTrips) { PastTripsView() }
+            .sheet(isPresented: $showContributions) { ContributionsView() }
+            .sheet(isPresented: $showAcknowledgements) { AcknowledgementsView() }
             .sheet(isPresented: $showHowItWorks) {
                 HowAisleWorksSheet().presentationDetents([.medium, .large])
             }
@@ -253,10 +262,28 @@ struct YouView: View {
 
     private var dataSection: some View {
         YouSection("Your data") {
-            ActionRow(systemImage: "clock.arrow.circlepath", title: "Clear recent searches", destructive: true) {
-                withAnimation { recents.clear() }
+            ActionRow(systemImage: "magnifyingglass", title: "Search history",
+                      subtitle: historyCount(SearchHistory.shared.entries.count, "search", "searches")) {
+                showHistory = true
             }
-            .disabled(recents.queries.isEmpty)
+            RowDivider()
+            ActionRow(systemImage: "cart", title: "Past trips",
+                      subtitle: historyCount(TripHistory.shared.trips.count, "trip", "trips")) {
+                showTrips = true
+            }
+            RowDivider()
+            ActionRow(systemImage: "hand.thumbsup", title: "Your contributions",
+                      subtitle: historyCount(ContributionLog.shared.confirmedCount, "spot confirmed", "spots confirmed")) {
+                showContributions = true
+            }
+            RowDivider()
+            ActionRow(systemImage: "clock.arrow.circlepath", title: "Clear search history", destructive: true) {
+                withAnimation {
+                    recents.clear()
+                    SearchHistory.shared.clear()
+                }
+            }
+            .disabled(recents.queries.isEmpty && SearchHistory.shared.entries.isEmpty)
             RowDivider()
             ActionRow(systemImage: "mappin.slash", title: "Forget home store", destructive: true) {
                 storeSelection.clear()
@@ -290,12 +317,27 @@ struct YouView: View {
                 showLegal = true
             }
             RowDivider()
+            if let url = ReviewPrompter.writeReviewURL {
+                ActionRow(systemImage: "star", title: "Rate Aisle", subtitle: "Takes a few seconds, helps a lot") {
+                    openURL(url)
+                }
+                RowDivider()
+            }
+            ActionRow(systemImage: "text.book.closed", title: "Acknowledgements",
+                      subtitle: "Fonts, icons and open-source code") {
+                showAcknowledgements = true
+            }
+            RowDivider()
             SettingRow(systemImage: "number", title: "Version", subtitle: nil) {
                 Text(Self.version)
                     .font(.aisleSubheadline)
                     .foregroundStyle(Theme.secondaryInk)
             }
         }
+    }
+
+    private func historyCount(_ count: Int, _ one: String, _ many: String) -> String? {
+        count == 0 ? nil : "\(count) \(count == 1 ? one : many)"
     }
 
     private static var version: String {
