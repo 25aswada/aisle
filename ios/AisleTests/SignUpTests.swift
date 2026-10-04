@@ -38,6 +38,21 @@ private final class FakeAuth: AuthService {
         return account
     }
 
+    var addedPhones: [(String, String)] = []
+
+    func sendAddPhoneCode(token: String, phone: String) async throws -> CodeSent {
+        CodeSent(sentTo: "+1 •••• 0188", retryAfter: 30)
+    }
+
+    func addPhone(token: String, phone: String, code: String) async throws -> Account {
+        guard code == "123456" else { throw AuthError.invalidCode }
+        if phone.contains("0199") {
+            throw AuthError.server("That number already has its own Aisle account.")
+        }
+        addedPhones.append((token, phone))
+        return Self.account("Sam", providers: [.google, .phone])
+    }
+
     func signOut(token: String) async { signedOutTokens.append(token) }
 
     func deleteAccount(token: String) async throws {
@@ -107,6 +122,68 @@ final class SignUpTests: XCTestCase {
         XCTAssertEqual(session?.account.wantsTips, true)
         XCTAssertEqual(auth.profileUpdates.first?.0, "Sam")
         XCTAssertEqual(auth.profileUpdates.first?.1, true)
+    }
+
+    func testANewAccountFromACodeAsksFirstAndCanBackOut() async {
+        let auth = FakeAuth()
+        let model = SignUpModel(auth: auth)
+        model.choose(.phone)
+        model.phone = "2155550123"
+        _ = await model.sendCode()
+        model.code = "123456"
+        _ = await model.verifyCode()
+        XCTAssertTrue(model.shouldConfirmNewAccount)
+        XCTAssertEqual(model.method, .phone)
+
+        // "I already have an account": the empty account goes, and the method screen says what to do.
+        let backedOut = await model.useExistingAccount()
+        XCTAssertTrue(backedOut)
+        XCTAssertEqual(auth.deleted, ["tok"])
+        XCTAssertNil(model.session)
+        XCTAssertFalse(model.shouldConfirmNewAccount)
+        XCTAssertTrue(model.notice?.contains("Phone number") == true)
+
+        // Choosing a method clears the note.
+        model.choose(.email)
+        XCTAssertNil(model.notice)
+    }
+
+    func testReturningAccountsAndProvidersDontAsk() async {
+        let auth = FakeAuth()
+        auth.returning = true
+        let model = SignUpModel(auth: auth)
+        model.choose(.phone)
+        model.phone = "2155550123"
+        model.code = "123456"
+        _ = await model.verifyCode()
+        XCTAssertFalse(model.shouldConfirmNewAccount, "the number already opens an account")
+        let refused = await model.useExistingAccount()
+        XCTAssertFalse(refused, "never deletes an existing account")
+        XCTAssertTrue(auth.deleted.isEmpty)
+
+        auth.providerResult = .success(AuthSession(token: "t", account: FakeAuth.account("Sam", providers: [.google]), isNew: true))
+        _ = await model.continueWith(.google)
+        XCTAssertFalse(model.shouldConfirmNewAccount, "Google links by email on the server")
+    }
+
+    func testAddingAPhoneToTheSignedInAccount() async throws {
+        let auth = FakeAuth()
+        let store = AccountStore(defaults: .fresh("SignUpTests.AddPhone"), tokens: InMemoryTokenStore(), auth: auth)
+        store.signIn(AuthSession(token: "tok", account: FakeAuth.account("Sam", providers: [.google]), isNew: false))
+
+        let sent = try await store.sendAddPhoneCode(to: "2155550188")
+        XCTAssertEqual(sent.sentTo, "+1 •••• 0188")
+        do {
+            try await store.addPhone("2155550199", code: "123456")
+            XCTFail("Expected a number with its own account to be refused")
+        } catch AuthError.server(let message) {
+            XCTAssertTrue(message.contains("own Aisle account"))
+        }
+        XCTAssertEqual(store.account?.providers, [.google])
+
+        try await store.addPhone("2155550188", code: "123456")
+        XCTAssertEqual(auth.addedPhones.first?.0, "tok")
+        XCTAssertEqual(store.account?.providers, [.google, .phone])
     }
 
     func testReturningAccountSkipsTheNameStep() async {

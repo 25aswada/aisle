@@ -51,6 +51,14 @@ final class RemoteAuthService: AuthService {
         try await api.updateMe(token: token, firstName: firstName, wantsTips: wantsTips)
     }
 
+    func sendAddPhoneCode(token: String, phone: String) async throws -> CodeSent {
+        try await api.addPhoneStart(token: token, phone: phone)
+    }
+
+    func addPhone(token: String, phone: String, code: String) async throws -> Account {
+        try await api.addPhoneVerify(token: token, phone: phone, code: code)
+    }
+
     func signOut(token: String) async {
         try? await api.signOut(token: token)
     }

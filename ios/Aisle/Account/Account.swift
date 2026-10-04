@@ -32,9 +32,10 @@ struct Account: Codable, Equatable {
     /// The ways this account can sign in.
     var providers: [AuthProvider]
 
-    /// The sign-in method to show ("Signed in with Apple").
+    /// The sign-in method to show ("Signed in with Apple"). A phone number added later in
+    /// You doesn't replace the way the account was made.
     var provider: AuthProvider {
-        for preferred in [AuthProvider.apple, .google, .phone, .email] where providers.contains(preferred) {
+        for preferred in [AuthProvider.apple, .google, .email, .phone] where providers.contains(preferred) {
             return preferred
         }
         return .email
@@ -91,6 +92,9 @@ protocol AuthService: AnyObject {
     func signIn(with provider: AuthProvider) async throws -> AuthSession
     func currentAccount(token: String) async throws -> Account
     func updateProfile(token: String, firstName: String?, wantsTips: Bool?) async throws -> Account
+    /// Adding a phone number to the signed-in account: text a code, then check it.
+    func sendAddPhoneCode(token: String, phone: String) async throws -> CodeSent
+    func addPhone(token: String, phone: String, code: String) async throws -> Account
     func signOut(token: String) async
     func deleteAccount(token: String) async throws
 }
@@ -178,6 +182,29 @@ final class AccountStore {
         }
     }
 
+    /// Texts a code to a number the shopper wants to add, so it signs in to this account.
+    func sendAddPhoneCode(to phone: String) async throws -> CodeSent {
+        guard let token = tokens.token, let auth else { throw AuthError.signedOut }
+        do {
+            return try await auth.sendAddPhoneCode(token: token, phone: phone)
+        } catch AuthError.signedOut {
+            signOutLocally()
+            throw AuthError.signedOut
+        }
+    }
+
+    /// Checks the texted code and adds the number. Signing in with it later opens this account.
+    func addPhone(_ phone: String, code: String) async throws {
+        guard let token = tokens.token, let auth else { throw AuthError.signedOut }
+        do {
+            let saved = try await auth.addPhone(token: token, phone: phone, code: code)
+            if tokens.token == token { account = saved }
+        } catch AuthError.signedOut {
+            signOutLocally()
+            throw AuthError.signedOut
+        }
+    }
+
     /// Picks up changes made on other devices, and signs out if the session was ended.
     func refresh() async {
         guard let token = tokens.token, let auth else { return }
@@ -226,6 +253,10 @@ final class SignUpModel {
     private(set) var errorMessage: String?
     private(set) var codeSent: CodeSent?
     private(set) var session: AuthSession?
+    /// How `session` was signed in to.
+    private(set) var method: AuthProvider?
+    /// Shown on the method screen after backing out of a new account ("sign in to yours, then…").
+    private(set) var notice: String?
 
     @ObservationIgnored private let auth: AuthService
 
@@ -244,8 +275,10 @@ final class SignUpModel {
         return domain.contains(".") && !domain.hasPrefix(".") && !domain.hasSuffix(".")
     }
 
+    var isPhoneValid: Bool { Self.looksLikePhone(phone) }
+
     /// Ten US digits, or a number with its country code (the server checks it properly).
-    var isPhoneValid: Bool {
+    static func looksLikePhone(_ phone: String) -> Bool {
         let digits = phone.filter(\.isNumber)
         if phone.trimmingCharacters(in: .whitespaces).hasPrefix("+") { return (8...15).contains(digits.count) }
         return digits.count == 10 || (digits.count == 11 && digits.hasPrefix("1"))
@@ -272,6 +305,12 @@ final class SignUpModel {
 
     var canFinish: Bool { session != nil && !trimmedName.isEmpty }
 
+    /// A phone or email code just made a brand-new account. Someone who already uses Aisle
+    /// another way (say Google) gets a second, empty account this way, so ask first.
+    var shouldConfirmNewAccount: Bool {
+        session?.isNew == true && (method == .phone || method == .email)
+    }
+
     func clearError() { errorMessage = nil }
 
     func choose(_ channel: CodeChannel) {
@@ -279,6 +318,7 @@ final class SignUpModel {
         code = ""
         codeSent = nil
         errorMessage = nil
+        notice = nil
     }
 
     /// Returns true when the code was sent.
@@ -292,12 +332,30 @@ final class SignUpModel {
 
     /// Returns true when the code was accepted and the shopper is signed in.
     func verifyCode() async -> Bool {
-        await run { accept(try await auth.verifyCode(channel, target: target, code: code)) }
+        let method: AuthProvider = channel == .phone ? .phone : .email
+        return await run { accept(try await auth.verifyCode(channel, target: target, code: code), via: method) }
     }
 
     /// Apple or Google. Returns true when signed in; false (with no message) if cancelled.
     func continueWith(_ provider: AuthProvider) async -> Bool {
-        await run { accept(try await auth.signIn(with: provider)) }
+        notice = nil
+        return await run { accept(try await auth.signIn(with: provider), via: provider) }
+    }
+
+    /// "I already have an account": deletes the empty account the code just made (nothing
+    /// is in it yet) and goes back to choosing how to sign in. Returns true when done.
+    func useExistingAccount() async -> Bool {
+        guard let session, session.isNew else { return false }
+        let byPhone = method == .phone
+        guard await run({ try await auth.deleteAccount(token: session.token) }) else { return false }
+        self.session = nil
+        method = nil
+        code = ""
+        codeSent = nil
+        notice = byPhone
+            ? "Sign in the way you first signed up. Then add this number in You, under Phone number, and it will open that account too."
+            : "Sign in the way you first signed up."
+        return true
     }
 
     /// Saves the name (for new accounts) and returns the finished session to sign in with.
@@ -313,8 +371,9 @@ final class SignUpModel {
         return saved ? finished : nil
     }
 
-    private func accept(_ session: AuthSession) {
+    private func accept(_ session: AuthSession, via method: AuthProvider) {
         self.session = session
+        self.method = method
         if firstName.isEmpty { firstName = session.account.firstName }
     }
 

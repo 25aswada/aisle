@@ -8,7 +8,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
-from ..auth.accounts import create_session, delete_user, revoke, sign_in, user_for_token
+from ..auth.accounts import PhoneTaken, add_phone, create_session, delete_user, revoke, sign_in, user_for_token
 from ..auth.codes import (
     RESEND_COOLDOWN, CodeProblem, EmailSender, PhoneVerifier, ResendEmailSender, TwilioPhoneVerifier,
     check_email_code, check_rate_limits, issue_email_code, normalize_email, normalize_phone,
@@ -222,6 +222,51 @@ def update_me(body: ProfileUpdate, db: Database, session: SignedIn):
     db.commit()
     db.refresh(user)
     return user_out(user)
+
+
+# Adding a phone number to the signed-in account, so it signs in here too.
+
+PHONE_TAKEN = ("That number already has its own Aisle account. Sign in with it and delete that "
+               "account in You, or use a different number.")
+
+
+@router.post("/me/phone/start", response_model=CodeSent)
+def add_phone_start(body: PhoneStart, db: Database, phones: Phones, request: Request, session: SignedIn,
+                    device_id: DeviceID = None):
+    if phones is None:
+        raise HTTPException(status_code=503, detail="Aisle can't send texts right now. Try again later.")
+    try:
+        phone = normalize_phone(body.phone)
+        if session[0].phone == phone:
+            raise CodeProblem(400, "That number is already on your account.")
+        check_rate_limits(db, "sms", phone, device_id, client_ip(request))
+        phones.send(phone)
+    except CodeProblem as error:
+        raise problem(error)
+    except ConnectionError:
+        raise HTTPException(status_code=503, detail="Aisle can't send texts right now. Try again later.")
+    record_code_request(db, "sms", phone, device_id, client_ip(request))
+    return CodeSent(sent_to=mask_phone(phone), retry_after=int(RESEND_COOLDOWN.total_seconds()))
+
+
+@router.post("/me/phone/verify", response_model=UserOut)
+def add_phone_verify(body: PhoneVerify, db: Database, phones: Phones, session: SignedIn):
+    if phones is None:
+        raise HTTPException(status_code=503, detail="Aisle can't check codes right now. Try again later.")
+    try:
+        phone = normalize_phone(body.phone)
+        approved = phones.check(phone, body.code)
+    except CodeProblem as error:
+        raise problem(error)
+    except ConnectionError:
+        raise HTTPException(status_code=503, detail="Aisle can't check codes right now. Try again later.")
+    if not approved:
+        raise HTTPException(status_code=400, detail=WRONG_CODE)
+    # Only now, with the number proven, say whether another account has it.
+    try:
+        return user_out(add_phone(db, session[0], phone))
+    except PhoneTaken:
+        raise HTTPException(status_code=409, detail=PHONE_TAKEN)
 
 
 @router.delete("/me", status_code=204)

@@ -50,6 +50,27 @@ def sign_in(
     return user, is_new
 
 
+class PhoneTaken(Exception):
+    """The number already signs in to a different account."""
+
+
+def add_phone(db: Session, user: User, phone: str) -> User:
+    """Makes a verified phone number a way into this account, so signing in with it later
+    finds this account instead of making a new one. Replaces the account's old number."""
+    owner = db.scalar(select(UserIdentity).where(
+        UserIdentity.provider == "phone", UserIdentity.subject == phone))
+    if owner is not None and owner.user_id != user.id:
+        raise PhoneTaken(phone)
+    if owner is None:
+        for old in [i for i in user.identities if i.provider == "phone"]:
+            user.identities.remove(old)
+        user.identities.append(UserIdentity(provider="phone", subject=phone))
+    user.phone = phone
+    db.commit()
+    db.refresh(user)
+    return user
+
+
 def _hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 

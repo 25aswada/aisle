@@ -1,11 +1,11 @@
 import SwiftUI
 
 /// The sign-in screens, in a navigation path: method, then phone or email, the code,
-/// and for new accounts the terms and a first name. Apple and Google skip straight to the name step
+/// and for new accounts a check that they don't already have one, the terms and a first name. Apple and Google skip straight to the name step
 /// (or finish, for an account that already has one).
 enum AccountFlowStep: Hashable {
     case method(returning: Bool)
-    case phone, email, code, terms, name
+    case phone, email, code, newAccount, terms, name
 }
 
 /// One sign-in screen, wired to push the next. Shared by onboarding and the You tab.
@@ -35,6 +35,8 @@ struct AccountFlowScreen: View {
             EmailStep(model: model, onBack: back) { path.append(.code) }
         case .code:
             CodeStep(model: model, onBack: back, onVerified: signedIn)
+        case .newAccount:
+            NewAccountStep(model: model, onBack: back, onCreate: { path.append(.terms) }, onUseExisting: backToMethods)
         case .terms:
             TermsStep(onBack: back) {
                 Legal.recordAcceptance()
@@ -45,12 +47,24 @@ struct AccountFlowScreen: View {
         }
     }
 
-    /// New accounts agree to the terms and pick a name; returning ones are done.
+    /// New accounts agree to the terms and pick a name; returning ones are done. A code
+    /// that made a new account first checks the shopper doesn't already have one.
     private func signedIn() {
-        if model.needsName {
+        if model.shouldConfirmNewAccount {
+            path.append(.newAccount)
+        } else if model.needsName {
             path.append(.terms)
         } else if let session = model.session {
             onSignedIn(session)
+        }
+    }
+
+    /// Back to choosing how to sign in, wherever that screen sits in the path.
+    private func backToMethods() {
+        if let index = path.firstIndex(where: { if case .method = $0 { true } else { false } }) {
+            path = Array(path[...index])
+        } else {
+            path.removeAll()
         }
     }
 

@@ -28,6 +28,7 @@ struct YouView: View {
     @State private var showTrips = false
     @State private var showContributions = false
     @State private var showAcknowledgements = false
+    @State private var isAddingPhone = false
     @Environment(\.openURL) private var openURL
     @State private var confirmSignOut = false
     @State private var isSigningIn = false
@@ -55,6 +56,9 @@ struct YouView: View {
                     }
                     homeStore.padding(.top, 24)
                     appearancePicker.padding(.top, 24)
+                    if let account = accounts.account {
+                        signIn(account).padding(.top, 24)
+                    }
                     preferences.padding(.top, 24)
                     dataSection.padding(.top, 24)
                     about.padding(.top, 24)
@@ -105,6 +109,9 @@ struct YouView: View {
             .sheet(isPresented: $showTrips) { PastTripsView() }
             .sheet(isPresented: $showContributions) { ContributionsView() }
             .sheet(isPresented: $showAcknowledgements) { AcknowledgementsView() }
+            .sheet(isPresented: $isAddingPhone) {
+                AddPhoneSheet().presentationDetents([.medium, .large])
+            }
             .sheet(isPresented: $showHowItWorks) {
                 HowAisleWorksSheet().presentationDetents([.medium, .large])
             }
@@ -232,6 +239,26 @@ struct YouView: View {
             .accessibilityElement(children: .contain)
             .accessibilityLabel("Theme")
             .accessibilityIdentifier("appearancePicker")
+        }
+    }
+
+    // MARK: - Sign-in
+
+    /// The phone number that signs in to this account. Adding one means texting in later
+    /// opens this account instead of making a new one.
+    private func signIn(_ account: Account) -> some View {
+        let hasPhone = account.providers.contains(.phone) && account.phone != nil
+        return YouSection("Sign-in") {
+            ActionRow(
+                systemImage: "phone",
+                title: hasPhone ? "Phone number" : "Add a phone number",
+                subtitle: hasPhone
+                    ? account.phone.map(ProfileHeader.formatted)
+                    : "Sign in by text and land in this account"
+            ) {
+                isAddingPhone = true
+            }
+            .accessibilityIdentifier("addPhoneButton")
         }
     }
 
@@ -671,6 +698,114 @@ private struct EditProfileSheet: View {
         .padding(.bottom, 16)
         .background(AisleBackground())
         .onAppear { name = account.firstName }
+    }
+}
+
+/// Adds a phone number to the signed-in account: the number, then the texted code.
+private struct AddPhoneSheet: View {
+    @Environment(AccountStore.self) private var accounts
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var phone = ""
+    @State private var code = ""
+    @State private var sentTo: String?
+    @State private var isWorking = false
+    @State private var errorMessage: String?
+    @FocusState private var focused: Bool
+
+    private var hasPhone: Bool { accounts.account?.providers.contains(.phone) == true }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(sentTo == nil ? (hasPhone ? "Change your number" : "Add your number") : "Check your texts")
+                .font(Theme.font(24, .bold, relativeTo: .title))
+                .padding(.top, 24)
+                .accessibilityAddTraits(.isHeader)
+            if let sentTo {
+                (Text("Enter the 6-digit code we sent to ")
+                    + Text(sentTo).font(Theme.font(15, .semibold)).foregroundStyle(Theme.ink)
+                    + Text("."))
+                    .font(.aisleSubheadline)
+                    .foregroundStyle(Theme.secondaryInk)
+                TextField("123456", text: $code)
+                    .keyboardType(.numberPad)
+                    .textContentType(.oneTimeCode)
+                    .focused($focused)
+                    .modifier(OnboardingFieldStyle())
+                    .accessibilityLabel("Verification code")
+                    .accessibilityIdentifier("addPhoneCodeField")
+                    .onChange(of: code) {
+                        let digits = String(code.filter(\.isNumber).prefix(6))
+                        if digits != code { code = digits }
+                        if code.count == 6 { verify() }
+                    }
+            } else {
+                Text("Signing in with a code texted to this number will open this account, with your lists and history, instead of making a new one.")
+                    .font(.aisleSubheadline)
+                    .foregroundStyle(Theme.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+                TextField("(215) 555-0123", text: $phone)
+                    .keyboardType(.phonePad)
+                    .textContentType(.telephoneNumber)
+                    .focused($focused)
+                    .modifier(OnboardingFieldStyle())
+                    .accessibilityLabel("Mobile number")
+                    .accessibilityIdentifier("addPhoneField")
+                Text("US numbers work as is. For others, start with + and the country code.")
+                    .font(.aisleFootnote)
+                    .foregroundStyle(Theme.secondaryInk)
+            }
+            if let errorMessage {
+                Text(errorMessage)
+                    .font(.aisleFootnote)
+                    .foregroundStyle(Theme.warning)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer()
+            Button(action: sentTo == nil ? send : verify) {
+                if isWorking { ProgressView() } else { Text(sentTo == nil ? "Text me a code" : "Add number") }
+            }
+            .buttonStyle(.aisleAccent)
+            .disabled(isWorking || (sentTo == nil ? !SignUpModel.looksLikePhone(phone) : code.count < 6))
+            .accessibilityIdentifier("addPhoneSubmitButton")
+        }
+        .foregroundStyle(Theme.ink)
+        .padding(.horizontal, 24)
+        .padding(.bottom, 16)
+        .background(AisleBackground())
+        // Focus the number field, then the code field once it appears.
+        .task(id: sentTo) { focused = true }
+    }
+
+    private func send() {
+        guard SignUpModel.looksLikePhone(phone), !isWorking else { return }
+        run {
+            sentTo = try await accounts.sendAddPhoneCode(to: phone).sentTo
+        }
+    }
+
+    private func verify() {
+        guard code.count == 6, !isWorking else { return }
+        run {
+            try await accounts.addPhone(phone, code: code)
+            dismiss()
+        }
+    }
+
+    private func run(_ work: @escaping () async throws -> Void) {
+        isWorking = true
+        errorMessage = nil
+        Task {
+            defer { isWorking = false }
+            do {
+                try await work()
+            } catch AuthError.signedOut {
+                dismiss()
+            } catch {
+                errorMessage = (error as? LocalizedError)?.errorDescription ?? AuthError.network.errorDescription
+                code = ""
+            }
+        }
     }
 }
 

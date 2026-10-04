@@ -251,6 +251,61 @@ def test_deleted_number_can_sign_up_again(api, engine):
     assert again["user"]["first_name"] == "" and again["user"]["providers"] == ["phone"]
 
 
+# MARK: - Adding a phone number
+
+def google_sign_in(api):
+    return api.post("/auth/google", json={"id_token": "x" * 40, "nonce": "n"}).json()
+
+
+def test_a_phone_added_to_a_google_account_signs_in_to_it(api, fakes):
+    google = google_sign_in(api)
+    assert api.post("/me/phone/start", json={"phone": "2155550123"}).status_code == 401
+    sent = api.post("/me/phone/start", json={"phone": "(215) 555-0123"}, headers=bearer(google["token"]))
+    assert sent.status_code == 200 and sent.json()["sent_to"] == "+1 •••• 0123"
+    wrong = api.post("/me/phone/verify", json={"phone": "2155550123", "code": "000000"},
+                     headers=bearer(google["token"]))
+    assert wrong.status_code == 400
+
+    added = api.post("/me/phone/verify", json={"phone": "2155550123", "code": "123456"},
+                     headers=bearer(google["token"])).json()
+    assert added["phone"] == "+12155550123"
+    assert added["providers"] == ["google", "phone"]
+
+    # Signing in by text now lands in the Google account, not a new one.
+    by_phone = api.post("/auth/phone/verify", json={"phone": "2155550123", "code": "123456"}).json()
+    assert by_phone["is_new"] is False
+    assert by_phone["user"]["id"] == google["user"]["id"]
+
+
+def test_adding_a_new_number_replaces_the_old_one(api, engine):
+    google = google_sign_in(api)
+    for phone in ("2155550123", "2155550188"):
+        api.post("/me/phone/verify", json={"phone": phone, "code": "123456"}, headers=bearer(google["token"]))
+    me = api.get("/me", headers=bearer(google["token"])).json()
+    assert me["phone"] == "+12155550188" and me["providers"] == ["google", "phone"]
+    # The old number no longer opens this account.
+    old = api.post("/auth/phone/verify", json={"phone": "2155550123", "code": "123456"}).json()
+    assert old["is_new"] is True
+
+
+def test_a_number_with_its_own_account_cant_be_added(api):
+    phone_sign_in(api)
+    google = google_sign_in(api)
+    taken = api.post("/me/phone/verify", json={"phone": "2155550123", "code": "123456"},
+                     headers=bearer(google["token"]))
+    assert taken.status_code == 409
+    assert "own Aisle account" in taken.json()["detail"]
+
+
+def test_adding_the_number_already_on_the_account(api):
+    token = phone_sign_in(api).json()["token"]
+    same = api.post("/me/phone/start", json={"phone": "2155550123"}, headers=bearer(token))
+    assert same.status_code == 400
+    # Verifying it anyway changes nothing.
+    again = api.post("/me/phone/verify", json={"phone": "2155550123", "code": "123456"}, headers=bearer(token))
+    assert again.json()["providers"] == ["phone"]
+
+
 # MARK: - Real token checks
 
 class FakeKeys:

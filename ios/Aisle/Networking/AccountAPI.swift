@@ -96,6 +96,17 @@ struct AccountAPI {
         return user.account
     }
 
+    /// Texts a code to a number the signed-in shopper wants to add to their account.
+    func addPhoneStart(token: String, phone: String) async throws -> CodeSent {
+        let body: CodeSentBody = try await send("POST", "me/phone/start", body: ["phone": phone], token: token)
+        return CodeSent(sentTo: body.sentTo, retryAfter: body.retryAfter)
+    }
+
+    func addPhoneVerify(token: String, phone: String, code: String) async throws -> Account {
+        let user: UserBody = try await send("POST", "me/phone/verify", body: ["phone": phone, "code": code], token: token)
+        return user.account
+    }
+
     func deleteMe(token: String) async throws {
         _ = try await data("DELETE", "me", body: nil as String?, token: token)
     }

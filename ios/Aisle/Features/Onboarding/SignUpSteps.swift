@@ -36,6 +36,16 @@ struct SignUpMethodStep: View {
                 .padding(.top, 16)
             }
         } footer: {
+            if let notice = model.notice {
+                Text(notice)
+                    .font(.aisleFootnote)
+                    .foregroundStyle(Theme.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Theme.accentWash, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .accessibilityIdentifier("signInNotice")
+            }
             if let error = model.errorMessage {
                 Text(error)
                     .font(.aisleFootnote)
@@ -338,6 +348,67 @@ struct CodeStep: View {
         Task {
             if await model.sendCode() { secondsLeft = model.codeSent?.retryAfter ?? 30 }
         }
+    }
+}
+
+/// Shown when a phone or email code made a brand-new account. Someone who already uses
+/// Aisle with Apple, Google or another email can back out and sign in that way, so they
+/// don't end up with two accounts.
+struct NewAccountStep: View {
+    @Bindable var model: SignUpModel
+    let onBack: () -> Void
+    let onCreate: () -> Void
+    let onUseExisting: () -> Void
+
+    private var byPhone: Bool { model.method == .phone }
+
+    var body: some View {
+        OnboardingPage(onBack: onBack) {
+            VStack(alignment: .leading, spacing: 12) {
+                AisleMark(size: 44)
+                    .padding(.bottom, 10)
+                GradientHeadline(lead: "New to ", accent: "Aisle?")
+                (Text(model.sentToLabel).font(Theme.font(17, .semibold)).foregroundStyle(Theme.ink)
+                    + Text(" isn't on an Aisle account yet, so this makes a new one."))
+                    .font(Theme.font(17, relativeTo: .body))
+                    .foregroundStyle(Theme.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Already use Aisle?")
+                        .font(.aisleHeadline)
+                    Text(byPhone
+                        ? "If you signed up with Apple, Google or email, sign in that way instead, then add this number in You. Otherwise you'd have two separate accounts."
+                        : "If you signed up with Apple, Google, your phone or another email, sign in that way instead. Otherwise you'd have two separate accounts.")
+                        .font(.aisleSubheadline)
+                        .foregroundStyle(Theme.secondaryInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .foregroundStyle(Theme.ink)
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Theme.accentWash, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                .padding(.top, 12)
+                if let error = model.errorMessage {
+                    Text(error)
+                        .font(.aisleFootnote)
+                        .foregroundStyle(Theme.warning)
+                }
+            }
+        } footer: {
+            Button("Create a new account", action: onCreate)
+                .buttonStyle(.aisleAccent)
+                .accessibilityIdentifier("confirmNewAccountButton")
+            Button {
+                Task {
+                    if await model.useExistingAccount() { onUseExisting() }
+                }
+            } label: {
+                if model.isWorking { ProgressView() } else { Text("I already have an account") }
+            }
+            .buttonStyle(.aisleSoft)
+            .accessibilityIdentifier("useExistingAccountButton")
+        }
+        .disabled(model.isWorking)
     }
 }
 
