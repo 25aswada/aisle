@@ -158,6 +158,7 @@ def _resolve(
         get_settings().aisle_ai_strategy == "model_first" or intent.match is None
     )
     if use_model:
+        db.commit()  # Hand the connection back during the model call.
         guess = model.locate(intent, store.retailer_name if store else None, layout) or guess
 
     if guess.source == "model":

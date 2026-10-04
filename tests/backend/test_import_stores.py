@@ -394,3 +394,62 @@ def test_states_are_written_as_codes(state):
     store = osm(70, 42.1, -88.4, shop="supermarket", addr__housenumber="10090", addr__street="Highway 47",
                 addr__city="Huntley", addr__state=state, addr__postcode="60142")
     assert to_record(CHAIN["Jewel-Osco"], store)[0].address == "10090 Highway 47, Huntley, IL 60142"
+
+
+def test_requests_are_guarded(db_client):
+    assert db_client.head("/health").status_code == 200
+    too_big = db_client.post("/lists/parse", content=b"x", headers={"content-length": str(9 * 1024 * 1024),
+                                                                    "content-type": "application/json"})
+    assert too_big.status_code == 413
+
+
+def test_each_network_can_only_set_up_so_many_new_stores_a_day(engine, db_client, monkeypatch):
+    from backend.app.config import get_settings
+
+    monkeypatch.setattr(get_settings(), "aisle_new_store_maps_per_ip_per_day", 2)
+    with Session(engine) as session:
+        seed_all(session)
+        import_download(session, download(Walmart=[walmart(2), walmart(3, lat=41.5), walmart(4, lat=41.7)]))
+        ids = sorted(session.scalars(select(Store.id).where(Store.external_place_id.is_not(None))))
+    one = {"X-Forwarded-For": "198.51.100.1"}
+    assert [db_client.get(f"/stores/{i}/layout", headers=one).status_code for i in ids] == [200, 200, 429]
+    # Stores already set up still open, and another network has its own allowance.
+    assert db_client.get(f"/stores/{ids[0]}/layout", headers=one).status_code == 200
+    assert db_client.get(f"/stores/{ids[2]}/layout", headers={"X-Forwarded-For": "198.51.100.2"}).status_code == 200
+
+
+def test_the_client_ip_is_the_one_herokus_router_saw():
+    from starlette.requests import Request
+
+    from backend.app.limits import client_ip
+
+    def request(forwarded):
+        return Request({"type": "http", "headers": [(b"x-forwarded-for", forwarded.encode())], "client": ("10.1.1.1", 1)})
+
+    assert client_ip(request("1.2.3.4, 203.0.113.7")) == "203.0.113.7"  # The first was made up by the client.
+    assert client_ip(request("203.0.113.7")) == "203.0.113.7"
+
+
+def test_cleanup_deletes_data_past_its_retention(engine):
+    from datetime import datetime, timedelta, timezone
+
+    from backend.app.cleanup import clean_up
+    from backend.app.models import AnalyticsEvent, CodeRequest, EmailCode, UsageCounter
+
+    now = datetime.now(timezone.utc)
+    with Session(engine) as session:
+        session.add_all([
+            CodeRequest(channel="sms", target="+12155550100", created_at=now - timedelta(days=3)),
+            CodeRequest(channel="sms", target="+12155550101", created_at=now),
+            EmailCode(email="a@example.com", code_hash="x", expires_at=now, created_at=now - timedelta(days=2)),
+            UsageCounter(subject="user:1", feature="photo_search", day=(now - timedelta(days=9)).date().isoformat()),
+            UsageCounter(subject="user:1", feature="photo_search", day=now.date().isoformat()),
+            UsageCounter(subject="user:1", feature="rl:search", day=(now - timedelta(days=3)).strftime("%Y%m%d%H")),
+            UsageCounter(subject="user:1", feature="rl:search", day=now.strftime("%Y%m%d%H")),
+            AnalyticsEvent(name="old", occurred_at=now, received_at=now - timedelta(days=200)),
+        ])
+        session.commit()
+        assert clean_up(session, now) == {"code_requests": 1, "email_codes": 1, "usage_counters": 2,
+                                          "analytics_events": 1, "search_events": 0}
+        assert session.scalar(select(func.count()).select_from(UsageCounter)) == 2
+        assert session.scalar(select(CodeRequest.target)) == "+12155550101"

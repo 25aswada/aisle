@@ -78,13 +78,16 @@ def guess_from_model_output(data: dict, intent: Intent, layout: LayoutDef) -> Lo
 class AnthropicLocationModel:
     name = "anthropic"
 
-    def __init__(self, api_key: str, model: str, timeout: float, reply_timeout: float | None = None):
+    def __init__(self, api_key: str, model: str, timeout: float, reply_timeout: float | None = None,
+                 explain_timeout: float | None = None):
         import anthropic  # Imported lazily so the fallback works without the SDK.
 
-        self._client = anthropic.Anthropic(api_key=api_key, timeout=timeout, max_retries=1)
+        self._client = anthropic.Anthropic(api_key=api_key, timeout=timeout, max_retries=0)
         self._model = model
-        # Written replies run longer than structured guesses.
+        # Written replies run longer than structured guesses. No retries: a retry doubles
+        # the wait, and Heroku ends any request after 30 seconds.
         self._reply_timeout = reply_timeout or timeout
+        self._explain_timeout = explain_timeout or self._reply_timeout
 
     def locate(self, intent: Intent, retailer_name: str | None, layout: LayoutDef) -> LocationGuess | None:
         departments = ", ".join(z.name for z in layout.zones)
@@ -116,15 +119,16 @@ class AnthropicLocationModel:
             return None
 
     def explain(self, facts: ExplainFacts) -> str | None:
-        return self.chat(EXPLAIN_SYSTEM_PROMPT, [{"role": "user", "content": facts_prompt(facts)}])
+        return self.chat(EXPLAIN_SYSTEM_PROMPT, [{"role": "user", "content": facts_prompt(facts)}],
+                         timeout=self._explain_timeout)
 
-    def chat(self, system: str, messages: list[dict]) -> str | None:
+    def chat(self, system: str, messages: list[dict], timeout: float | None = None) -> str | None:
         response = self._client.messages.create(
             model=self._model,
             max_tokens=1500,
             system=system,
             messages=[{"role": m["role"], "content": _anthropic_content(m)} for m in messages],
-            timeout=self._reply_timeout,
+            timeout=timeout or self._reply_timeout,
         )
         if response.stop_reason in ("refusal", "max_tokens"):
             return None
@@ -134,13 +138,16 @@ class AnthropicLocationModel:
 class OpenAILocationModel:
     name = "openai"
 
-    def __init__(self, api_key: str, model: str, timeout: float, reply_timeout: float | None = None):
+    def __init__(self, api_key: str, model: str, timeout: float, reply_timeout: float | None = None,
+                 explain_timeout: float | None = None):
         import openai  # Imported lazily so the fallback works without the SDK.
 
-        self._client = openai.OpenAI(api_key=api_key, timeout=timeout, max_retries=1)
+        self._client = openai.OpenAI(api_key=api_key, timeout=timeout, max_retries=0)
         self._model = model
-        # Written replies run longer than structured guesses.
+        # Written replies run longer than structured guesses. No retries: a retry doubles
+        # the wait, and Heroku ends any request after 30 seconds.
         self._reply_timeout = reply_timeout or timeout
+        self._explain_timeout = explain_timeout or self._reply_timeout
 
     def locate(self, intent: Intent, retailer_name: str | None, layout: LayoutDef) -> LocationGuess | None:
         departments = ", ".join(z.name for z in layout.zones)
@@ -171,16 +178,17 @@ class OpenAILocationModel:
 
 
     def explain(self, facts: ExplainFacts) -> str | None:
-        return self.chat(EXPLAIN_SYSTEM_PROMPT, [{"role": "user", "content": facts_prompt(facts)}])
+        return self.chat(EXPLAIN_SYSTEM_PROMPT, [{"role": "user", "content": facts_prompt(facts)}],
+                         timeout=self._explain_timeout)
 
-    def chat(self, system: str, messages: list[dict]) -> str | None:
+    def chat(self, system: str, messages: list[dict], timeout: float | None = None) -> str | None:
         response = self._client.chat.completions.create(
             model=self._model,
             messages=[
                 {"role": "system", "content": system},
                 *({"role": m["role"], "content": _openai_content(m)} for m in messages),
             ],
-            timeout=self._reply_timeout,
+            timeout=timeout or self._reply_timeout,
         )
         choice = response.choices[0]
         if choice.finish_reason != "stop" or choice.message.refusal:
@@ -259,7 +267,8 @@ def get_explainer() -> Explainer | None:
     global _cached_explainer
     settings = get_settings()
     choice = _choose_provider(settings) if settings.aisle_ai_explain else None
-    key = (choice, settings.aisle_ai_model, settings.aisle_ai_timeout_seconds, settings.aisle_ai_reply_timeout_seconds)
+    key = (choice, settings.aisle_ai_model, settings.aisle_ai_timeout_seconds, settings.aisle_ai_reply_timeout_seconds,
+           settings.aisle_ai_explain_timeout_seconds)
     if _cached_explainer is not None and _cached_explainer[0] == key:
         return _cached_explainer[1]
     explainer: Explainer | None = None
@@ -268,7 +277,7 @@ def get_explainer() -> Explainer | None:
         try:
             explainer = CachedExplainer(PROVIDERS[name](
                 api_key, settings.aisle_ai_model or DEFAULT_MODELS[name], settings.aisle_ai_timeout_seconds,
-                settings.aisle_ai_reply_timeout_seconds,
+                settings.aisle_ai_reply_timeout_seconds, settings.aisle_ai_explain_timeout_seconds,
             ))
         except ImportError:
             log.warning("%s package not installed; no AI explanations", name)

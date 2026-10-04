@@ -11,8 +11,15 @@ def _zone(client, store_id, name):
     return next(z for z in zones if z["name"] == name)
 
 
+def _network(device):
+    """A made-up client address per test shopper: signed out, reports count per network."""
+    return f"10.0.0.{int(device.split('-')[-1])}"
+
+
 def _feedback(client, device, **body):
-    response = client.post("/feedback", json=body, headers={"X-Aisle-Device": device})
+    # Heroku's router appends the address it saw; only that last one counts.
+    response = client.post("/feedback", json=body, headers={
+        "X-Aisle-Device": device, "X-Forwarded-For": f"203.0.113.9, {_network(device)}"})
     assert response.status_code == 201, response.text
     return response.json()
 
@@ -50,7 +57,7 @@ def test_found_it_records_observation(seeded_client, seeded_engine):
     with Session(seeded_engine) as session:
         observation = session.get(LocationObservation, saved["id"])
         assert observation.search_event_id == result["search_id"]
-        assert observation.device_id == "dev-1"
+        assert observation.device_id == "ip:10.0.0.1"
 
 
 def test_one_report_does_not_change_the_answer(seeded_client):
@@ -70,7 +77,7 @@ def test_agreeing_corrections_become_the_answer(seeded_client):
     for device in ("dev-1", "dev-2"):
         _feedback(seeded_client, device, store_id=store_id, item="maple syrup", verdict="found",
                   zone_id=frozen["id"], aisle=" aisle 9 ")
-    # The same device reporting twice counts once.
+    # The same shopper reporting twice counts once.
     _feedback(seeded_client, "dev-2", store_id=store_id, item="maple syrup", verdict="found", zone_id=frozen["id"])
     data = seeded_client.post("/search", json={"query": "organic maple syrup", "store_id": store_id}).json()
     assert data["source"] == "observations"

@@ -1,5 +1,6 @@
 """Aisle+: the app proves its subscription with signed App Store transactions, and asks
-how much of the free tier is left today."""
+how much of the free tier is left today. Apple also tells us directly (App Store Server
+Notifications V2) when a subscription renews, lapses or is refunded."""
 import logging
 from datetime import datetime, timezone
 from typing import Annotated
@@ -12,8 +13,8 @@ from ..config import get_settings
 from ..database import get_db
 from ..models import PlusEntitlement, User
 from ..plus.access import FOLLOW_UP, PHOTO_SEARCH, PLUS_PRODUCTS, Caller, active_entitlement, limit_for, used_today
-from ..plus.appstore import InvalidTransaction, verify_transaction
-from ..schemas import PlusStatus, PlusSync, UsageOut
+from ..plus.appstore import InvalidTransaction, VerifiedTransaction, verify_notification, verify_transaction
+from ..schemas import AppStoreNotification, PlusStatus, PlusSync, UsageOut
 from .auth import CallerDep
 
 router = APIRouter()
@@ -51,7 +52,7 @@ def plus_sync(body: PlusSync, db: Database, caller: CallerDep):
         try:
             verified = verify_transaction(
                 jws, bundle_id=settings.apple_bundle_id, product_ids=PLUS_PRODUCTS,
-                allow_xcode=settings.aisle_plus_allow_xcode,
+                allow_xcode=settings.allow_xcode_purchases,
             )
         except InvalidTransaction as error:
             log.warning("Rejected an Aisle+ transaction: %s", error)
@@ -66,17 +67,64 @@ def plus_sync(body: PlusSync, db: Database, caller: CallerDep):
         if entitlement is None:
             entitlement = PlusEntitlement(original_transaction_id=verified.original_transaction_id)
             db.add(entitlement)
-        entitlement.product_id = verified.product_id
-        entitlement.environment = verified.environment
-        entitlement.expires_at = verified.expires_at
-        entitlement.revoked_at = verified.revoked_at
+        apply_transaction(entitlement, verified)
         entitlement.device_id = caller.device_id or entitlement.device_id
         entitlement.user_id = user.id
-        entitlement.updated_at = datetime.now(timezone.utc)
     db.commit()
     if body.transactions and not accepted:
         raise HTTPException(status_code=400, detail="Those purchases couldn't be verified with the App Store.")
     return status_for(db, caller)
+
+
+def _aware(moment: datetime | None) -> datetime | None:
+    return moment.replace(tzinfo=timezone.utc) if moment and moment.tzinfo is None else moment
+
+
+def apply_transaction(entitlement: PlusEntitlement, verified: VerifiedTransaction) -> None:
+    """Updates a subscription from one of its transactions. A refund or revocation ends it;
+    otherwise the latest expiry wins, so an older transaction arriving late can't shorten it."""
+    entitlement.environment = verified.environment
+    entitlement.updated_at = datetime.now(timezone.utc)
+    if verified.revoked_at is not None:
+        entitlement.revoked_at = verified.revoked_at
+        entitlement.product_id = entitlement.product_id or verified.product_id
+        return
+    current = _aware(entitlement.expires_at)
+    if current is None or (verified.expires_at is not None and verified.expires_at >= current):
+        entitlement.expires_at = verified.expires_at
+        entitlement.product_id = verified.product_id
+        entitlement.revoked_at = None
+
+
+@router.post("/plus/notifications")
+def app_store_notification(body: AppStoreNotification, db: Database):
+    """App Store Server Notifications V2. Set this URL (for production and sandbox) in App
+    Store Connect > the app > App Information. Renewals, lapses and refunds update the
+    subscription even if the app is never opened again."""
+    settings = get_settings()
+    try:
+        notice = verify_notification(body.signedPayload, bundle_id=settings.apple_bundle_id, product_ids=PLUS_PRODUCTS)
+    except InvalidTransaction as error:
+        log.warning("Rejected an App Store notification: %s", error)
+        raise HTTPException(status_code=400, detail="Not a genuine App Store notification.")
+    verified = notice.transaction
+    if verified is None:
+        return {"ok": True}
+    entitlement = db.scalar(select(PlusEntitlement).where(
+        PlusEntitlement.original_transaction_id == verified.original_transaction_id))
+    if entitlement is None:
+        # Bought on a phone that never synced: link it to the account it was bought for.
+        owner = db.scalar(select(User).where(User.plus_token == verified.app_account_token)) \
+            if verified.app_account_token else None
+        entitlement = PlusEntitlement(original_transaction_id=verified.original_transaction_id,
+                                      user_id=owner.id if owner else None)
+        db.add(entitlement)
+    apply_transaction(entitlement, verified)
+    if notice.notification_type in ("REFUND", "REVOKE") and entitlement.revoked_at is None:
+        entitlement.revoked_at = datetime.now(timezone.utc)
+    db.commit()
+    log.info("App Store notification %s/%s for an Aisle+ subscription", notice.notification_type, notice.subtype)
+    return {"ok": True}
 
 
 def _belongs_to(db: Session, user: User, token: str | None, entitlement: PlusEntitlement | None,

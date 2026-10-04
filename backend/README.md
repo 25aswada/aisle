@@ -11,7 +11,7 @@ Run from the repository root:
 ```sh
 python3 -m venv backend/.venv
 source backend/.venv/bin/activate
-pip install -r backend/requirements.txt
+pip install -r backend/requirements-dev.txt
 cp backend/.env.example backend/.env
 docker compose up -d postgres
 alembic -c backend/alembic.ini upgrade head

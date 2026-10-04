@@ -383,15 +383,17 @@ class EmailVerify(EmailStart):
 
 class AppleSignIn(BaseModel):
     identity_token: str = Field(min_length=20, max_length=8000)
-    # The raw nonce the app hashed into Apple's request.
-    nonce: str | None = Field(default=None, max_length=200)
+    # The raw nonce the app hashed into Apple's request; a token can't be replayed without it.
+    nonce: str = Field(min_length=8, max_length=200)
+    # Apple's one-time code, traded for the refresh token revoked when the account is deleted.
+    authorization_code: str | None = Field(default=None, max_length=2000)
     # Apple shares the name only on the very first sign-in, and only with the app.
     first_name: str | None = Field(default=None, max_length=40)
 
 
 class GoogleSignIn(BaseModel):
     id_token: str = Field(min_length=20, max_length=8000)
-    nonce: str | None = Field(default=None, max_length=200)
+    nonce: str = Field(min_length=8, max_length=200)
 
 
 class CodeSent(BaseModel):
@@ -434,6 +436,11 @@ class ProfileUpdate(BaseModel):
 
 
 # --- Aisle+ ---
+
+class AppStoreNotification(BaseModel):
+    """App Store Server Notifications V2: one signed JWS."""
+    signedPayload: str = Field(min_length=20, max_length=60000)
+
 
 class PlusSync(BaseModel):
     # StoreKit 2 `jwsRepresentation` of each current Aisle+ entitlement.

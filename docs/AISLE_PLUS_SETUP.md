@@ -46,9 +46,19 @@ uses `ios/Aisle/Aisle.storekit`, and the server accepts those purchases only wit
 
 ## 5. Before launch
 
-- The server must run somewhere public over HTTPS, not this Mac.
-- App Store review needs a privacy policy URL and terms of use (EULA) for subscriptions,
-  linked in the app's description. The Aisle+ page already shows Restore and the renewal terms.
-- Optional: App Store Server Notifications V2 for instant refund/renewal updates. Today
-  the app re-sends its current transactions on every launch and after each purchase,
-  which covers renewals and refunds within a day.
+- The server runs on Heroku over HTTPS (done).
+- **Server notifications (required):** App Store Connect → the app → App Information →
+  App Store Server Notifications. Set both the Production and Sandbox URLs to
+  `https://aisle-api-db30672cd6aa.herokuapp.com/plus/notifications`, Version 2. That's
+  how the server learns about refunds, lapses and renewals even if the app is never opened
+  again. Without it a refunded subscription keeps working until it would have expired.
+- **Privacy policy, terms and support URLs:** the server serves them at `/privacy`,
+  `/terms` and `/support` on the same address. Enter those in the app's App Store listing
+  (or host the same text on shopaisle.app and use those URLs). Subscriptions use Apple's
+  standard EULA; link it in the description.
+- **Sign in with Apple key (required for account deletion):** Certificates, Identifiers &
+  Profiles → Keys → + → Sign in with Apple (primary App ID `app.shopaisle.aisle`). Download
+  the .p8 once, then set `APPLE_TEAM_ID=983N58VUTZ`, `APPLE_SIGNIN_KEY_ID` (the key's ID)
+  and `APPLE_SIGNIN_PRIVATE_KEY` (the file's contents) on Heroku. Apple requires apps to
+  revoke a user's Apple sign-in when they delete their account; without the key the server
+  can't.

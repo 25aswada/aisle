@@ -59,10 +59,9 @@ def _moment(milliseconds) -> datetime | None:
     return datetime.fromtimestamp(milliseconds / 1000, tz=timezone.utc) if milliseconds else None
 
 
-def verify_transaction(
-    jws: str, *, bundle_id: str, product_ids: set[str], allow_xcode: bool = False,
-    root: x509.Certificate | None = None, now: datetime | None = None,
-) -> VerifiedTransaction:
+def _verified_payload(jws: str, *, allow_xcode: bool, root: x509.Certificate | None,
+                      now: datetime | None) -> dict:
+    """The JWS payload, once its signature and certificate chain check out."""
     try:
         header_part, payload_part, _ = jws.split(".")
         header = json.loads(_b64url(header_part))
@@ -73,8 +72,7 @@ def verify_transaction(
     if header.get("alg") != "ES256" or not chain:
         raise InvalidTransaction("unexpected signature")
 
-    environment = payload.get("environment", "")
-    if environment == "Xcode":
+    if payload.get("environment") == "Xcode":
         if not allow_xcode:
             raise InvalidTransaction("Xcode test transactions aren't accepted here")
     else:
@@ -84,7 +82,15 @@ def verify_transaction(
         jwt.PyJWS().decode(jws, chain[0].public_key(), algorithms=["ES256"])
     except jwt.PyJWTError as error:
         raise InvalidTransaction("bad signature") from error
+    return payload
 
+
+def verify_transaction(
+    jws: str, *, bundle_id: str, product_ids: set[str], allow_xcode: bool = False,
+    root: x509.Certificate | None = None, now: datetime | None = None,
+) -> VerifiedTransaction:
+    payload = _verified_payload(jws, allow_xcode=allow_xcode, root=root, now=now)
+    environment = payload.get("environment", "")
     if payload.get("bundleId") != bundle_id:
         raise InvalidTransaction("transaction is for another app")
     if payload.get("productId") not in product_ids:
@@ -119,3 +125,30 @@ def _check_chain(chain: list[x509.Certificate], root: x509.Certificate, now: dat
             cert.extensions.get_extension_for_oid(oid)
         except x509.ExtensionNotFound as error:
             raise InvalidTransaction("not an App Store signing certificate") from error
+
+
+@dataclass(frozen=True)
+class VerifiedNotification:
+    """An App Store Server Notification (V2): what happened, and to which transaction."""
+    notification_type: str  # e.g. DID_RENEW, EXPIRED, REFUND, REVOKE
+    subtype: str | None
+    transaction: VerifiedTransaction | None
+
+
+def verify_notification(
+    signed_payload: str, *, bundle_id: str, product_ids: set[str],
+    root: x509.Certificate | None = None, now: datetime | None = None,
+) -> VerifiedNotification:
+    """Checks a notification Apple sent us, and the signed transaction inside it."""
+    payload = _verified_payload(signed_payload, allow_xcode=False, root=root, now=now)
+    data = payload.get("data") or {}
+    if data.get("bundleId") != bundle_id:
+        raise InvalidTransaction("notification is for another app")
+    signed_transaction = data.get("signedTransactionInfo")
+    transaction = verify_transaction(
+        signed_transaction, bundle_id=bundle_id, product_ids=product_ids, root=root, now=now,
+    ) if signed_transaction else None
+    return VerifiedNotification(
+        notification_type=str(payload.get("notificationType", "")), subtype=payload.get("subtype"),
+        transaction=transaction,
+    )

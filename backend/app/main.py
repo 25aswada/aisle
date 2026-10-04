@@ -1,14 +1,19 @@
+from contextlib import asynccontextmanager
 from math import asin, cos, degrees, radians, sin, sqrt
 from typing import Annotated
 
 import logging
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
+from .cleanup import start_in_background as start_cleanup
+from .config import get_settings
 from .database import get_db
+from .legal import privacy_page, support_page, terms_page
+from .middleware import RequestGuard
 from .models import Retailer, Store
 from .routers import analytics as analytics_routes
 from .routers import auth as auth_routes
@@ -20,7 +25,22 @@ from .routers import route as route_routes
 from .routers import search as search_routes
 from .schemas import NearbyResponse, NearbyStoreResponse, StoreResponse
 
-app = FastAPI(title="Aisle API", version="0.2.0")
+_on_heroku = get_settings().on_heroku
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    if _on_heroku:
+        start_cleanup()  # Deletes data past its retention, every few hours.
+    yield
+
+# The API's interactive docs stay off in production; they map every route for anyone.
+app = FastAPI(
+    title="Aisle API", version="0.2.0",
+    docs_url=None if _on_heroku else "/docs", redoc_url=None if _on_heroku else "/redoc",
+    openapi_url=None if _on_heroku else "/openapi.json", lifespan=lifespan,
+)
+app.add_middleware(RequestGuard, redirect_http=_on_heroku)
 app.include_router(search_routes.router)
 app.include_router(feedback_routes.router)
 app.include_router(list_routes.router)
@@ -46,12 +66,16 @@ NEARBY_RADII_MILES = (10, 40, 160, 640, 2560)
 SEARCH_LIMIT = 50
 
 
-def distance_miles(lat: float, lon: float, store: Store) -> float:
-    """Haversine great-circle distance, using the mean Earth radius in miles."""
-    lat1, lat2 = radians(lat), radians(store.latitude)
-    dlat, dlon = lat2 - lat1, radians(store.longitude - lon)
-    a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
+def haversine_miles(lat: float, lon: float, lat2: float, lon2: float) -> float:
+    """Great-circle distance, using the mean Earth radius in miles."""
+    phi1, phi2 = radians(lat), radians(lat2)
+    dlat, dlon = phi2 - phi1, radians(lon2 - lon)
+    a = sin(dlat / 2) ** 2 + cos(phi1) * cos(phi2) * sin(dlon / 2) ** 2
     return EARTH_RADIUS_MILES * 2 * asin(sqrt(min(1.0, max(0.0, a))))
+
+
+def distance_miles(lat: float, lon: float, store: Store) -> float:
+    return haversine_miles(lat, lon, store.latitude, store.longitude)
 
 
 def within_box(lat: float, lon: float, miles: float):
@@ -84,6 +108,27 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
+# Public pages the App Store links to.
+@app.get("/privacy", response_class=HTMLResponse, include_in_schema=False)
+def privacy() -> str:
+    return privacy_page()
+
+
+@app.get("/terms", response_class=HTMLResponse, include_in_schema=False)
+def terms() -> str:
+    return terms_page()
+
+
+@app.get("/support", response_class=HTMLResponse, include_in_schema=False)
+def support() -> str:
+    return support_page()
+
+
+@app.head("/health", include_in_schema=False)
+def health_head() -> None:
+    """For uptime monitors that check with HEAD."""
+
+
 @app.get("/stores/nearby", response_model=NearbyResponse)
 def nearby(
     db: Database,
@@ -102,7 +147,12 @@ def nearby(
         if len(ranked) >= limit:
             break
     else:
-        ranked = with_distances(lat, lon, db.scalars(select(Store)))
+        # Nothing much for thousands of miles. Rank every store by its coordinates alone
+        # (cheap, unlike loading them all), then load just the nearest.
+        points = db.execute(select(Store.id, Store.latitude, Store.longitude)).all()
+        nearest = sorted(points, key=lambda p: (haversine_miles(lat, lon, p.latitude, p.longitude), p.id))[:limit]
+        stores = db.scalars(select(Store).where(Store.id.in_([p.id for p in nearest]))).all()
+        ranked = with_distances(lat, lon, stores)
     return NearbyResponse(stores=[nearby_response(d, s) for d, s in ranked[:limit]])
 
 

@@ -6,9 +6,20 @@ from backend.app.main import app
 
 
 @pytest.fixture
-def api():
-    with TestClient(app) as client:
+def api(engine):
+    from sqlalchemy.orm import Session
+
+    from backend.app.database import get_db
+    from conftest import signed_in_headers
+
+    def override_db():
+        with Session(engine) as session:
+            yield session
+
+    app.dependency_overrides[get_db] = override_db
+    with TestClient(app, headers=signed_in_headers(engine)) as client:
         yield client
+    app.dependency_overrides.clear()
 
 
 def test_space_separated_items_become_four(api):

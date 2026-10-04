@@ -10,10 +10,14 @@ def make_engine(url: str):
     # Accept common deployment URLs while using the psycopg 3 driver.
     if url.startswith(("postgres://", "postgresql://")):
         url = "postgresql+psycopg://" + url.split("://", 1)[1]
+    # Heroku's essential-0 Postgres allows 20 connections; with two web processes, each
+    # gets at most 8, leaving room for release commands and `heroku run`.
+    pool = {} if url.startswith("sqlite") else {"pool_size": 4, "max_overflow": 4, "pool_timeout": 10}
     engine = create_engine(
         url,
         pool_pre_ping=True,
         connect_args={"check_same_thread": False} if url.startswith("sqlite") else {},
+        **pool,
     )
     if engine.dialect.name == "sqlite":
         @event.listens_for(engine, "connect")
