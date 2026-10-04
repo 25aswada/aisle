@@ -1,35 +1,45 @@
 import CoreMotion
 import SwiftUI
 
-/// The Aisle mark drawn as vector panels so each shelf can move on its own.
+/// The Aisle mark drawn as vector panels so its halves and shelves can move on their own.
 ///
-/// When `stocked` turns on, the panels fill in from the vanishing point outward,
-/// far shelves first, like an aisle being stocked toward you. Afterwards, tilting
-/// the phone shifts near panels more than far ones, so the mark reads as depth.
-/// Both effects are off under Reduce Motion, where the logo simply appears.
-struct StockingLogo: View {
+/// When `walkedIn` turns on, each half swings in from nearly edge-on, hinged on its
+/// outer edge, and the mark grows slightly, as if you'd stepped into the aisle; a soft
+/// spring gives a small overshoot as the walls settle. Afterwards, tilting the phone
+/// shifts near shelves more than far ones, so the mark reads as depth. Both effects are
+/// off under Reduce Motion, where the logo simply appears.
+struct WalkInLogo: View {
     var size: CGFloat = 140
-    /// Panels are hidden until this is true; flip it inside your own timing.
-    var stocked: Bool
+    /// The halves stay swung open and hidden until this is true; flip it in your own timing.
+    var walkedIn: Bool
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var tilt = DeviceTilt()
 
     /// Largest parallax shift, in points, for the nearest panel.
     private var maxShift: CGFloat { size * 0.045 }
+    private var animation: Animation? {
+        reduceMotion ? nil : .spring(response: 1.1, dampingFraction: 0.62)
+    }
 
     var body: some View {
         ZStack {
-            ForEach(LogoPanel.all) { panel in
+            half(.left)
+            half(.right)
+        }
+        .frame(width: size, height: size)
+        .scaleEffect(walkedIn ? 1 : 0.82)
+        .animation(animation, value: walkedIn)
+        .onAppear { if !reduceMotion { tilt.start() } }
+        .onDisappear { tilt.stop() }
+        .accessibilityHidden(true)
+    }
+
+    private func half(_ side: LogoPanel.Side) -> some View {
+        ZStack {
+            ForEach(LogoPanel.all.filter { $0.side == side }) { panel in
                 LogoPanelShape(points: panel.points)
                     .fill(Theme.ink)
-                    // Grow out of the vanishing point at the centre of the mark.
-                    .scaleEffect(stocked ? 1 : 0.35, anchor: .center)
-                    .opacity(stocked ? 1 : 0)
-                    .animation(
-                        reduceMotion ? nil : .spring(response: 1.0, dampingFraction: 0.78).delay(Double(panel.tier) * 0.22),
-                        value: stocked
-                    )
                     .offset(
                         x: CGFloat(tilt.x) * panel.depth * maxShift,
                         y: CGFloat(tilt.y) * panel.depth * maxShift
@@ -37,37 +47,44 @@ struct StockingLogo: View {
             }
         }
         .frame(width: size, height: size)
-        .onAppear { if !reduceMotion { tilt.start() } }
-        .onDisappear { tilt.stop() }
-        .accessibilityHidden(true)
+        // Hinge on the outer edge: start almost edge-on, then swing into place.
+        .rotation3DEffect(
+            .degrees(walkedIn ? 0 : (side == .left ? 78 : -78)),
+            axis: (x: 0, y: 1, z: 0),
+            anchor: side == .left ? .leading : .trailing,
+            perspective: 0.55
+        )
+        .opacity(walkedIn ? 1 : 0)
+        .animation(animation, value: walkedIn)
     }
 }
 
 /// One shelf of the mark: a quadrilateral in the logo's 512-point artwork space.
 private struct LogoPanel: Identifiable {
+    enum Side { case left, right }
+
     let id: Int
     let points: [CGPoint]
-    /// Stocking order, from the vanishing point outward.
-    let tier: Int
+    let side: Side
     /// Parallax weight: near panels (outer edge) move most, far ones least.
     let depth: CGFloat
 
     /// Left-side panels, traced from aisle-logo.png. The right side mirrors them.
-    private static let left: [(points: [(CGFloat, CGFloat)], tier: Int, depth: CGFloat)] = [
-        ([(145, 240), (220, 264), (220, 286), (145, 290)], 0, 0.3),  // inner, middle
-        ([(145, 156), (220, 212), (220, 255), (145, 225)], 0, 0.3),  // inner, top
-        ([(0, 192), (132, 235), (132, 290), (0, 295)], 1, 1),        // outer, middle
-        ([(0, 57), (132, 145), (132, 220), (0, 169)], 1, 1),         // outer, top
-        ([(0, 320), (220, 295), (220, 331), (0, 454)], 2, 0.7),      // floor
+    private static let left: [(points: [(CGFloat, CGFloat)], depth: CGFloat)] = [
+        ([(145, 240), (220, 264), (220, 286), (145, 290)], 0.3),  // inner, middle
+        ([(145, 156), (220, 212), (220, 255), (145, 225)], 0.3),  // inner, top
+        ([(0, 192), (132, 235), (132, 290), (0, 295)], 1),        // outer, middle
+        ([(0, 57), (132, 145), (132, 220), (0, 169)], 1),         // outer, top
+        ([(0, 320), (220, 295), (220, 331), (0, 454)], 0.7),      // floor
     ]
 
     static let all: [LogoPanel] = {
         var panels: [LogoPanel] = []
         for (index, panel) in left.enumerated() {
             let points = panel.points.map { CGPoint(x: $0.0, y: $0.1) }
-            panels.append(LogoPanel(id: index * 2, points: points, tier: panel.tier, depth: panel.depth))
+            panels.append(LogoPanel(id: index * 2, points: points, side: .left, depth: panel.depth))
             let mirrored = points.reversed().map { CGPoint(x: 512 - $0.x, y: $0.y) }
-            panels.append(LogoPanel(id: index * 2 + 1, points: mirrored, tier: panel.tier, depth: panel.depth))
+            panels.append(LogoPanel(id: index * 2 + 1, points: mirrored, side: .right, depth: panel.depth))
         }
         return panels
     }()

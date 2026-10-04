@@ -245,8 +245,8 @@ private struct IntroStage: View {
                     .frame(width: 340, height: 340)
                     .scaleEffect(bloom ? 1 : 0.3)
                     .opacity(bloom ? 1 : 0)
-                // Shelves stock from the vanishing point outward, then follow the phone's tilt.
-                StockingLogo(size: logoSize, stocked: assembled)
+                // The walls swing in as if you'd stepped into the aisle, then follow the phone's tilt.
+                WalkInLogo(size: logoSize, walkedIn: assembled)
             }
             .frame(height: 180)
             .accessibilityHidden(true)
