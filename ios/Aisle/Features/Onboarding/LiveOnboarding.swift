@@ -1,12 +1,16 @@
 import SwiftUI
 
 /// First launch, as a short interactive story: the logo assembles, Aisle answers a
-/// question on its own, the shopper asks one, then learns the confidence levels,
-/// taps "Found it", picks a store and then makes an account, which Aisle requires.
+/// question on its own, the shopper asks one, then learns the confidence levels and
+/// taps "Found it". Then lists: one sorts itself, the shopper builds one, a paper list
+/// is photographed and read, and the list becomes a walk. Last, they pick a store and
+/// make an account, which Aisle requires.
 /// "Skip" skips the tour, not the account.
 struct LiveOnboarding: View {
     enum Step: Int, CaseIterable {
-        case intro, demo, tryIt, confidence, found, location, done
+        case intro, demo, tryIt, confidence, found
+        case listDemo, listTry, listPhoto, listRoute
+        case location, done
     }
 
     let api: AisleAPI
@@ -17,6 +21,8 @@ struct LiveOnboarding: View {
 
     @State private var step: Step = .intro
     @State private var chosenStore: Store?
+    /// The list made in the list steps. Practice only: it isn't saved to the real list.
+    @State private var practiceList: [ListItem] = []
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -50,7 +56,15 @@ struct LiveOnboarding: View {
         case .confidence:
             ConfidenceStage { go(.found) }
         case .found:
-            FoundStage { go(.location) }
+            FoundStage { go(.listDemo) }
+        case .listDemo:
+            ListDemoStage { go(.listTry) }
+        case .listTry:
+            ListTryStage(api: api, items: $practiceList) { go(.listPhoto) }
+        case .listPhoto:
+            ListPhotoStage { go(.listRoute) }
+        case .listRoute:
+            ListRouteStage(items: practiceList) { go(.location) }
         case .location:
             LocationStage(api: api, location: location, onPicked: { store in
                 chosenStore = store
@@ -79,7 +93,7 @@ struct LiveOnboarding: View {
 
 // MARK: - Shared pieces
 
-/// Six gradient segments and a Skip button.
+/// One gradient segment per step, and a Skip button.
 private struct ProgressHeader: View {
     let current: Int
     let total: Int
@@ -966,5 +980,880 @@ private struct DoneStage: View {
                 withAnimation(.easeOut(duration: 0.9).delay(0.15)) { burst = true }
             }
         }
+    }
+}
+
+// MARK: - Lists: shared logic
+
+/// The practice list's logic, kept apart from the views so it can be tested.
+enum PracticeList {
+    struct Department: Identifiable, Equatable {
+        let name: String
+        var items: [ListItem]
+        var id: String { name }
+    }
+
+    /// Items grouped by department the way the List tab groups them: in the order they
+    /// were added, with "Other" last.
+    static func departments(_ items: [ListItem]) -> [Department] {
+        var groups: [Department] = []
+        for item in items {
+            let name = item.categoryName?.trimmingCharacters(in: .whitespaces) ?? ""
+            let department = name.isEmpty ? "Other" : name
+            if let index = groups.firstIndex(where: { $0.name == department }) {
+                groups[index].items.append(item)
+            } else {
+                groups.append(Department(name: department, items: [item]))
+            }
+        }
+        return groups.filter { $0.name != "Other" } + groups.filter { $0.name == "Other" }
+    }
+
+    /// List items for parsed text, skipping any already on the list or repeated in the text.
+    static func newItems(from parsed: [ParsedListItem], existing: [ListItem]) -> [ListItem] {
+        var seen = Set(existing.map { $0.text.lowercased() })
+        return parsed.compactMap { item in
+            guard seen.insert(item.text.lowercased()).inserted else { return nil }
+            return ListItem(text: item.text, quantity: item.quantity, categoryName: item.category?.name)
+        }
+    }
+
+    /// A typical store's walk, for before a store is picked: fresh food first, then the
+    /// middle aisles, then frozen and dairy so they stay cold. Names match the server's.
+    static let typicalWalk = [
+        "Flowers & Plants", "Fruit", "Vegetables", "Bread & Bakery", "Deli & Prepared Foods",
+        "Meat & Poultry", "Seafood", "Cereal & Breakfast", "Coffee & Tea", "Syrups & Sweeteners",
+        "Peanut Butter & Spreads", "Baking", "Spices & Seasonings", "Oils & Vinegar",
+        "Condiments & Dressings", "Pasta & Sauce", "Rice, Grains & Beans", "Canned Goods & Soup",
+        "International Foods", "Chips & Snacks", "Nuts & Dried Fruit", "Cookies & Candy", "Drinks",
+        "Beer & Wine", "Paper Goods", "Cleaning & Laundry", "Pet Supplies", "Baby", "Oral Care",
+        "Hair Care", "Bath & Body", "Beauty & Cosmetics", "Medicine & First Aid",
+        "Vitamins & Supplements", "Frozen Foods", "Ice Cream & Frozen Desserts",
+        "Milk & Dairy", "Eggs", "Cheese",
+    ]
+
+    /// Departments in walking order. Ones the typical walk doesn't know come after the
+    /// known ones, in their own order; "Other" stays last.
+    static func walkingOrder(_ departments: [Department]) -> [Department] {
+        func rank(_ name: String) -> Int {
+            if name == "Other" { return typicalWalk.count + 1 }
+            return typicalWalk.firstIndex(of: name) ?? typicalWalk.count
+        }
+        return departments.enumerated()
+            .sorted { (rank($0.element.name), $0.offset) < (rank($1.element.name), $1.offset) }
+            .map(\.element)
+    }
+}
+
+// MARK: - Lists: shared pieces
+
+/// The List tab's add-bar outline: white capsule, gradient ring, soft glow.
+private struct ComposerChrome: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .padding(.leading, 18)
+            .padding(.trailing, 7)
+            .padding(.vertical, 7)
+            .frame(minHeight: 58)
+            .background(Theme.surface, in: RoundedRectangle(cornerRadius: 29, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 29, style: .continuous).strokeBorder(Theme.accentRing, lineWidth: 1.5))
+            .shadow(color: Theme.glow.opacity(0.10), radius: 14, y: 8)
+    }
+}
+
+/// The List tab's add bar, drawn for the scripted steps, showing `text` as if being typed.
+private struct ComposerPreview: View {
+    var text = ""
+    var showsCaret = false
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "plus")
+                .font(.system(size: 17, weight: .semibold))
+            Group {
+                if text.isEmpty {
+                    Text("Add items, like milk, eggs, bread")
+                        .foregroundStyle(Theme.secondaryInk)
+                        .lineLimit(1)
+                } else {
+                    Text(text) + Text(showsCaret ? "|" : "").foregroundStyle(Color(hex: 0xDC6F9C))
+                }
+            }
+            .font(.aisleBody)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 9)
+            Image(systemName: "camera")
+                .font(.system(size: 17, weight: .semibold))
+                .frame(width: 34, height: 38)
+            Image(systemName: "arrow.up")
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(Theme.onAccent)
+                .frame(width: 44, height: 44)
+                .background(Theme.accent, in: Circle())
+                .opacity(text.isEmpty ? 0.5 : 1)
+        }
+        .foregroundStyle(Theme.ink)
+        .modifier(ComposerChrome())
+    }
+}
+
+/// A department heading (picture, name, count) over a white card of rows, like the List tab.
+private struct PracticeSection<Rows: View>: View {
+    let name: String
+    let count: Int
+    @ViewBuilder var rows: () -> Rows
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                DepartmentIconView(department: name, size: 18)
+                Text(name.uppercased()).fontWeight(.bold)
+                Text("· \(count)")
+            }
+            .font(Theme.font(13, .medium, relativeTo: .footnote))
+            .tracking(0.3)
+            .foregroundStyle(Theme.secondaryInk)
+            .padding(.leading, 4)
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isHeader)
+            VStack(spacing: 0) { rows() }
+                .background(Theme.surface.opacity(0.92), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                .shadow(color: Theme.ink.opacity(0.06), radius: 14, y: 8)
+        }
+    }
+}
+
+private struct PracticeDivider: View {
+    var body: some View {
+        Divider().overlay(Theme.hairline).padding(.leading, 54)
+    }
+}
+
+/// One list row: a check circle, the item and its quantity. With handlers, the circle
+/// checks the item off and an × removes it; without, it's a picture of a row.
+private struct PracticeRow: View {
+    let item: ListItem
+    var onToggle: (() -> Void)?
+    var onRemove: (() -> Void)?
+
+    var body: some View {
+        HStack(spacing: 12) {
+            if let onToggle {
+                Button(action: onToggle) { check }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(item.isDone ? "Mark \(item.text) as not done" : "Mark \(item.text) as done")
+            } else {
+                check
+            }
+            Text(item.text)
+                .font(Theme.font(17, relativeTo: .body))
+                .strikethrough(item.isDone, color: Color(hex: 0xDC6F9C).opacity(0.7))
+                .foregroundStyle(item.isDone ? Theme.secondaryInk : Theme.ink)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if let quantity = item.quantity, !quantity.isEmpty {
+                Text(quantity)
+                    .font(Theme.font(13, .semibold, relativeTo: .footnote))
+                    .foregroundStyle(Theme.ink)
+                    .padding(.horizontal, 9)
+                    .frame(minWidth: 28, minHeight: 26)
+                    .background(Theme.fill, in: Capsule())
+                    .accessibilityLabel("Quantity \(quantity)")
+            }
+            if let onRemove {
+                Button(action: onRemove) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Theme.secondaryInk.opacity(0.7))
+                        .frame(width: 36, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Remove \(item.text)")
+            }
+        }
+        .padding(.leading, 4)
+        .padding(.trailing, 6)
+        .frame(minHeight: onToggle == nil ? 46 : 56)
+    }
+
+    /// The List tab's check: an empty ring, or the gradient with a tick.
+    private var check: some View {
+        ZStack {
+            Circle()
+                .strokeBorder(Theme.secondaryInk.opacity(0.45), lineWidth: 2)
+                .opacity(item.isDone ? 0 : 1)
+            Circle()
+                .fill(Theme.accent)
+                .scaleEffect(item.isDone ? 1.05 : 0.3)
+                .opacity(item.isDone ? 1 : 0)
+            Image(systemName: "checkmark")
+                .font(.system(size: 11, weight: .heavy))
+                .foregroundStyle(Theme.onAccent)
+                .scaleEffect(item.isDone ? 1 : 0.4)
+                .opacity(item.isDone ? 1 : 0)
+        }
+        .frame(width: 26, height: 26)
+        .frame(width: 44, height: 44)
+        .contentShape(Rectangle())
+    }
+}
+
+/// Departments of rows, each section and row easing in as it appears.
+private struct PracticeDepartments: View {
+    let items: [ListItem]
+    var onToggle: ((UUID) -> Void)?
+    var onRemove: ((UUID) -> Void)?
+
+    var body: some View {
+        ForEach(PracticeList.departments(items)) { department in
+            PracticeSection(name: department.name, count: department.items.count) {
+                ForEach(Array(department.items.enumerated()), id: \.element.id) { index, item in
+                    if index > 0 { PracticeDivider() }
+                    PracticeRow(
+                        item: item,
+                        onToggle: onToggle.map { toggle in { () -> Void in toggle(item.id) } },
+                        onRemove: onRemove.map { remove in { () -> Void in remove(item.id) } }
+                    )
+                    .transition(.opacity.combined(with: .offset(y: 8)))
+                }
+            }
+            .transition(.opacity.combined(with: .offset(y: 14)))
+        }
+    }
+}
+
+/// "Watch again" under a scripted step.
+private struct WatchAgainButton: View {
+    let action: () -> Void
+
+    var body: some View {
+        Button("Watch again", action: action)
+            .font(Theme.font(15, .medium, relativeTo: .subheadline))
+            .foregroundStyle(Theme.secondaryInk)
+            .frame(minHeight: 44)
+    }
+}
+
+// MARK: - 6. Lists: a whole list sorts itself
+
+private struct ListDemoStage: View {
+    let onNext: () -> Void
+
+    private static let typedList = "bananas, milk, bread, apples, yogurt"
+    private static let items = [
+        ListItem(text: "bananas", categoryName: "Fruit"),
+        ListItem(text: "milk", categoryName: "Milk & Dairy"),
+        ListItem(text: "bread", categoryName: "Bread & Bakery"),
+        ListItem(text: "apples", categoryName: "Fruit"),
+        ListItem(text: "yogurt", categoryName: "Milk & Dairy"),
+    ]
+
+    @State private var typed = ""
+    @State private var revealed = 0
+    @State private var finished = false
+    @State private var run = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Stage(lead: "Got a list? ", accent: "Paste the whole thing.", message: "Watch. Aisle splits it into items and sorts them by department.") {
+            VStack(alignment: .leading, spacing: 18) {
+                ComposerPreview(text: typed, showsCaret: !typed.isEmpty)
+                PracticeDepartments(items: Array(Self.items.prefix(revealed)))
+            }
+            .animation(.spring(response: 0.45, dampingFraction: 0.86), value: revealed)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Example: you paste bananas, milk, bread, apples and yogurt. Aisle sorts them into Fruit, Milk and Dairy, and Bread and Bakery.")
+        } footer: {
+            if finished {
+                Button("Now you try", action: onNext)
+                    .buttonStyle(.aisleAccent)
+                    .transition(.opacity.combined(with: .offset(y: 10)))
+                WatchAgainButton { run += 1 }
+            }
+        }
+        .sensoryFeedback(.impact(weight: .light), trigger: revealed)
+        .task(id: run) { await play() }
+    }
+
+    private func play() async {
+        typed = ""; revealed = 0; finished = false
+        if reduceMotion {
+            revealed = Self.items.count; finished = true
+            return
+        }
+        guard await pause(600) else { return }
+        for character in Self.typedList {
+            typed.append(character)
+            guard await pause(45) else { return }
+        }
+        guard await pause(350) else { return }
+        typed = ""
+        guard await pause(250) else { return }
+        // Items land one by one, each joining its department, so "apples" jumps up beside "bananas".
+        for index in 1...Self.items.count {
+            revealed = index
+            guard await pause(220) else { return }
+        }
+        guard await pause(300) else { return }
+        withAnimation(.spring(response: 0.5, dampingFraction: 0.85)) { finished = true }
+    }
+}
+
+// MARK: - 7. Lists: your turn
+
+/// A real add bar on a practice list. Uses the server's parser, like the List tab, and
+/// splits on commas when it can't be reached. Nothing here is saved to the real list.
+private struct ListTryStage: View {
+    let api: AisleAPI
+    @Binding var items: [ListItem]
+    let onNext: () -> Void
+
+    @State private var draft = ""
+    @State private var isAdding = false
+    @State private var checkedAny = false
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        Stage(lead: "Your turn. ", accent: "Start a list.", message: "Type a few things with commas between them, or tap a starter.") {
+            VStack(alignment: .leading, spacing: 18) {
+                composer
+                if items.isEmpty {
+                    starters
+                } else if checkedAny {
+                    AisleNote(text: "Checked off. On your list, it moves to Done.")
+                        .padding(.leading, 4)
+                        .transition(.opacity)
+                } else {
+                    Text("Tap a circle when it’s in your cart.")
+                        .font(.aisleSubheadline)
+                        .foregroundStyle(Theme.secondaryInk)
+                        .padding(.leading, 4)
+                        .transition(.opacity)
+                }
+                PracticeDepartments(items: items, onToggle: { toggle($0) }, onRemove: { remove($0) })
+            }
+            .animation(.spring(response: 0.45, dampingFraction: 0.86), value: items)
+            .animation(.easeOut(duration: 0.2), value: checkedAny)
+        } footer: {
+            Button("Looks good") {
+                focused = false
+                onNext()
+            }
+            .buttonStyle(.aisleAccent)
+            .disabled(items.isEmpty || isAdding)
+        }
+        .sensoryFeedback(.impact(weight: .light), trigger: items.count)
+    }
+
+    private var composer: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "plus")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(Theme.ink)
+                .accessibilityHidden(true)
+            TextField("Add items, like milk, eggs, bread", text: $draft, axis: .vertical)
+                .lineLimit(1...4)
+                .font(.aisleBody)
+                .foregroundStyle(Theme.ink)
+                .focused($focused)
+                .submitLabel(.done)
+                .textInputAutocapitalization(.never)
+                .onSubmit(submit)
+            if isAdding {
+                ProgressView().frame(width: 44, height: 44)
+            } else {
+                Button(action: submit) {
+                    Image(systemName: "arrow.up")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(Theme.onAccent)
+                        .frame(width: 44, height: 44)
+                        .background(Theme.accent, in: Circle())
+                }
+                .disabled(draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .accessibilityLabel("Add")
+            }
+        }
+        .modifier(ComposerChrome())
+    }
+
+    private var starters: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Or start from")
+                .font(Theme.font(12, .semibold, relativeTo: .caption))
+                .foregroundStyle(Theme.secondaryInk)
+                .padding(.leading, 4)
+            FlowLayout(spacing: 8) {
+                ForEach(Array(ListStarter.all.enumerated()), id: \.element.id) { index, starter in
+                    Button(starter.title) { add(starter.items, fromDraft: false) }
+                        .font(Theme.font(14, .medium, relativeTo: .subheadline))
+                        .foregroundStyle(Theme.ink)
+                        .padding(.horizontal, 14)
+                        .frame(minHeight: 40)
+                        .background(Theme.surface, in: Capsule())
+                        .disabled(isAdding)
+                        .rise(0.2 + Double(index) * 0.07)
+                }
+            }
+        }
+        .transition(.opacity)
+    }
+
+    private func submit() {
+        add(draft, fromDraft: true)
+    }
+
+    private func add(_ raw: String, fromDraft: Bool) {
+        let text = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty, !isAdding else { return }
+        isAdding = true
+        Task { @MainActor in
+            let parsed: [ParsedListItem]
+            do {
+                parsed = try await api.parseList(text: text)
+            } catch {
+                parsed = LocalListParser.parse(text)
+            }
+            items.append(contentsOf: PracticeList.newItems(from: parsed, existing: items))
+            if fromDraft { draft = "" }
+            isAdding = false
+        }
+    }
+
+    private func toggle(_ id: UUID) {
+        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+        items[index].isDone.toggle()
+        checkedAny = true
+    }
+
+    private func remove(_ id: UUID) {
+        items.removeAll { $0.id == id }
+    }
+}
+
+// MARK: - 8. Lists: snap a handwritten list
+
+/// Scripted: the camera frames a paper list, the shutter fires, the lines light up as
+/// they're read, then the items land on the list sorted, with the List tab's
+/// "Added 4 items from your photo" line.
+private struct ListPhotoStage: View {
+    let onNext: () -> Void
+
+    enum Phase { case camera, reading, done }
+
+    /// What's written on the note. Its title, "taco night", is left off, as the real scan does.
+    private static let items = [
+        ListItem(text: "avocados", categoryName: "Fruit"),
+        ListItem(text: "limes", categoryName: "Fruit"),
+        ListItem(text: "onions", categoryName: "Vegetables"),
+        ListItem(text: "tortillas", categoryName: "Bread & Bakery"),
+    ]
+
+    @State private var phase: Phase = .camera
+    @State private var pressed = false
+    @State private var flash = 0.0
+    @State private var shots = 0
+    @State private var highlighted = 0
+    @State private var revealed = 0
+    @State private var finished = false
+    @State private var run = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Stage(lead: "On paper? ", accent: "Snap it.", message: "Take a photo of a handwritten list. Aisle reads every line and adds it, sorted.") {
+            VStack(alignment: .leading, spacing: 18) {
+                if phase == .done {
+                    VStack(alignment: .leading, spacing: 10) {
+                        ComposerPreview()
+                        photoNotice
+                    }
+                    .transition(.opacity.combined(with: .offset(y: 12)))
+                    PracticeDepartments(items: Array(Self.items.prefix(revealed)))
+                } else {
+                    viewfinder
+                        .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                }
+            }
+            .animation(.spring(response: 0.45, dampingFraction: 0.86), value: revealed)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Example: you photograph a handwritten list. Aisle reads avocados, limes, onions and tortillas, and sorts them into Fruit, Vegetables, and Bread and Bakery.")
+        } footer: {
+            if finished {
+                Button("Continue", action: onNext)
+                    .buttonStyle(.aisleAccent)
+                    .transition(.opacity.combined(with: .offset(y: 10)))
+                WatchAgainButton { run += 1 }
+            }
+        }
+        .sensoryFeedback(.impact(weight: .medium), trigger: shots)
+        .sensoryFeedback(.impact(weight: .light), trigger: revealed)
+        .task(id: run) { await play() }
+    }
+
+    private var viewfinder: some View {
+        ZStack(alignment: .top) {
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(RadialGradient(
+                    colors: [Color(hex: 0x4A403A), Color(hex: 0x2A2420), Color(hex: 0x1C1815)],
+                    center: UnitPoint(x: 0.5, y: 0.3), startRadius: 0, endRadius: 320
+                ))
+            HandwrittenNote(items: Self.items.map(\.text), highlighted: highlighted)
+                .rotationEffect(.degrees(-4))
+                .padding(.top, 30)
+            ViewfinderCorners()
+                .stroke(Color.white.opacity(0.9), style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                .padding(EdgeInsets(top: 14, leading: 34, bottom: 86, trailing: 34))
+            if phase == .reading {
+                ScanLine(travel: 212)
+                    .padding(.horizontal, 44)
+                    .padding(.top, 34)
+                    .transition(.opacity)
+            }
+        }
+        .overlay(alignment: .bottom) {
+            Group {
+                if phase == .camera {
+                    shutter
+                } else {
+                    HStack(spacing: 8) {
+                        ProgressView().tint(.white).controlSize(.small)
+                        Text("Reading your list…")
+                    }
+                    .font(Theme.font(14, .medium, relativeTo: .subheadline))
+                    .foregroundStyle(.white)
+                    .frame(height: 66)
+                }
+            }
+            .padding(.bottom, 14)
+        }
+        .overlay { Color.white.opacity(flash).allowsHitTesting(false) }
+        .frame(height: 360)
+        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+    }
+
+    /// The camera's shutter button, as drawn by the List tab's camera.
+    private var shutter: some View {
+        ZStack {
+            Circle().fill(Color.black.opacity(0.25))
+            Circle().strokeBorder(Color.white.opacity(0.55), lineWidth: 3)
+            Circle().fill(Color.white).padding(7).scaleEffect(pressed ? 0.86 : 1)
+        }
+        .frame(width: 66, height: 66)
+    }
+
+    private var photoNotice: some View {
+        HStack(spacing: 10) {
+            Label("Added \(Self.items.count) items from your photo", systemImage: "text.viewfinder")
+                .font(.aisleFootnote)
+                .foregroundStyle(Theme.secondaryInk)
+            Spacer(minLength: 0)
+            Text("Undo")
+                .font(Theme.font(13, .semibold, relativeTo: .footnote))
+                .foregroundStyle(Theme.ink)
+            Image(systemName: "xmark")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(Theme.secondaryInk)
+                .frame(width: 28, height: 28)
+        }
+        .padding(.leading, 6)
+    }
+
+    private func play() async {
+        phase = .camera; pressed = false; flash = 0; highlighted = 0; revealed = 0; finished = false
+        if reduceMotion {
+            phase = .done; highlighted = Self.items.count; revealed = Self.items.count; finished = true
+            return
+        }
+        guard await pause(1000) else { return }
+        withAnimation(.easeOut(duration: 0.12)) { pressed = true }
+        guard await pause(150) else { return }
+        shots += 1
+        withAnimation(.easeOut(duration: 0.1)) { pressed = false; flash = 0.9 }
+        guard await pause(200) else { return }
+        withAnimation(.easeIn(duration: 0.3)) { flash = 0; phase = .reading }
+        guard await pause(400) else { return }
+        for index in 1...Self.items.count {
+            highlighted = index
+            guard await pause(420) else { return }
+        }
+        guard await pause(250) else { return }
+        withAnimation(.spring(response: 0.55, dampingFraction: 0.86)) { phase = .done }
+        guard await pause(300) else { return }
+        for index in 1...Self.items.count {
+            revealed = index
+            guard await pause(220) else { return }
+        }
+        guard await pause(300) else { return }
+        withAnimation(.spring(response: 0.5, dampingFraction: 0.85)) { finished = true }
+    }
+}
+
+/// A note on ruled paper, in handwriting, its lines lighting up as Aisle reads them.
+private struct HandwrittenNote: View {
+    let items: [String]
+    let highlighted: Int
+
+    private let lineHeight: CGFloat = 34
+    private let top: CGFloat = 12
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("taco night")
+                .font(.custom("Noteworthy-Bold", fixedSize: 24))
+                .underline()
+                .frame(height: lineHeight, alignment: .bottomLeading)
+            ForEach(Array(items.enumerated()), id: \.offset) { index, item in
+                Text(item)
+                    .font(.custom("Noteworthy-Light", fixedSize: 23))
+                    .padding(.horizontal, 5)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                            .fill(Theme.accent)
+                            .opacity(index < highlighted ? 0.85 : 0)
+                    )
+                    .padding(.leading, -5)
+                    .frame(height: lineHeight, alignment: .bottomLeading)
+            }
+        }
+        .foregroundStyle(Color(hex: 0x2B3A67))
+        .padding(.leading, 36)
+        .padding(.top, top)
+        .frame(width: 220, height: 226, alignment: .topLeading)
+        .background {
+            Canvas { context, size in
+                var rules = Path()
+                var y = top + lineHeight + 0.5
+                while y < size.height {
+                    rules.move(to: CGPoint(x: 0, y: y))
+                    rules.addLine(to: CGPoint(x: size.width, y: y))
+                    y += lineHeight
+                }
+                context.stroke(rules, with: .color(Color(hex: 0xDCE6F2)), lineWidth: 1)
+                var margin = Path()
+                margin.move(to: CGPoint(x: 26, y: 0))
+                margin.addLine(to: CGPoint(x: 26, y: size.height))
+                context.stroke(margin, with: .color(Color(hex: 0xDC6F9C).opacity(0.4)), lineWidth: 1.5)
+            }
+            .background(Color(hex: 0xFFFDF6))
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 5, style: .continuous))
+        .shadow(color: .black.opacity(0.45), radius: 20, y: 18)
+        .animation(.easeOut(duration: 0.25), value: highlighted)
+    }
+}
+
+/// Four rounded corner marks, like a camera framing a document.
+private struct ViewfinderCorners: Shape {
+    var length: CGFloat = 24
+    var radius: CGFloat = 10
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let corners: [(CGPoint, CGFloat, CGFloat)] = [
+            (CGPoint(x: rect.minX, y: rect.minY), 1, 1),
+            (CGPoint(x: rect.maxX, y: rect.minY), -1, 1),
+            (CGPoint(x: rect.maxX, y: rect.maxY), -1, -1),
+            (CGPoint(x: rect.minX, y: rect.maxY), 1, -1),
+        ]
+        // Each mark runs down the side, rounds the corner and runs along the edge.
+        for (corner, dx, dy) in corners {
+            path.move(to: CGPoint(x: corner.x, y: corner.y + dy * length))
+            path.addLine(to: CGPoint(x: corner.x, y: corner.y + dy * radius))
+            path.addQuadCurve(to: CGPoint(x: corner.x + dx * radius, y: corner.y), control: corner)
+            path.addLine(to: CGPoint(x: corner.x + dx * length, y: corner.y))
+        }
+        return path
+    }
+}
+
+/// The gradient bar that sweeps the note while it's read. Still under Reduce Motion.
+private struct ScanLine: View {
+    let travel: CGFloat
+
+    @State private var down = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        Capsule()
+            .fill(Theme.accentRing)
+            .frame(height: 3)
+            .shadow(color: Color(hex: 0xF6C2D7).opacity(0.8), radius: 8)
+            .offset(y: down ? travel : 0)
+            .onAppear {
+                guard !reduceMotion else { return }
+                withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) { down = true }
+            }
+    }
+}
+
+// MARK: - 9. Lists: the walk
+
+/// The practice list as the List tab's progress card, then as numbered stops in a
+/// typical store's order. The real route waits until a store is picked (next step).
+private struct ListRouteStage: View {
+    let items: [ListItem]
+    let onNext: () -> Void
+
+    @State private var shown = 0
+    @State private var run = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var remaining: [ListItem] { items.filter { !$0.isDone } }
+
+    /// Everything checked off already? Walk the whole list anyway.
+    private var stops: [PracticeList.Department] {
+        PracticeList.walkingOrder(PracticeList.departments(remaining.isEmpty ? items : remaining))
+    }
+
+    var body: some View {
+        Stage(lead: "One list, ", accent: "the shortest walk.", message: "Start shopping turns your list into stops, in the order you’ll pass them.") {
+            VStack(alignment: .leading, spacing: 22) {
+                summaryCard
+                    .rise(0.15)
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack(spacing: 8) {
+                        Text("YOUR ROUTE").fontWeight(.bold)
+                        Text("· \(stops.count) \(stops.count == 1 ? "stop" : "stops")")
+                    }
+                    .font(Theme.font(13, .medium, relativeTo: .footnote))
+                    .tracking(0.3)
+                    .foregroundStyle(Theme.secondaryInk)
+                    .padding(.leading, 4)
+                    .accessibilityElement(children: .combine)
+                    .accessibilityAddTraits(.isHeader)
+                    VStack(spacing: 0) {
+                        ForEach(Array(stops.prefix(shown).enumerated()), id: \.element.id) { index, stop in
+                            StopRow(number: index + 1, stop: stop, isLast: index == stops.count - 1)
+                                .transition(.opacity.combined(with: .offset(y: 12)))
+                        }
+                    }
+                    .padding(.vertical, 8)
+                    .frame(maxWidth: .infinity, minHeight: 60, alignment: .top)
+                    .background(Theme.surface.opacity(0.92), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                    .shadow(color: Theme.ink.opacity(0.06), radius: 14, y: 8)
+                }
+            }
+            .animation(.spring(response: 0.5, dampingFraction: 0.85), value: shown)
+        } footer: {
+            Button("Pick my store", action: onNext)
+                .buttonStyle(.aisleAccent)
+        }
+        .sensoryFeedback(.impact(weight: .light), trigger: shown)
+        .task(id: run) { await play() }
+    }
+
+    /// The List tab's progress card. Its button plays the stops again.
+    private var summaryCard: some View {
+        let total = items.count
+        let left = remaining.count
+        let fraction = total == 0 ? 0 : Double(total - left) / Double(total)
+        return VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 16) {
+                ZStack {
+                    Circle().stroke(Theme.onAccent.opacity(0.12), lineWidth: 7)
+                    Circle()
+                        .trim(from: 0, to: fraction)
+                        .stroke(Theme.onAccent, style: StrokeStyle(lineWidth: 7, lineCap: .round))
+                        .rotationEffect(.degrees(-90))
+                    Text("\(Int((fraction * 100).rounded()))%")
+                        .font(Theme.font(15, .bold, relativeTo: .subheadline))
+                }
+                .frame(width: 60, height: 60)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(left == 0 ? "All done!" : "\(left) \(left == 1 ? "item" : "items") left")
+                        .font(Theme.font(22, .bold, relativeTo: .title2))
+                        .tracking(-0.4)
+                    Text("\(stops.count) \(stops.count == 1 ? "department" : "departments")")
+                        .font(Theme.font(13, relativeTo: .footnote))
+                        .opacity(0.75)
+                }
+            }
+            .accessibilityElement(children: .combine)
+
+            Button { run += 1 } label: {
+                Label("Start shopping · best route", systemImage: "point.topleft.down.to.point.bottomright.curvepath")
+                    .font(.aisleHeadline)
+                    .foregroundStyle(Color.white)
+                    .frame(maxWidth: .infinity, minHeight: 52)
+                    .background(Color(hex: 0x1F1B24), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+            }
+            .buttonStyle(PressableCardStyle())
+            .accessibilityHint("Shows the stops again")
+        }
+        .foregroundStyle(Theme.onAccent)
+        .padding(18)
+        .background(Theme.accent, in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .shadow(color: Theme.glow.opacity(0.22), radius: 18, y: 12)
+    }
+
+    private func play() async {
+        shown = 0
+        let count = stops.count
+        if reduceMotion || count == 0 {
+            shown = count
+            return
+        }
+        guard await pause(500) else { return }
+        for index in 1...count {
+            shown = index
+            guard await pause(260) else { return }
+        }
+    }
+}
+
+/// One stop: its number (the first in the gradient), the department and what to get there,
+/// joined to the next stop by a dotted line.
+private struct StopRow: View {
+    let number: Int
+    let stop: PracticeList.Department
+    let isLast: Bool
+
+    private var itemList: String { stop.items.map(\.text).joined(separator: ", ") }
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 14) {
+            Text("\(number)")
+                .font(Theme.font(14, .bold, relativeTo: .subheadline))
+                .foregroundStyle(number == 1 ? Theme.onAccent : Theme.ink)
+                .frame(width: 30, height: 30)
+                .background(number == 1 ? AnyShapeStyle(Theme.accent) : AnyShapeStyle(Theme.fill), in: Circle())
+                .padding(.top, 10)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 8) {
+                    DepartmentIconView(department: stop.name, size: 20)
+                    Text(stop.name)
+                        .font(Theme.font(16, .semibold, relativeTo: .body))
+                        .foregroundStyle(Theme.ink)
+                }
+                Text(itemList)
+                    .font(Theme.font(14, relativeTo: .subheadline))
+                    .foregroundStyle(Theme.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.top, 14)
+            .padding(.bottom, 18)
+        }
+        .padding(.horizontal, 16)
+        .background(alignment: .topLeading) {
+            if !isLast {
+                VerticalLine()
+                    .stroke(Theme.secondaryInk.opacity(0.3), style: StrokeStyle(lineWidth: 2, lineCap: .round, dash: [3, 5]))
+                    .frame(width: 2)
+                    .padding(.leading, 30)
+                    .padding(.top, 44)
+                    .padding(.bottom, -8)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Stop \(number), \(stop.name): \(itemList)")
+    }
+}
+
+private struct VerticalLine: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        path.move(to: CGPoint(x: rect.midX, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
+        return path
     }
 }

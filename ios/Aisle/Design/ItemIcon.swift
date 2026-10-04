@@ -759,3 +759,100 @@ struct ItemIconView: View {
         }
     }
 }
+
+// MARK: - Departments
+
+/// A picture for a list department ("Fruit", "Milk & Dairy"), from the same ItemIcons set.
+/// Unlike items, every department gets one: names it doesn't know get a basket.
+enum DepartmentIcon {
+    static func assetName(for department: String) -> String {
+        let key = department.trimmingCharacters(in: .whitespaces).lowercased()
+        if let slug = byName[key] { return "ItemIcons/\(slug)" }
+        if let match = keywords.first(where: { key.contains($0.word) }) { return "ItemIcons/\(match.slug)" }
+        return "ItemIcons/basket"
+    }
+
+    /// The server's department names (backend/app/ai/catalog.py), lowercased.
+    private static let byName: [String: String] = [
+        "fruit": "red-apple",
+        "vegetables": "broccoli",
+        "flowers & plants": "bouquet",
+        "bread & bakery": "bread",
+        "milk & dairy": "glass-of-milk",
+        "eggs": "egg",
+        "cheese": "cheese-wedge",
+        "meat & poultry": "cut-of-meat",
+        "seafood": "fish",
+        "deli & prepared foods": "sandwich",
+        "cereal & breakfast": "bowl-with-spoon",
+        "syrups & sweeteners": "honey-pot",
+        "peanut butter & spreads": "peanuts",
+        "baking": "cupcake",
+        "spices & seasonings": "salt",
+        "oils & vinegar": "olive",
+        "condiments & dressings": "jar",
+        "pasta & sauce": "spaghetti",
+        "rice, grains & beans": "cooked-rice",
+        "canned goods & soup": "canned-food",
+        "international foods": "steaming-bowl",
+        "chips & snacks": "popcorn",
+        "nuts & dried fruit": "chestnut",
+        "cookies & candy": "cookie",
+        "coffee & tea": "hot-beverage",
+        "drinks": "cup-with-straw",
+        "beer & wine": "wine-glass",
+        "frozen foods": "ice",
+        "ice cream & frozen desserts": "ice-cream",
+        "oral care": "toothbrush",
+        "hair care": "lotion-bottle",
+        "bath & body": "soap",
+        "beauty & cosmetics": "lipstick",
+        "medicine & first aid": "adhesive-bandage",
+        "vitamins & supplements": "pill",
+        "baby": "baby-bottle",
+        "paper goods": "roll-of-paper",
+        "cleaning & laundry": "sponge",
+        "pet supplies": "paw-prints",
+        "batteries & light bulbs": "battery",
+        "kitchen & home": "fork-and-knife",
+        "electronics": "headphone",
+        "office & school": "pencil",
+        "clothing": "socks",
+        "toys & games": "teddy-bear",
+        "tools": "screwdriver",
+        "hardware & fasteners": "nut-and-bolt",
+        "paint": "bucket",
+        "plumbing": "plunger",
+        "electrical": "electric-plug",
+        "lumber & building materials": "hammer",
+        "garden & outdoor": "potted-plant",
+    ]
+
+    /// For other names, like ones typed into an item's details. First match wins.
+    private static let keywords: [(word: String, slug: String)] = [
+        ("produce", "leafy-green"), ("fruit", "red-apple"), ("vegetable", "broccoli"), ("veggie", "broccoli"),
+        ("bakery", "bread"), ("bread", "bread"), ("dairy", "glass-of-milk"), ("milk", "glass-of-milk"),
+        ("egg", "egg"), ("cheese", "cheese-wedge"), ("poultry", "poultry-leg"), ("meat", "cut-of-meat"),
+        ("seafood", "fish"), ("fish", "fish"), ("deli", "sandwich"), ("ice cream", "ice-cream"),
+        ("frozen", "ice"), ("snack", "popcorn"), ("candy", "lollipop"), ("coffee", "hot-beverage"),
+        ("drink", "cup-with-straw"), ("beverage", "cup-with-straw"), ("pantry", "canned-food"),
+        ("canned", "canned-food"), ("household", "roll-of-paper"), ("paper", "roll-of-paper"),
+        ("clean", "sponge"), ("pet", "paw-prints"), ("baby", "baby-bottle"), ("party", "balloon"),
+        ("health", "adhesive-bandage"), ("beauty", "lipstick"), ("garden", "potted-plant"),
+    ]
+}
+
+/// A department's picture, sized for headings.
+struct DepartmentIconView: View {
+    let department: String
+    var size: CGFloat = 18
+
+    var body: some View {
+        Image(DepartmentIcon.assetName(for: department))
+            .resizable()
+            .interpolation(.high)
+            .scaledToFit()
+            .frame(width: size, height: size)
+            .accessibilityHidden(true)
+    }
+}

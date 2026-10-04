@@ -1,3 +1,4 @@
+import UIKit
 import XCTest
 @testable import Aisle
 
@@ -352,5 +353,55 @@ final class MultipleListsTests: XCTestCase {
         try await store.stopSharingCurrent()
         XCTAssertEqual(service.deleted, ["srv-9"])
         XCTAssertEqual(store.lists.count, 1)
+    }
+}
+
+/// The intro's practice list: grouping, adding and walking order, and department pictures.
+final class PracticeListTests: XCTestCase {
+    func testDepartmentsKeepAddedOrderWithOtherLast() {
+        let departments = PracticeList.departments([
+            ListItem(text: "tape"),
+            ListItem(text: "bananas", categoryName: "Fruit"),
+            ListItem(text: "milk", categoryName: "Milk & Dairy"),
+            ListItem(text: "apples", categoryName: " Fruit "),
+        ])
+        XCTAssertEqual(departments.map(\.name), ["Fruit", "Milk & Dairy", "Other"])
+        XCTAssertEqual(departments[0].items.map(\.text), ["bananas", "apples"])
+    }
+
+    func testNewItemsSkipWhatsAlreadyThere() {
+        let parsed = [
+            ParsedListItem(text: "milk", quantity: nil, category: nil),
+            ParsedListItem(text: "eggs", quantity: "12", category: ItemCategory(slug: "eggs", name: "Eggs")),
+            ParsedListItem(text: "EGGS", quantity: nil, category: nil),
+        ]
+        let added = PracticeList.newItems(from: parsed, existing: [ListItem(text: "Milk")])
+        XCTAssertEqual(added.map(\.text), ["eggs"])
+        XCTAssertEqual(added.first?.categoryName, "Eggs")
+        XCTAssertEqual(added.first?.quantity, "12")
+    }
+
+    func testWalkingOrderIsFreshFirstColdLast() {
+        let departments = PracticeList.departments([
+            ListItem(text: "milk", categoryName: "Milk & Dairy"),
+            ListItem(text: "tape"),
+            ListItem(text: "widgets", categoryName: "Gadgets"),
+            ListItem(text: "rice", categoryName: "Rice, Grains & Beans"),
+            ListItem(text: "spinach", categoryName: "Vegetables"),
+        ])
+        XCTAssertEqual(
+            PracticeList.walkingOrder(departments).map(\.name),
+            ["Vegetables", "Rice, Grains & Beans", "Milk & Dairy", "Gadgets", "Other"]
+        )
+    }
+
+    func testEveryDepartmentHasAPicture() {
+        for name in PracticeList.typicalWalk + ["Other", "Produce", "Frozen pizza aisle", "Something new"] {
+            XCTAssertNotNil(UIImage(named: DepartmentIcon.assetName(for: name)), name)
+        }
+    }
+
+    func testStartersAreDistinct() {
+        XCTAssertEqual(Set(ListStarter.all.map(\.id)).count, ListStarter.all.count)
     }
 }

@@ -57,3 +57,16 @@ enum LocalListParser {
             .map { ParsedListItem(text: $0.lowercased(), quantity: nil, category: nil) }
     }
 }
+
+/// Ready-made lists to start from, on the empty list and in the intro.
+struct ListStarter: Identifiable, Equatable {
+    let title: String
+    let items: String
+    var id: String { title }
+
+    static let all = [
+        ListStarter(title: "Weeknight dinner", items: "chicken, rice, onions, garlic, spinach, lemons"),
+        ListStarter(title: "Breakfast basics", items: "eggs, bread, butter, bananas, oats, coffee"),
+        ListStarter(title: "Party supplies", items: "balloons, candles, plates, napkins, cups, ice cream"),
+    ]
+}

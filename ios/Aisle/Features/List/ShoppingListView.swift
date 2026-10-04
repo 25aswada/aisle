@@ -805,12 +805,6 @@ extension ListItemRow {
 private struct EmptyListCard: View {
     let onTemplate: (String) -> Void
 
-    private static let templates: [(String, String)] = [
-        ("Weeknight dinner", "chicken, rice, onions, garlic, spinach, lemons"),
-        ("Breakfast basics", "eggs, bread, butter, bananas, oats, coffee"),
-        ("Party supplies", "balloons, candles, plates, napkins, cups, ice cream"),
-    ]
-
     var body: some View {
         VStack(spacing: 0) {
             illustration
@@ -829,8 +823,8 @@ private struct EmptyListCard: View {
                 .foregroundStyle(Theme.secondaryInk)
                 .padding(.top, 18)
             FlowLayout(spacing: 8) {
-                ForEach(Self.templates, id: \.0) { title, items in
-                    Button(title) { onTemplate(items) }
+                ForEach(ListStarter.all) { starter in
+                    Button(starter.title) { onTemplate(starter.items) }
                         .font(Theme.font(13, .semibold, relativeTo: .footnote))
                         .foregroundStyle(Theme.ink)
                         .padding(.horizontal, 14)
