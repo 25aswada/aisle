@@ -8,11 +8,31 @@ struct SearchResultCard: View {
     /// The store's floor plan, when loaded; the map shows only if the result's zone is on it.
     var layout: StoreLayout? = nil
 
+    @State private var showingWay = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             ConfidenceHero(result: result)
             if let layout, let zoneID = mappedZone(in: layout) {
-                StoreMapCard(layout: layout, retailer: retailer, highlighted: [zoneID], height: 200)
+                Button { showingWay = true } label: {
+                    StoreMapCard(layout: layout, retailer: retailer, highlighted: [zoneID], height: 200)
+                        .overlay(alignment: .topTrailing) {
+                            Label("Show me the way", systemImage: "figure.walk")
+                                .font(Theme.font(13, .semibold, relativeTo: .footnote))
+                                .foregroundStyle(Theme.onAccent)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(Theme.accent, in: Capsule())
+                                .shadow(color: Theme.glow.opacity(0.25), radius: 8, y: 4)
+                                .padding(20)
+                        }
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint("Opens the map, a 3D view and step-by-step directions")
+                .accessibilityIdentifier("showMeTheWay")
+                .fullScreenCover(isPresented: $showingWay) {
+                    StoreWayView(layout: layout, zoneID: zoneID, result: result, retailer: retailer)
+                }
             }
             details
         }
