@@ -34,6 +34,11 @@ Aisle helps people find items inside physical stores. These documents describe t
   server-side. With the default `AISLE_AI_STRATEGY=catalog_first` the model only handles
   queries the catalog can't classify. Without a key, or on any provider error, the
   deterministic fallback answers.
+- With a key, the model also writes each result's "where to find it" reply
+  (`ai/explain.py`), answering in its own words from what it knows about the chain, like a
+  chatbot. Only real data for the store (product data, aisle numbers, shopper reports) goes
+  in with the question; layout guesses don't. The reply is shown as written; the app uses
+  its own wording only when there is none.
 - Eval cases live in `backend/app/ai/eval_cases.json`. Run
   `python -m backend.app.ai.evaluate` (model if a key is set) or `--fallback`.
 

@@ -1,3 +1,5 @@
+import base64
+import binascii
 from datetime import datetime
 from typing import Literal
 
@@ -53,6 +55,78 @@ class SearchRequest(BaseModel):
         if not value:
             raise ValueError("query must not be blank")
         return value
+
+
+# A photo is base64 JPEG or PNG; the app downsizes to about 1024 px, well under this.
+MAX_PHOTO_BASE64 = 4_000_000
+
+
+def check_photo(value: str | None) -> str | None:
+    """Base64 for a JPEG or PNG, or a ValueError."""
+    if value is None:
+        return None
+    try:
+        data = base64.b64decode(value, validate=True)
+    except (binascii.Error, ValueError):
+        raise ValueError("image must be base64") from None
+    if not (data.startswith(b"\xff\xd8") or data.startswith(b"\x89PNG")):
+        raise ValueError("image must be a JPEG or PNG")
+    return value
+
+
+class ChatMessageIn(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(default="", max_length=4000)
+    # A photo the shopper sent with this message.
+    image: str | None = Field(default=None, max_length=MAX_PHOTO_BASE64)
+
+    @field_validator("image")
+    @classmethod
+    def image_is_a_photo(cls, value: str | None) -> str | None:
+        return check_photo(value)
+
+
+class ChatRequest(BaseModel):
+    """A follow-up: the whole conversation so far, ending with the shopper's new message."""
+    store_id: int
+    messages: list[ChatMessageIn] = Field(min_length=1, max_length=40)
+
+    @field_validator("messages")
+    @classmethod
+    def ends_with_shopper(cls, value: list[ChatMessageIn]) -> list[ChatMessageIn]:
+        last = value[-1]
+        if last.role != "user" or not (last.content.strip() or last.image):
+            raise ValueError("the last message must be the shopper's")
+        if any(m.image and m.role != "user" for m in value):
+            raise ValueError("only the shopper's messages can have photos")
+        if any(not (m.content.strip() or m.image) for m in value):
+            raise ValueError("messages need text or a photo")
+        return value
+
+
+class IdentifyRequest(BaseModel):
+    """A photo of something the shopper wants to find, and anything they typed with it."""
+    store_id: int | None = None
+    image: str = Field(max_length=MAX_PHOTO_BASE64)
+    note: str | None = Field(default=None, max_length=200)
+
+    @field_validator("image")
+    @classmethod
+    def image_is_a_photo(cls, value: str) -> str:
+        return check_photo(value)
+
+
+class IdentifyResponse(BaseModel):
+    # A short search phrase for the item, or null when there's no product to name.
+    item: str | None
+
+
+class ChatResponse(BaseModel):
+    # Null when no AI provider is configured or it couldn't answer.
+    reply: str | None
+    # When the follow-up asks where to find a new item: that item's search, as from
+    # POST /search (its `explanation` is null; `reply` is the answer to show).
+    search: "SearchResponse | None" = None
 
 
 class CategoryOut(BaseModel):
@@ -226,7 +300,7 @@ class RouteResponse(BaseModel):
 ANALYTICS_EVENT_NAMES = (
     "app_opened", "store_selected", "search_submitted", "search_failed", "recent_search_tapped",
     "feedback_sent", "list_items_added", "shopping_started", "shopping_item_found",
-    "shopping_item_skipped", "shopping_finished",
+    "shopping_item_skipped", "shopping_finished", "follow_up_sent",
 )
 AnalyticsValue = str | int | float | bool | None
 
@@ -253,3 +327,6 @@ class AnalyticsBatch(BaseModel):
 
 class AnalyticsAccepted(BaseModel):
     accepted: int
+
+
+ChatResponse.model_rebuild()

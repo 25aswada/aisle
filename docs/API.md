@@ -99,7 +99,60 @@ Response (Trader Joe's, no database row for this item):
 Source priority is described in `DATA_MODEL.md`. A database row for the item at this
 store always beats the model.
 
-The response is structured data only. The app composes all display text.
+The response is structured data, plus `explanation`: with an AI key, the model's
+written "where to find it" reply, shown as written (null without a key or on failure).
+
+### POST /chat
+
+A follow-up in the conversation a search started. Send the whole conversation so far,
+ending with the shopper's new message:
+
+```json
+{
+  "store_id": 2,
+  "messages": [
+    {"role": "user", "content": "cookies"},
+    {"role": "assistant", "content": "If you're inside Costco right now, ..."},
+    {"role": "user", "content": "I'm at the bakery and don't see them"}
+  ]
+}
+```
+
+1–40 messages, each up to 4000 characters; the last must be `user`. A `user` message may
+also carry `"image"`, a base64 JPEG or PNG (about 1024 px; at most 4 MB of base64), and
+then its text may be empty. The app sends only the newest photo. Unknown `store_id` →
+404. Invalid body or image → 422.
+
+```json
+{"reply": "Check the tables right in front of the bakery ovens, ...", "search": null}
+```
+
+`reply` is null when no AI key is set or the provider couldn't answer.
+
+While writing the reply, the server asks the model whether the newest message wants a
+product found that the conversation hasn't located yet ("what about milk", a photo of
+something to find). If so, `search` is that item's `POST /search` response for this store
+(recorded as a search, so its `search_id` takes feedback; its `explanation` is null since
+`reply` already answers). Small talk, prices, "I don't see them" and the like get
+`"search": null`.
+
+### POST /identify
+
+What the shopper photographed, as a search phrase the app then sends to `POST /search`.
+
+```json
+{"store_id": 2, "image": "/9j/4AAQ...", "note": "the blue one"}
+```
+
+`store_id` and `note` (what the shopper typed with the photo, up to 200 characters) are
+optional. Unknown `store_id` → 404. Invalid image → 422.
+
+```json
+{"item": "oat milk"}
+```
+
+`item` is 1–5 words, or null when there's no product in the photo, no AI key is set, or
+the provider couldn't answer.
 
 ## Feedback (Milestone 4)
 
@@ -217,7 +270,7 @@ Basic, anonymous product analytics. Status 202.
 - 1–50 events per batch. `occurred_at` is optional and clamped to the server clock.
 - `name` must be one of: `app_opened`, `store_selected`, `search_submitted`, `search_failed`,
   `recent_search_tapped`, `feedback_sent`, `list_items_added`, `shopping_started`,
-  `shopping_item_found`, `shopping_item_skipped`, `shopping_finished`.
+  `shopping_item_found`, `shopping_item_skipped`, `shopping_finished`, `follow_up_sent`.
 - `properties`: at most 12 scalar values (string ≤ 80 chars, number, bool, null). The app
   never sends queries or item text. Users can turn analytics off in the You tab.
 

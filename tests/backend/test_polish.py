@@ -116,5 +116,5 @@ def test_openapi_lists_all_routes():
     assert {
         "/health", "/stores/nearby", "/stores/search", "/stores/{store_id}", "/stores/{store_id}/zones",
         "/stores/{store_id}/layout",
-        "/search", "/feedback", "/lists/parse", "/route", "/events",
+        "/search", "/chat", "/identify", "/feedback", "/lists/parse", "/route", "/events",
     } == paths

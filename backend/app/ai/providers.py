@@ -78,11 +78,13 @@ def guess_from_model_output(data: dict, intent: Intent, layout: LayoutDef) -> Lo
 class AnthropicLocationModel:
     name = "anthropic"
 
-    def __init__(self, api_key: str, model: str, timeout: float):
+    def __init__(self, api_key: str, model: str, timeout: float, reply_timeout: float | None = None):
         import anthropic  # Imported lazily so the fallback works without the SDK.
 
         self._client = anthropic.Anthropic(api_key=api_key, timeout=timeout, max_retries=1)
         self._model = model
+        # Written replies run longer than structured guesses.
+        self._reply_timeout = reply_timeout or timeout
 
     def locate(self, intent: Intent, retailer_name: str | None, layout: LayoutDef) -> LocationGuess | None:
         departments = ", ".join(z.name for z in layout.zones)
@@ -114,11 +116,15 @@ class AnthropicLocationModel:
             return None
 
     def explain(self, facts: ExplainFacts) -> str | None:
+        return self.chat(EXPLAIN_SYSTEM_PROMPT, [{"role": "user", "content": facts_prompt(facts)}])
+
+    def chat(self, system: str, messages: list[dict]) -> str | None:
         response = self._client.messages.create(
             model=self._model,
-            max_tokens=400,
-            system=EXPLAIN_SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": facts_prompt(facts)}],
+            max_tokens=1500,
+            system=system,
+            messages=[{"role": m["role"], "content": _anthropic_content(m)} for m in messages],
+            timeout=self._reply_timeout,
         )
         if response.stop_reason in ("refusal", "max_tokens"):
             return None
@@ -128,11 +134,13 @@ class AnthropicLocationModel:
 class OpenAILocationModel:
     name = "openai"
 
-    def __init__(self, api_key: str, model: str, timeout: float):
+    def __init__(self, api_key: str, model: str, timeout: float, reply_timeout: float | None = None):
         import openai  # Imported lazily so the fallback works without the SDK.
 
         self._client = openai.OpenAI(api_key=api_key, timeout=timeout, max_retries=1)
         self._model = model
+        # Written replies run longer than structured guesses.
+        self._reply_timeout = reply_timeout or timeout
 
     def locate(self, intent: Intent, retailer_name: str | None, layout: LayoutDef) -> LocationGuess | None:
         departments = ", ".join(z.name for z in layout.zones)
@@ -163,17 +171,42 @@ class OpenAILocationModel:
 
 
     def explain(self, facts: ExplainFacts) -> str | None:
+        return self.chat(EXPLAIN_SYSTEM_PROMPT, [{"role": "user", "content": facts_prompt(facts)}])
+
+    def chat(self, system: str, messages: list[dict]) -> str | None:
         response = self._client.chat.completions.create(
             model=self._model,
             messages=[
-                {"role": "system", "content": EXPLAIN_SYSTEM_PROMPT},
-                {"role": "user", "content": facts_prompt(facts)},
+                {"role": "system", "content": system},
+                *({"role": m["role"], "content": _openai_content(m)} for m in messages),
             ],
+            timeout=self._reply_timeout,
         )
         choice = response.choices[0]
         if choice.finish_reason != "stop" or choice.message.refusal:
             return None
         return (choice.message.content or "").strip() or None
+
+
+def _media_type(image: str) -> str:
+    return "image/png" if image.startswith("iVBOR") else "image/jpeg"
+
+
+def _anthropic_content(message: dict) -> str | list[dict]:
+    """Plain text, or the photo then the text, in Anthropic's message format."""
+    if not message.get("image"):
+        return message["content"]
+    image = {"type": "image", "source": {"type": "base64", "media_type": _media_type(message["image"]),
+                                         "data": message["image"]}}
+    return [image, {"type": "text", "text": message["content"] or "(photo)"}]
+
+
+def _openai_content(message: dict) -> str | list[dict]:
+    """Plain text, or the text then the photo, in OpenAI's message format."""
+    if not message.get("image"):
+        return message["content"]
+    url = f"data:{_media_type(message['image'])};base64,{message['image']}"
+    return [{"type": "text", "text": message["content"] or "(photo)"}, {"type": "image_url", "image_url": {"url": url}}]
 
 
 DEFAULT_MODELS = {"anthropic": "claude-opus-5-5", "openai": "gpt-6-luna"}
@@ -226,7 +259,7 @@ def get_explainer() -> Explainer | None:
     global _cached_explainer
     settings = get_settings()
     choice = _choose_provider(settings) if settings.aisle_ai_explain else None
-    key = (choice, settings.aisle_ai_model, settings.aisle_ai_timeout_seconds)
+    key = (choice, settings.aisle_ai_model, settings.aisle_ai_timeout_seconds, settings.aisle_ai_reply_timeout_seconds)
     if _cached_explainer is not None and _cached_explainer[0] == key:
         return _cached_explainer[1]
     explainer: Explainer | None = None
@@ -234,7 +267,8 @@ def get_explainer() -> Explainer | None:
         name, api_key = choice
         try:
             explainer = CachedExplainer(PROVIDERS[name](
-                api_key, settings.aisle_ai_model or DEFAULT_MODELS[name], settings.aisle_ai_timeout_seconds
+                api_key, settings.aisle_ai_model or DEFAULT_MODELS[name], settings.aisle_ai_timeout_seconds,
+                settings.aisle_ai_reply_timeout_seconds,
             ))
         except ImportError:
             log.warning("%s package not installed; no AI explanations", name)
