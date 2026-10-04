@@ -219,6 +219,20 @@ towels" is two items); consecutive unknown words stay one item. Leading quantiti
 ("2", "a dozen", "half gallon") go to `quantity`. Unknown items have `category: null`.
 When the server is unreachable, the app splits on separators or spaces locally.
 
+### POST /lists/scan
+
+A photo of a shopping list (handwritten, printed or on a screen), read by the AI and then
+split exactly like `POST /lists/parse` text.
+
+```json
+{"image": "/9j/4AAQ..."}
+```
+
+`image` is a base64 JPEG or PNG (at most 4 MB of base64); anything else → 422. The
+response has the same shape as `/lists/parse`. Crossed-out items, headings, dates and
+prices are left out. `items` is empty when there's no list in the photo, no AI key is set,
+or the provider couldn't read it.
+
 ## Route (Milestone 6)
 
 ### POST /route

@@ -242,6 +242,16 @@ class ListParseRequest(BaseModel):
     text: str = Field(max_length=2000)
 
 
+class ListScanRequest(BaseModel):
+    """A photo of a shopping list to read and split into items."""
+    image: str = Field(max_length=MAX_PHOTO_BASE64)
+
+    @field_validator("image")
+    @classmethod
+    def image_is_a_photo(cls, value: str) -> str:
+        return check_photo(value)
+
+
 class ParsedListItem(BaseModel):
     text: str
     quantity: str | None

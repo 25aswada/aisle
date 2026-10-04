@@ -53,6 +53,8 @@ protocol AisleAPI: Sendable {
     func storeLayout(storeID: String) async throws -> StoreLayout
     func sendFeedback(_ body: FeedbackBody) async throws -> FeedbackReceipt
     func parseList(text: String) async throws -> [ParsedListItem]
+    /// The items on a photographed shopping list (JPEG); empty when there's none to read.
+    func scanList(photo: Data) async throws -> [ParsedListItem]
     func planRoute(storeID: String, items: [ListItem]) async throws -> RoutePlan
     func sendEvents(_ events: [AnalyticsEvent]) async throws
 }
@@ -131,6 +133,13 @@ struct APIClient: AisleAPI {
 
     func parseList(text: String) async throws -> [ParsedListItem] {
         let response: ListParseResponse = try await post("lists/parse", body: ListParseRequestBody(text: text))
+        return response.items
+    }
+
+    func scanList(photo: Data) async throws -> [ParsedListItem] {
+        let response: ListParseResponse = try await post(
+            "lists/scan", body: ListScanRequestBody(image: photo.base64EncodedString()), timeout: Self.replyTimeout
+        )
         return response.items
     }
 

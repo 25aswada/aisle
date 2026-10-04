@@ -31,6 +31,11 @@ struct ListParseRequestBody: Encodable {
     let text: String
 }
 
+/// `POST /lists/scan`: a photo (base64 JPEG) of a shopping list.
+struct ListScanRequestBody: Encodable {
+    let image: String
+}
+
 /// Offline fallback when `/lists/parse` is unreachable: split on separators, or on
 /// spaces when there are none. The server parser is smarter about multi-word items.
 enum LocalListParser {

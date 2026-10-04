@@ -107,6 +107,43 @@ final class ListComposerTests: XCTestCase {
         await composer.add(to: store)
         XCTAssertTrue(api.parsedTexts.isEmpty)
     }
+
+    func testPhotoOfAListAddsItsItemsAndCanBeUndone() async {
+        let api = StubAPI()
+        api.scanListResult = .success([
+            ParsedListItem(text: "chicken", quantity: "2 lbs", category: ItemCategory(slug: "meat", name: "Meat & Poultry")),
+            ParsedListItem(text: "bananas", quantity: nil, category: nil),
+        ])
+        let store = ShoppingListStore(defaults: .fresh("AisleTests.ComposerPhoto"))
+        store.add([ParsedListItem(text: "milk", quantity: nil, category: nil)])
+        let composer = ListComposerModel(api: api)
+        let photo = Data([0xFF, 0xD8, 0x01])
+        await composer.add(photo: photo, to: store)
+
+        XCTAssertEqual(api.scannedPhotos, [photo])
+        XCTAssertEqual(store.items.map(\.text), ["milk", "chicken", "bananas"])
+        XCTAssertEqual(store.items[1].quantity, "2 lbs")
+        XCTAssertEqual(composer.photoNotice?.message, "Added 2 items from your photo")
+        XCTAssertFalse(composer.isReadingPhoto)
+
+        composer.undoPhoto(in: store)
+        XCTAssertEqual(store.items.map(\.text), ["milk"], "Undo takes back only what the photo added")
+        XCTAssertNil(composer.photoNotice)
+    }
+
+    func testPhotoWithoutAListSaysSo() async {
+        let api = StubAPI()
+        let store = ShoppingListStore(defaults: .fresh("AisleTests.ComposerPhoto2"))
+        let composer = ListComposerModel(api: api)
+        await composer.add(photo: Data([0xFF, 0xD8]), to: store)
+        XCTAssertTrue(store.items.isEmpty)
+        XCTAssertEqual(composer.photoNotice?.added, [])
+        XCTAssertNotNil(composer.photoNotice?.message)
+
+        api.scanListResult = .failure(APIError.timeout)
+        await composer.add(photo: Data([0xFF, 0xD8]), to: store)
+        XCTAssertEqual(composer.photoNotice?.message, APIError.timeout.errorDescription)
+    }
 }
 
 final class LocalListParserTests: XCTestCase {

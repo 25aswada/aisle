@@ -21,10 +21,19 @@ final class ShoppingListStore {
 
     var remaining: [ListItem] { items.filter { !$0.isDone } }
 
-    func add(_ parsed: [ParsedListItem]) {
-        items.append(contentsOf: parsed.map {
+    /// Adds the items and returns their ids, so an add can be undone.
+    @discardableResult
+    func add(_ parsed: [ParsedListItem]) -> [UUID] {
+        let added = parsed.map {
             ListItem(text: $0.text, quantity: $0.quantity, categoryName: $0.category?.name)
-        })
+        }
+        items.append(contentsOf: added)
+        return added.map(\.id)
+    }
+
+    func remove(_ ids: [UUID]) {
+        let gone = Set(ids)
+        items.removeAll { gone.contains($0.id) }
     }
 
     func rename(_ id: UUID, to text: String) {
@@ -75,13 +84,22 @@ final class ShoppingListStore {
     }
 }
 
-/// Adds typed or pasted text to the list via the server parser, with an offline fallback.
+/// Adds typed or pasted text to the list via the server parser, with an offline fallback,
+/// or a photographed list read by the server's AI.
 @MainActor
 @Observable
 final class ListComposerModel {
+    /// What happened with a photographed list: how many items were added (undoable), or why none were.
+    struct PhotoNotice: Equatable {
+        let message: String
+        let added: [UUID]
+    }
+
     var draft = ""
     private(set) var isAdding = false
     private(set) var notice: String?
+    private(set) var isReadingPhoto = false
+    private(set) var photoNotice: PhotoNotice?
 
     @ObservationIgnored private let api: AisleAPI
     @ObservationIgnored private let analytics: AnalyticsTracking
@@ -96,6 +114,7 @@ final class ListComposerModel {
         guard !text.isEmpty, !isAdding else { return }
         isAdding = true
         notice = nil
+        photoNotice = nil
         defer { isAdding = false }
         do {
             let parsed = try await api.parseList(text: text)
@@ -111,5 +130,49 @@ final class ListComposerModel {
             notice = "Added offline. Check that multi-word items weren't split."
             analytics.track(.listItemsAdded, ["count": .int(parsed.count), "offline": true])
         }
+    }
+
+    /// Reads a photographed list and adds what's on it straight away, with an undo.
+    func add(photo: Data, to store: ShoppingListStore) async {
+        guard !isAdding else { return }
+        isAdding = true
+        isReadingPhoto = true
+        notice = nil
+        photoNotice = nil
+        defer {
+            isAdding = false
+            isReadingPhoto = false
+        }
+        do {
+            let parsed = try await api.scanList(photo: photo)
+            guard !parsed.isEmpty else {
+                photoNotice = PhotoNotice(
+                    message: "Couldn't find a list in that photo. Try a closer, brighter shot.", added: []
+                )
+                return
+            }
+            let added = store.add(parsed)
+            photoNotice = PhotoNotice(
+                message: "Added \(parsed.count) \(parsed.count == 1 ? "item" : "items") from your photo", added: added
+            )
+            analytics.track(.listItemsAdded, ["count": .int(parsed.count), "offline": false, "photo": true])
+        } catch is CancellationError {
+            return
+        } catch {
+            photoNotice = PhotoNotice(
+                message: (error as? LocalizedError)?.errorDescription ?? "Couldn't read that photo.", added: []
+            )
+        }
+    }
+
+    /// Takes back the items a photo just added.
+    func undoPhoto(in store: ShoppingListStore) {
+        guard let added = photoNotice?.added else { return }
+        store.remove(added)
+        photoNotice = nil
+    }
+
+    func dismissPhotoNotice() {
+        photoNotice = nil
     }
 }

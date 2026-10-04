@@ -111,6 +111,13 @@ punctuation.
 If it doesn't (small talk, a question about price, brands or the item already discussed,
 "I don't see them", thanks), reply NONE."""
 
+READ_LIST_PROMPT = """The photo shows a shopping list: handwritten, printed, on a screen, a whiteboard
+or a sticky note. Write out the items to buy, one per line, in the order they appear.
+Keep quantities and sizes as written ("2 lbs chicken", "dozen eggs"), fix obvious
+misspellings, and leave out crossed-out or checked-off items, headings, dates and
+prices. Write nothing else: no bullets, numbers or commentary. If there is no shopping
+list in the photo, reply NONE."""
+
 IDENTIFY_PROMPT = """A shopper took a photo of something they want to find in a store. Reply with
 only a short search phrase for the product, 1 to 5 words, the way they'd type it into a
 store's search: the kind of product, plus the brand or variety only when it's clearly
@@ -268,3 +275,18 @@ def wanted_item_safely(explainer: Explainer | None, messages: list[dict]) -> str
     except Exception:
         log.warning("AI follow-up classification failed", exc_info=True)
         return None
+
+
+def read_list_safely(explainer: Explainer | None, image: str) -> str | None:
+    """The items on a photographed shopping list, one per line, or None."""
+    if explainer is None:
+        return None
+    message = {"role": "user", "content": "Read this shopping list.", "image": image}
+    try:
+        text = (explainer.chat(READ_LIST_PROMPT, [message]) or "").strip()
+    except Exception:
+        log.warning("AI list reading failed", exc_info=True)
+        return None
+    if not text or text.upper().strip(" .") == "NONE":
+        return None
+    return text

@@ -15,6 +15,7 @@ struct ShoppingListView: View {
     @State private var showDone = false
     @FocusState private var composerFocused: Bool
     @State private var scrolledUnderStatusBar: CGFloat = 0
+    @State private var isScanning = false
 
     init(api: AisleAPI, analytics: AnalyticsTracking) {
         self.api = api
@@ -81,6 +82,9 @@ struct ShoppingListView: View {
             .safeAreaInset(edge: .top, spacing: 0) { StatusBarBackdrop(scrolled: scrolledUnderStatusBar) }
             .background(AisleBackground())
             .toolbar(.hidden, for: .navigationBar)
+            .cameraOverlay(isPresented: $isScanning) { photo in
+                Task { await composer.add(photo: photo, to: list) }
+            }
             .sensoryFeedback(.impact(weight: .light), trigger: list.remaining.count)
             .fullScreenCover(item: $trip) { trip in
                 ShoppingModeView(model: trip)
@@ -154,6 +158,10 @@ struct ShoppingListView: View {
                     .textInputAutocapitalization(.never)
                     .onSubmit(submit)
                     .accessibilityIdentifier("listComposerField")
+                CameraButton(action: scanList)
+                    .disabled(composer.isAdding)
+                    .accessibilityLabel("Scan a written list")
+                    .accessibilityIdentifier("listCameraButton")
                 if composer.isAdding {
                     ProgressView().frame(width: 44, height: 44)
                 } else {
@@ -177,7 +185,37 @@ struct ShoppingListView: View {
             .overlay(RoundedRectangle(cornerRadius: 29, style: .continuous).strokeBorder(Theme.accentRing, lineWidth: 1.5))
             .shadow(color: Theme.glow.opacity(0.10), radius: 14, y: 8)
 
-            if let notice = composer.notice {
+            if composer.isReadingPhoto {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Reading your list…")
+                }
+                .font(.aisleFootnote)
+                .foregroundStyle(Theme.secondaryInk)
+                .padding(.leading, 6)
+                .accessibilityElement(children: .combine)
+            } else if let photoNotice = composer.photoNotice {
+                HStack(spacing: 10) {
+                    Label(photoNotice.message, systemImage: photoNotice.added.isEmpty ? "exclamationmark.triangle" : "text.viewfinder")
+                        .font(.aisleFootnote)
+                        .foregroundStyle(Theme.secondaryInk)
+                    Spacer(minLength: 0)
+                    if !photoNotice.added.isEmpty {
+                        Button("Undo") { withAnimation { composer.undoPhoto(in: list) } }
+                            .font(Theme.font(13, .semibold, relativeTo: .footnote))
+                            .foregroundStyle(Theme.ink)
+                            .accessibilityLabel("Undo adding items from the photo")
+                    }
+                    Button { composer.dismissPhotoNotice() } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(Theme.secondaryInk)
+                            .frame(width: 28, height: 28)
+                    }
+                    .accessibilityLabel("Dismiss")
+                }
+                .padding(.leading, 6)
+            } else if let notice = composer.notice {
                 Label(notice, systemImage: "wifi.slash")
                     .font(.aisleFootnote)
                     .foregroundStyle(Theme.secondaryInk)
@@ -241,6 +279,14 @@ struct ShoppingListView: View {
 
     private func submit() {
         Task { await composer.add(to: list) }
+    }
+
+    /// Opens the camera over the list; the overlay slides its own card up.
+    private func scanList() {
+        composerFocused = false
+        var instant = Transaction()
+        instant.disablesAnimations = true
+        withTransaction(instant) { isScanning = true }
     }
 
     private func addText(_ text: String) {

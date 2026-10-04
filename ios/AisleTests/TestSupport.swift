@@ -154,6 +154,14 @@ final class StubAPI: AisleAPI, @unchecked Sendable {
         return try parseListResult.get()
     }
 
+    var scanListResult: Result<[ParsedListItem], Error> = .success([])
+    private(set) var scannedPhotos: [Data] = []
+
+    func scanList(photo: Data) async throws -> [ParsedListItem] {
+        scannedPhotos.append(photo)
+        return try scanListResult.get()
+    }
+
     func sendEvents(_ events: [AnalyticsEvent]) async throws {
         if let eventsError { throw eventsError }
         sentEventBatches.append(events)
