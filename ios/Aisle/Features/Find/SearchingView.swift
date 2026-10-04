@@ -49,13 +49,9 @@ struct SearchingView: View {
             }
             Spacer(minLength: 0)
             if photo == nil, ItemIcon.assetName(for: query) != nil {
-                ItemIconView(text: query, size: 52)
+                ItemIconView(text: query, size: 62)
                     .scaleEffect(reduceMotion ? 1 : 1 + 0.03 * (1 + sin(time * 2 * .pi / 2.2)))
                     .frame(width: 74, height: 74)
-                    .background(
-                        colorScheme == .dark ? AnyShapeStyle(Color.white.opacity(0.06)) : AnyShapeStyle(Theme.accentSoft),
-                        in: RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    )
                     .transition(.opacity)
             }
         }
