@@ -36,12 +36,19 @@ enum PlusFeature: CaseIterable, Identifiable {
 
 // MARK: - Tab
 
-/// The Aisle+ tab: a living gradient card, what you get, and Free vs Aisle+.
+/// The Aisle+ tab: the upgrade offer itself, or, for subscribers, what they have.
 struct PlusTabView: View {
+    var body: some View {
+        NavigationStack {
+            PaywallView(reason: nil, inTab: true)
+                .toolbar(.hidden, for: .navigationBar)
+        }
+    }
+}
+
+/// What a subscriber sees on the Aisle+ tab: a living gradient card, what they get, and Free vs Aisle+.
+private struct PlusMemberView: View {
     @Environment(PlusStore.self) private var plus
-    @State private var showingPaywall = false
-    @State private var restoreMessage: String?
-    @State private var scrolledUnderStatusBar: CGFloat = 0
 
     private let comparison: [(String, String, String)] = [
         ("Find items in any store", "✓", "✓"),
@@ -53,60 +60,30 @@ struct PlusTabView: View {
     ]
 
     var body: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    HStack {
-                        PlusWordmark(size: 22)
-                        Spacer()
-                        if !plus.isPlus {
-                            Button("Restore") { Task { await restore() } }
-                                .font(Theme.font(13, .semibold, relativeTo: .footnote))
-                                .foregroundStyle(Theme.ink)
-                                .padding(.horizontal, 14)
-                                .frame(height: 36)
-                                .background(Theme.surface.opacity(0.92), in: Capsule())
-                        }
-                    }
-                    .trackingScrollUnderStatusBar($scrolledUnderStatusBar)
-
-                    HeroCard(isPlus: plus.isPlus, yearlyPrice: plus.price(.yearly)) {
-                        showingPaywall = true
-                    }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                HeroCard(isPlus: true, yearlyPrice: plus.price(.yearly)) {}
                     .padding(.top, 22)
 
-                    sectionTitle("What you get").padding(.top, 30)
-                    LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
-                        ForEach(PlusFeature.allCases) { feature in
-                            FeatureTile(feature: feature)
-                        }
+                sectionTitle("What you get").padding(.top, 30)
+                LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+                    ForEach(PlusFeature.allCases) { feature in
+                        FeatureTile(feature: feature)
                     }
-
-                    sectionTitle("Free vs Aisle+").padding(.top, 30)
-                    comparisonTable
-                    Text("Everything that helps you find an item stays free. Aisle+ adds more photos, sharing and bigger trips.")
-                        .font(Theme.font(12, relativeTo: .caption))
-                        .foregroundStyle(Theme.secondaryInk)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .padding(.top, 14)
-                        .padding(.horizontal, 4)
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 8)
-                .padding(.bottom, 32)
+
+                sectionTitle("Free vs Aisle+").padding(.top, 30)
+                comparisonTable
+                Text("Everything that helps you find an item stays free. Aisle+ adds more photos, sharing and bigger trips.")
+                    .font(Theme.font(12, relativeTo: .caption))
+                    .foregroundStyle(Theme.secondaryInk)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 14)
+                    .padding(.horizontal, 4)
             }
-            .safeAreaInset(edge: .top, spacing: 0) { StatusBarBackdrop(scrolled: scrolledUnderStatusBar) }
-            .background(AisleBackground())
-            .toolbar(.hidden, for: .navigationBar)
-            .task { await plus.load() }
-            .sheet(isPresented: $showingPaywall) {
-                PaywallView(reason: nil)
-            }
-            .alert("Restore purchases", isPresented: Binding(get: { restoreMessage != nil }, set: { if !$0 { restoreMessage = nil } })) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(restoreMessage ?? "")
-            }
+            .padding(.horizontal, 20)
+            .padding(.top, 8)
+            .padding(.bottom, 32)
         }
     }
 
@@ -176,15 +153,6 @@ struct PlusTabView: View {
         case "✓": return "included"
         case "—": return "not included"
         default: return value
-        }
-    }
-
-    private func restore() async {
-        do {
-            try await plus.restore()
-            restoreMessage = plus.isPlus ? "Aisle+ is active on this device." : "No Aisle+ purchase was found for this Apple ID."
-        } catch {
-            restoreMessage = "Couldn't reach the App Store. Try again in a moment."
         }
     }
 }
@@ -332,6 +300,9 @@ private struct FeatureTile: View {
 struct PaywallView: View {
     /// Why the sheet opened, e.g. "You've used today's 5 photo searches." Nil from the tab.
     let reason: String?
+    /// The Aisle+ tab rather than a sheet: the wordmark instead of Close, and subscribers
+    /// see what they have instead of the offer.
+    var inTab = false
 
     @Environment(PlusStore.self) private var plus
     @Environment(\.dismiss) private var dismiss
@@ -358,9 +329,13 @@ struct PaywallView: View {
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                CircleButton(systemImage: "xmark", label: "Close") { dismiss() }
+                if inTab {
+                    PlusWordmark(size: 22)
+                } else {
+                    CircleButton(systemImage: "xmark", label: "Close") { dismiss() }
+                }
                 Spacer()
-                if !welcomed {
+                if !welcomed && !(inTab && plus.isPlus) {
                     Button("Restore") { Task { await restore() } }
                         .font(Theme.font(15, .semibold, relativeTo: .subheadline))
                         .foregroundStyle(Theme.ink)
@@ -374,8 +349,16 @@ struct PaywallView: View {
             .padding(.top, 14)
 
             if welcomed {
-                PlusWelcome { dismiss() }
-                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                PlusWelcome {
+                    if inTab {
+                        withAnimation(.spring(response: 0.5, dampingFraction: 0.85)) { welcomed = false }
+                    } else {
+                        dismiss()
+                    }
+                }
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+            } else if inTab && plus.isPlus {
+                PlusMemberView().transition(.opacity)
             } else {
                 offer.transition(.opacity)
             }
@@ -608,21 +591,27 @@ private struct FeatureMarquee: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        TimelineView(.animation(paused: reduceMotion)) { timeline in
-            let speed = 22.0   // points per second
-            let t = timeline.date.timeIntervalSinceReferenceDate
-            let offset = rowWidth > 0 && !reduceMotion ? -CGFloat((t * speed).truncatingRemainder(dividingBy: Double(rowWidth))) : 0
-            HStack(spacing: 0) {
-                row.background(GeometryReader { geo in
-                    Color.clear.onAppear { rowWidth = geo.size.width }
-                })
-                row
+        // The strip (two copies of the row, for a seamless loop) is far wider than the
+        // screen, so it's an overlay: overlays don't size their parent, which stays as wide
+        // as it's offered.
+        Color.clear
+            .frame(maxWidth: .infinity)
+            .frame(height: 28)
+            .overlay(alignment: .leading) {
+                TimelineView(.animation(paused: reduceMotion)) { timeline in
+                    let speed = 22.0   // points per second
+                    let t = timeline.date.timeIntervalSinceReferenceDate
+                    let offset = rowWidth > 0 && !reduceMotion ? -CGFloat((t * speed).truncatingRemainder(dividingBy: Double(rowWidth))) : 0
+                    HStack(spacing: 0) {
+                        row.background(GeometryReader { geo in
+                            Color.clear.onAppear { rowWidth = geo.size.width }
+                        })
+                        row
+                    }
+                    .offset(x: offset)
+                }
             }
-            .offset(x: offset)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .frame(height: 28)
-        .clipped()
+            .clipped()
         .mask(LinearGradient(stops: [
             .init(color: .clear, location: 0), .init(color: .black, location: 0.12),
             .init(color: .black, location: 0.88), .init(color: .clear, location: 1),
