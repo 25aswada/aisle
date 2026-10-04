@@ -304,7 +304,8 @@ private struct IntroStage: View {
         }
         guard await pause(250) else { return }
         withAnimation(.spring(response: 0.7, dampingFraction: 0.72)) { assembled = true }
-        guard await pause(900) else { return }
+        // Let the walk-in mostly land before the glow, haptic and letters.
+        guard await pause(1500) else { return }
         thump.toggle()
         withAnimation(.easeOut(duration: 0.8)) { bloom = true }
         for index in 1...word.count {

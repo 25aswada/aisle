@@ -3,14 +3,18 @@ import SwiftUI
 
 /// The Aisle mark drawn as vector panels so its halves and shelves can move on their own.
 ///
-/// When `walkedIn` turns on, each half swings in from nearly edge-on, hinged on its
-/// outer edge, and the mark grows slightly, as if you'd stepped into the aisle; a soft
-/// spring gives a small overshoot as the walls settle. Afterwards, tilting the phone
-/// shifts near shelves more than far ones, so the mark reads as depth. Both effects are
-/// off under Reduce Motion, where the logo simply appears.
+/// When `walkedIn` turns on, the mark plays a short walk down the aisle in layers:
+/// - the whole mark rises from below, tipped back like a camera moving forward, and
+///   sharpens from a soft blur while growing to full size;
+/// - each half swings in from nearly edge-on, hinged on its outer edge, with a springy
+///   overshoot as the walls settle;
+/// - shelves arrive in depth order: near walls first, then the floor settles, then the
+///   far inner shelves pop out of the vanishing point.
+/// Afterwards, tilting the phone shifts near shelves more than far ones. Both effects
+/// are off under Reduce Motion, where the logo simply appears.
 struct WalkInLogo: View {
     var size: CGFloat = 140
-    /// The halves stay swung open and hidden until this is true; flip it in your own timing.
+    /// The mark stays hidden until this is true; flip it in your own timing.
     var walkedIn: Bool
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -18,8 +22,9 @@ struct WalkInLogo: View {
 
     /// Largest parallax shift, in points, for the nearest panel.
     private var maxShift: CGFloat { size * 0.045 }
-    private var animation: Animation? {
-        reduceMotion ? nil : .spring(response: 1.1, dampingFraction: 0.62)
+
+    private func spring(_ response: Double, _ damping: Double, delay: Double = 0) -> Animation? {
+        reduceMotion ? nil : .spring(response: response, dampingFraction: damping).delay(delay)
     }
 
     var body: some View {
@@ -28,18 +33,28 @@ struct WalkInLogo: View {
             half(.right)
         }
         .frame(width: size, height: size)
-        .scaleEffect(walkedIn ? 1 : 0.82)
-        .animation(animation, value: walkedIn)
+        // The camera: rise, level out, grow and come into focus.
+        .rotation3DEffect(.degrees(walkedIn ? 0 : 32), axis: (x: 1, y: 0, z: 0), perspective: 0.6)
+        .scaleEffect(walkedIn ? 1 : 0.6)
+        .offset(y: walkedIn ? 0 : size * 0.28)
+        .blur(radius: walkedIn ? 0 : 10)
+        .animation(spring(1.9, 0.82), value: walkedIn)
         .onAppear { if !reduceMotion { tilt.start() } }
         .onDisappear { tilt.stop() }
         .accessibilityHidden(true)
     }
 
     private func half(_ side: LogoPanel.Side) -> some View {
-        ZStack {
+        let outward: CGFloat = side == .left ? -1 : 1
+        return ZStack {
             ForEach(LogoPanel.all.filter { $0.side == side }) { panel in
                 LogoPanelShape(points: panel.points)
                     .fill(Theme.ink)
+                    // Far shelves grow out of the vanishing point; the floor drops into place.
+                    .scaleEffect(walkedIn ? 1 : panel.entrance.scale, anchor: .center)
+                    .offset(y: walkedIn ? 0 : panel.entrance.drop * size)
+                    .opacity(walkedIn ? 1 : 0)
+                    .animation(spring(1.3, 0.62, delay: panel.entrance.delay), value: walkedIn)
                     .offset(
                         x: CGFloat(tilt.x) * panel.depth * maxShift,
                         y: CGFloat(tilt.y) * panel.depth * maxShift
@@ -47,15 +62,15 @@ struct WalkInLogo: View {
             }
         }
         .frame(width: size, height: size)
-        // Hinge on the outer edge: start almost edge-on, then swing into place.
+        // The walls: hinge on the outer edge, start almost edge-on and swing into place.
         .rotation3DEffect(
-            .degrees(walkedIn ? 0 : (side == .left ? 78 : -78)),
+            .degrees(walkedIn ? 0 : -86 * outward),
             axis: (x: 0, y: 1, z: 0),
             anchor: side == .left ? .leading : .trailing,
             perspective: 0.55
         )
-        .opacity(walkedIn ? 1 : 0)
-        .animation(animation, value: walkedIn)
+        .offset(x: walkedIn ? 0 : outward * size * 0.3)
+        .animation(spring(1.6, 0.55, delay: 0.1), value: walkedIn)
     }
 }
 
@@ -68,6 +83,16 @@ private struct LogoPanel: Identifiable {
     let side: Side
     /// Parallax weight: near panels (outer edge) move most, far ones least.
     let depth: CGFloat
+
+    /// How the panel arrives: starting scale, starting drop (fraction of the mark's
+    /// height) and delay. Near walls lead, the floor follows, far shelves come last.
+    var entrance: (scale: CGFloat, drop: CGFloat, delay: Double) {
+        switch depth {
+        case ..<0.5: return (0.3, 0, 0.55)   // inner shelves, far down the aisle
+        case ..<1: return (1, 0.12, 0.3)     // floor
+        default: return (1, 0, 0.1)          // outer walls, nearest
+        }
+    }
 
     /// Left-side panels, traced from aisle-logo.png. The right side mirrors them.
     private static let left: [(points: [(CGFloat, CGFloat)], depth: CGFloat)] = [
