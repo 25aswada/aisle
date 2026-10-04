@@ -35,6 +35,7 @@
 		5D8635D9F77B8E2152CB998A /* ShoppingList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F34F9C2719C1FB102927590 /* ShoppingList.swift */; };
 		5EBED4D197E5A4EBAD9DC51C /* PlusViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC67A4D579579373CED54185 /* PlusViews.swift */; };
 		6307DD9A3EDCA4A1F547A86B /* Feedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = D013BA53FADF2AB56FCA7D95 /* Feedback.swift */; };
+		6835AEEB38AD979368C5AB7D /* MemberActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 578DE87EE9D1C26D8DF5BC97 /* MemberActivity.swift */; };
 		6D55C93158E8BB9A076EFA62 /* ShoppingListTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA92FEBC6C187376090D1B60 /* ShoppingListTests.swift */; };
 		6FA41AB5A696FEBA3B6D4A50 /* LiveOnboarding.swift in Sources */ = {isa = PBXBuildFile; fileRef = 496BBC47AF11D1538DE838C7 /* LiveOnboarding.swift */; };
 		700677C23C091E32EBFABB43 /* AdaptiveStack.swift in Sources */ = {isa = PBXBuildFile; fileRef = FE9FE08311669988290AB5A0 /* AdaptiveStack.swift */; };
@@ -120,6 +121,7 @@
 		496BBC47AF11D1538DE838C7 /* LiveOnboarding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiveOnboarding.swift; sourceTree = "<group>"; };
 		4E28133ACF05710EB0935DF3 /* Account.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Account.swift; sourceTree = "<group>"; };
 		4F551FDCD24FEF4163ED9E8A /* ShoppingListStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShoppingListStore.swift; sourceTree = "<group>"; };
+		578DE87EE9D1C26D8DF5BC97 /* MemberActivity.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MemberActivity.swift; sourceTree = "<group>"; };
 		5F34F9C2719C1FB102927590 /* ShoppingList.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShoppingList.swift; sourceTree = "<group>"; };
 		62DE0639BE302C03E9AF6ABF /* AppConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfig.swift; sourceTree = "<group>"; };
 		6470DDB95F2D49F70C7251AD /* AisleApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AisleApp.swift; sourceTree = "<group>"; };
@@ -391,6 +393,7 @@
 			isa = PBXGroup;
 			children = (
 				4E28133ACF05710EB0935DF3 /* Account.swift */,
+				578DE87EE9D1C26D8DF5BC97 /* MemberActivity.swift */,
 				9F15E3A9B2B74D695D67A224 /* PlusStore.swift */,
 				3F1FAAA21BC068E13516AE78 /* RemoteAuthService.swift */,
 				0B6177DDB775035FB051DAD6 /* ShopperStats.swift */,
@@ -590,6 +593,7 @@
 				E40DE0670371B4AC9D8E1AF5 /* ListSharingViews.swift in Sources */,
 				6FA41AB5A696FEBA3B6D4A50 /* LiveOnboarding.swift in Sources */,
 				97794A08EF311AE5CCB6C4C1 /* LocationProvider.swift in Sources */,
+				6835AEEB38AD979368C5AB7D /* MemberActivity.swift in Sources */,
 				27E0879DFF7814C5B975D58C /* OfflineMaps.swift in Sources */,
 				05FC12E8D3FA74F6B4A657B8 /* OnboardingFlow.swift in Sources */,
 				790E90D0AC7C2C3848D3A993 /* PlusStore.swift in Sources */,
