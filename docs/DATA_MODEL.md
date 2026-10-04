@@ -72,6 +72,15 @@ analytics stay anonymous and are not linked to users.
 - `usage_counters(id, subject, feature, day, count)`, unique on `(subject, feature, day)`:
   the free tier's daily use. `subject` is `user:<id>`, `device:<install id>` or `ip:<addr>`.
 
+## Shared lists
+
+- `shared_lists(id uuid, owner_id, name, invite_code unique, version, created_at, updated_at)`.
+- `shared_list_members(id, list_id, user_id, joined_at)`, unique on `(list_id, user_id)`.
+- `shared_list_items(id (the phone's UUID), list_id, text, quantity, category_name, is_done,
+  position, updated_at)`.
+
+Deleting the owner's account deletes their lists; deleting a member's removes them.
+
 ### Seeding and imports
 
 `python -m backend.app.seed` loads demo stores, the catalog (categories, concepts,

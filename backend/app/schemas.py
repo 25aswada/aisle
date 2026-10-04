@@ -429,3 +429,67 @@ class PlusStatus(BaseModel):
     # Today's use of the free tier's limited features (not counted for Aisle+).
     photo_search: UsageOut
     follow_up: UsageOut
+
+
+# --- Shared lists ---
+
+class SharedItemIn(BaseModel):
+    # The phone's own id for the item (a UUID string), kept on every device.
+    id: str = Field(min_length=1, max_length=36)
+    text: str = Field(min_length=1, max_length=200)
+    quantity: str | None = Field(default=None, max_length=40)
+    category_name: str | None = Field(default=None, max_length=80)
+    is_done: bool = False
+    position: float = 0
+
+
+class SharedItemOut(SharedItemIn):
+    pass
+
+
+class SharedListCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
+    items: list[SharedItemIn] = Field(default_factory=list, max_length=500)
+
+
+class SharedListRename(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
+
+
+class SharedListChange(BaseModel):
+    op: Literal["upsert", "delete"]
+    item: SharedItemIn | None = None
+    id: str | None = Field(default=None, max_length=36)
+
+
+class SharedListChanges(BaseModel):
+    changes: list[SharedListChange] = Field(max_length=500)
+
+
+class JoinSharedList(BaseModel):
+    code: str = Field(min_length=4, max_length=20)
+
+
+class SharedMemberOut(BaseModel):
+    first_name: str
+    is_owner: bool
+    is_you: bool
+
+
+class SharedListOut(BaseModel):
+    id: str
+    name: str
+    invite_code: str
+    version: int
+    is_owner: bool
+    members: list[SharedMemberOut]
+    items: list[SharedItemOut]
+
+
+class SharedListSummary(BaseModel):
+    id: str
+    name: str
+    version: int
+    is_owner: bool
+    item_count: int
+    members: list[SharedMemberOut]

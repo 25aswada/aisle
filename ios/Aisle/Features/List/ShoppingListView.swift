@@ -17,6 +17,25 @@ struct ShoppingListView: View {
     @State private var scrolledUnderStatusBar: CGFloat = 0
     @State private var isScanning = false
     @State private var confirmingNewList = false
+    @Environment(PlusStore.self) private var plus
+    @Environment(AccountStore.self) private var accounts
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var sheet: ListSheet?
+    @State private var confirmingDelete = false
+    @State private var sharingError: String?
+
+    /// The list screens' sheets, one at a time.
+    enum ListSheet: Identifiable {
+        case share, join(String), rename, signIn
+        var id: String {
+            switch self {
+            case .share: return "share"
+            case .join(let code): return "join-\(code)"
+            case .rename: return "rename"
+            case .signIn: return "signIn"
+            }
+        }
+    }
 
     init(api: AisleAPI, analytics: AnalyticsTracking) {
         self.api = api
@@ -87,6 +106,51 @@ struct ShoppingListView: View {
                 Task { await composer.add(photo: photo, to: list) }
             }
             .plusUpgradeSheet(reason: $composer.upgradePrompt)
+            .sheet(item: $sheet) { sheet in
+                switch sheet {
+                case .share: ShareListSheet().presentationDetents([.large])
+                case .join(let code): JoinListSheet(code: code).presentationDetents([.medium, .large])
+                case .rename: RenameListSheet().presentationDetents([.medium])
+                case .signIn:
+                    if let auth = accounts.auth { AccountSheet(auth: auth) }
+                }
+            }
+            .confirmationDialog(deleteTitle, isPresented: $confirmingDelete, titleVisibility: .visible) {
+                Button(deleteAction, role: .destructive) {
+                    Task {
+                        do { try await list.deleteCurrent() } catch {
+                            sharingError = (error as? LocalizedError)?.errorDescription ?? "Couldn't do that. Try again."
+                        }
+                    }
+                }
+            } message: {
+                Text(deleteMessage)
+            }
+            .alert("Couldn't share", isPresented: Binding(get: { sharingError != nil }, set: { if !$0 { sharingError = nil } })) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(sharingError ?? "")
+            }
+            // Shared lists: pick up the family's changes while the list is open.
+            .task(id: list.current.shared?.serverID) {
+                guard list.current.shared != nil else { return }
+                while !Task.isCancelled {
+                    await list.refreshShared()
+                    try? await Task.sleep(for: .seconds(5))
+                }
+            }
+            .task(id: accounts.account?.id) {
+                if accounts.isSignedIn { await list.refreshMemberships() }
+            }
+            .onChange(of: scenePhase) {
+                if scenePhase == .active { Task { await list.refreshShared() } }
+            }
+            .task(id: list.pendingJoinCode) {
+                // An invite link (also when it opened the app on this tab).
+                guard let code = list.pendingJoinCode else { return }
+                list.pendingJoinCode = nil
+                sheet = accounts.isSignedIn ? .join(code) : .signIn
+            }
             .sensoryFeedback(.impact(weight: .light), trigger: list.remaining.count)
             .fullScreenCover(item: $trip) { trip in
                 ShoppingModeView(model: trip)
@@ -106,8 +170,8 @@ struct ShoppingListView: View {
             HStack {
                 AisleWordmark(size: 26)
                 Spacer()
-                if !list.items.isEmpty {
-                    Button { confirmingNewList = true } label: {
+                if !list.items.isEmpty || list.lists.count > 1 {
+                    Button(action: newListTapped) {
                         Label("New list", systemImage: "square.and.pencil")
                             .font(Theme.font(14, .semibold, relativeTo: .subheadline))
                             .foregroundStyle(Theme.ink)
@@ -121,31 +185,56 @@ struct ShoppingListView: View {
                     .confirmationDialog(
                         "Start a new list?", isPresented: $confirmingNewList, titleVisibility: .visible
                     ) {
-                        Button("Start new list", role: .destructive, action: startNewList)
+                        Button("Start over", role: .destructive, action: startNewList)
+                        Button("Keep more lists with Aisle+") {
+                            composer.upgradePrompt = "Keep a list for every store and occasion with Aisle+."
+                        }
                     } message: {
-                        Text("This clears all \(list.items.count) \(list.items.count == 1 ? "item" : "items") on your current list.")
+                        Text("Starting over clears all \(list.items.count) \(list.items.count == 1 ? "item" : "items") on your list. With Aisle+ you can keep more than one list.")
                     }
-                    Menu {
-                        Button("Clear checked items", systemImage: "checkmark.circle") { list.clearCompleted() }
-                            .disabled(done.isEmpty)
-                        Button("Clear all", systemImage: "trash", role: .destructive) { list.clearAll() }
-                    } label: {
-                        Image(systemName: "ellipsis")
-                            .font(.system(size: 17, weight: .semibold))
-                            .foregroundStyle(Theme.ink)
-                            .frame(width: 44, height: 44)
-                            .background(Theme.surface.opacity(0.9), in: Circle())
-                            .shadow(color: Theme.ink.opacity(0.06), radius: 12, y: 6)
-                    }
-                    .accessibilityLabel("List options")
                 }
+                Menu {
+                    if list.current.shared != nil {
+                        Button("Sharing…", systemImage: "person.2") { sheet = .share }
+                    } else {
+                        Button("Share with family…", systemImage: "person.2.badge.plus") { shareTapped() }
+                    }
+                    Button("Join a shared list…", systemImage: "person.crop.circle.badge.plus") {
+                        sheet = accounts.isSignedIn ? .join("") : .signIn
+                    }
+                    Button("Rename list…", systemImage: "pencil") { sheet = .rename }
+                    Divider()
+                    Button("Clear checked items", systemImage: "checkmark.circle") { list.clearCompleted() }
+                        .disabled(done.isEmpty)
+                    Button("Clear all", systemImage: "trash", role: .destructive) { list.clearAll() }
+                        .disabled(list.items.isEmpty)
+                    if list.lists.count > 1 || list.current.shared != nil {
+                        Button(deleteAction, systemImage: "xmark.bin", role: .destructive) { confirmingDelete = true }
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(Theme.ink)
+                        .frame(width: 44, height: 44)
+                        .background(Theme.surface.opacity(0.9), in: Circle())
+                        .shadow(color: Theme.ink.opacity(0.06), radius: 12, y: 6)
+                }
+                .accessibilityLabel("List options")
             }
-            (Text("Your ") + Text("list").foregroundStyle(Theme.accentInk))
-                .font(Theme.font(34, .bold, relativeTo: .largeTitle))
-                .tracking(-1)
-                .foregroundStyle(Theme.ink)
+            listTitle
                 .padding(.top, 20)
-                .accessibilityAddTraits(.isHeader)
+            if let with = list.current.shared?.withLabel {
+                Label(with, systemImage: "person.2.fill")
+                    .font(Theme.font(14, .semibold, relativeTo: .subheadline))
+                    .foregroundStyle(Theme.accentInk)
+                    .padding(.top, 6)
+            }
+            if let problem = list.syncProblem {
+                Label(problem, systemImage: "arrow.triangle.2.circlepath")
+                    .font(.aisleFootnote)
+                    .foregroundStyle(Theme.secondaryInk)
+                    .padding(.top, 6)
+            }
             if let store = storeSelection.current {
                 HStack(spacing: 8) {
                     RetailerLogo(url: store.retailerLogoURL, size: 22) {
@@ -302,6 +391,101 @@ struct ShoppingListView: View {
     }
 
     /// Clears the list and puts the cursor in the add bar for the first item.
+    /// "Your list" for a single list of your own; otherwise the list's name, which switches lists.
+    @ViewBuilder
+    private var listTitle: some View {
+        if list.lists.count == 1 && list.current.shared == nil {
+            (Text("Your ") + Text("list").foregroundStyle(Theme.accentInk))
+                .font(Theme.font(34, .bold, relativeTo: .largeTitle))
+                .tracking(-1)
+                .foregroundStyle(Theme.ink)
+                .accessibilityAddTraits(.isHeader)
+        } else {
+            Menu {
+                ForEach(list.lists) { item in
+                    Button {
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.86)) { list.select(item.id) }
+                    } label: {
+                        if item.id == list.currentID {
+                            Label(item.name, systemImage: "checkmark")
+                        } else {
+                            Label(item.name, systemImage: item.shared == nil ? "list.bullet" : "person.2")
+                        }
+                    }
+                }
+                Divider()
+                Button("New list", systemImage: "plus", action: newListTapped)
+            } label: {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(list.current.name)
+                        .font(Theme.font(34, .bold, relativeTo: .largeTitle))
+                        .tracking(-1)
+                        .foregroundStyle(Theme.accentInk)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundStyle(Theme.ink)
+                }
+            }
+            .accessibilityLabel("List: \(list.current.name). Switch lists")
+            .accessibilityAddTraits(.isHeader)
+        }
+    }
+
+    /// Aisle+ adds another list; the free tier has one, so it's start over or upgrade.
+    private func newListTapped() {
+        if plus.isPlus {
+            withAnimation(.spring(response: 0.45, dampingFraction: 0.86)) {
+                list.createList()
+                composer.dismissPhotoNotice()
+                showDone = false
+            }
+            composerFocused = true
+        } else if list.items.isEmpty && list.ownLists.count <= 1 {
+            composerFocused = true
+        } else {
+            confirmingNewList = true
+        }
+    }
+
+    /// Sharing needs an account (to know who's on the list) and Aisle+ (the server checks too).
+    private func shareTapped() {
+        guard accounts.isSignedIn else {
+            sheet = .signIn
+            return
+        }
+        guard plus.isPlus else {
+            composer.upgradePrompt = "Sharing lists with your family is part of Aisle+."
+            return
+        }
+        Task {
+            do {
+                try await list.shareCurrent()
+                sheet = .share
+            } catch APIError.plusRequired(_, let message) {
+                composer.upgradePrompt = message
+            } catch {
+                sharingError = (error as? LocalizedError)?.errorDescription ?? "Couldn't share the list. Try again."
+            }
+        }
+    }
+
+    private var deleteTitle: String {
+        guard let shared = list.current.shared else { return "Delete “\(list.current.name)”?" }
+        return shared.isOwner ? "Delete “\(list.current.name)” for everyone?" : "Leave “\(list.current.name)”?"
+    }
+
+    private var deleteAction: String {
+        guard let shared = list.current.shared else { return "Delete list" }
+        return shared.isOwner ? "Delete for everyone" : "Leave list"
+    }
+
+    private var deleteMessage: String {
+        guard let shared = list.current.shared else { return "Its items are removed from this phone." }
+        return shared.isOwner ? "Everyone on the list loses it." : "The others keep the list."
+    }
+
     private func startNewList() {
         withAnimation(.spring(response: 0.45, dampingFraction: 0.86)) {
             list.clearAll()

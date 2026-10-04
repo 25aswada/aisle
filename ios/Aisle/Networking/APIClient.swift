@@ -293,6 +293,55 @@ extension APIClient {
     }
 }
 
+// MARK: - Shared lists
+
+extension APIClient {
+    /// A shared-list call. 404 means the list is gone (or you were removed), 401 that
+    /// you need to sign in, 402 that sharing needs Aisle+.
+    func sharedListRequest<Body: Encodable, T: Decodable>(_ method: String, _ path: String, body: Body?) async throws -> T {
+        var request = URLRequest(url: try makeURL(path: path))
+        request.httpMethod = method
+        if let body {
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = try JSONEncoder().encode(body)
+        }
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let deviceID {
+            request.setValue(deviceID, forHTTPHeaderField: "X-Aisle-Device")
+        }
+        guard let token = authToken?() else { throw SharedListError.signedOut }
+        request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        request.timeoutInterval = 15
+
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await session.data(for: request)
+        } catch let error as URLError where error.code == .cancelled {
+            throw CancellationError()
+        } catch let error as URLError
+            where [.notConnectedToInternet, .networkConnectionLost, .dataNotAllowed].contains(error.code) {
+            throw APIError.offline
+        } catch {
+            throw APIError.transport(error.localizedDescription)
+        }
+        guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
+        switch http.statusCode {
+        case 200..<300:
+            if http.statusCode == 204 || data.isEmpty, let empty = SharedListEmpty() as? T { return empty }
+            do {
+                return try JSONDecoder().decode(T.self, from: data)
+            } catch {
+                throw APIError.decoding(String(describing: error))
+            }
+        case 401: throw SharedListError.signedOut
+        case 402: throw Self.plusRequired(from: data)
+        case 404: throw SharedListError.gone
+        default: throw APIError.httpStatus(http.statusCode)
+        }
+    }
+}
+
 extension AisleAPI {
     /// Stand-ins without a map; the app just hides it.
     func storeLayout(storeID: String) async throws -> StoreLayout {

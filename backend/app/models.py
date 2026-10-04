@@ -297,3 +297,51 @@ class UsageCounter(Base):
     feature: Mapped[str] = mapped_column(String(20))  # photo_search or follow_up
     day: Mapped[str] = mapped_column(String(10))  # YYYY-MM-DD
     count: Mapped[int] = mapped_column(default=0)
+
+
+class SharedList(Base):
+    """A shopping list kept on the server so a family can share it (Aisle+ to share)."""
+    __tablename__ = "shared_lists"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    owner_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    name: Mapped[str] = mapped_column(String(60))
+    # Short code people type or tap to join, e.g. "K7Q2MX".
+    invite_code: Mapped[str] = mapped_column(String(12), unique=True)
+    # Bumped on every change, so phones can ask "anything new?" cheaply.
+    version: Mapped[int] = mapped_column(default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    members: Mapped[list["SharedListMember"]] = relationship(
+        back_populates="shared_list", cascade="all, delete-orphan", lazy="selectin"
+    )
+    items: Mapped[list["SharedListItem"]] = relationship(
+        back_populates="shared_list", cascade="all, delete-orphan", lazy="selectin"
+    )
+
+
+class SharedListMember(Base):
+    __tablename__ = "shared_list_members"
+    __table_args__ = (UniqueConstraint("list_id", "user_id", name="uq_shared_list_member"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    list_id: Mapped[str] = mapped_column(ForeignKey("shared_lists.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    shared_list: Mapped[SharedList] = relationship(back_populates="members")
+    user: Mapped[User] = relationship(lazy="joined")
+
+
+class SharedListItem(Base):
+    """One line on a shared list. The id comes from the phone that added it."""
+    __tablename__ = "shared_list_items"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    list_id: Mapped[str] = mapped_column(ForeignKey("shared_lists.id", ondelete="CASCADE"), index=True)
+    text: Mapped[str] = mapped_column(String(200))
+    quantity: Mapped[str | None] = mapped_column(String(40))
+    category_name: Mapped[str | None] = mapped_column(String(80))
+    is_done: Mapped[bool] = mapped_column(default=False)
+    position: Mapped[float] = mapped_column(default=0)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    shared_list: Mapped[SharedList] = relationship(back_populates="items")

@@ -33,7 +33,7 @@ struct AisleApp: App {
         self.analytics = AnalyticsClient(api: api)
         _health = State(initialValue: HealthMonitor(api: api))
         _storeSelection = State(initialValue: StoreSelection())
-        _shoppingList = State(initialValue: ShoppingListStore())
+        _shoppingList = State(initialValue: ShoppingListStore(service: RemoteSharedLists(client: api)))
         _recentSearches = State(initialValue: RecentSearches())
         _accounts = State(initialValue: AccountStore(auth: auth))
         let plus = PlusStore()
@@ -66,6 +66,12 @@ struct AisleApp: App {
                 .onChange(of: accounts.account?.id) {
                     // Aisle+ follows the account once signed in.
                     Task { await plus.syncWithServer() }
+                }
+                .onOpenURL { url in
+                    // aisle://join/K7Q2MX from a shared-list invite.
+                    if url.scheme == "aisle", url.host == "join", url.pathComponents.count > 1 {
+                        shoppingList.pendingJoinCode = url.lastPathComponent
+                    }
                 }
                 .task {
                     analytics.track(.appOpened)

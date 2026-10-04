@@ -304,6 +304,28 @@ sign-in created the account, so the app asks for a first name (`PATCH /me`).
 - A method without keys in `backend/.env` answers 503 with a message to try another way.
 - Errors carry `{"detail": "…"}` meant for the shopper.
 
+## Shared lists
+
+Lists live on the phone; sharing one (Aisle+) moves a copy here so everyone on it sees
+the same items. Every route needs a session. Joining with an invite code is free.
+
+| Route | Body | Notes |
+| --- | --- | --- |
+| `GET /lists` | | Summaries of the lists you're on: `id, name, version, is_owner, item_count, members` |
+| `POST /lists` | `{"name", "items": [item…]}` | Shares a list; 402 without Aisle+. 201 with the list |
+| `POST /lists/join` | `{"code"}` | Case and spacing don't matter; 404 for an unknown code |
+| `GET /lists/{id}` | | The list; 404 if it's gone or you're not on it |
+| `POST /lists/{id}/changes` | `{"changes": [{"op": "upsert", "item": item} \| {"op": "delete", "id"}]}` | Latest write to an item wins; bumps `version` |
+| `PATCH /lists/{id}` | `{"name"}` | |
+| `DELETE /lists/{id}` | | The owner deletes it for everyone; anyone else leaves. 204 |
+
+An item is `{"id", "text", "quantity", "category_name", "is_done", "position"}`; `id` is the
+phone's UUID for it. A list is `{"id", "name", "invite_code", "version", "is_owner",
+"members": [{"first_name", "is_owner", "is_you"}], "items": [item…]}`, up to 500 items.
+The app keeps unconfirmed changes on the phone, sends them after a short pause, polls every
+few seconds while the list is open, and replays its own pending changes on top of the
+server's copy. Invites are `aisle://join/<code>` links.
+
 ## Aisle+
 
 The subscription is bought with StoreKit 2 in the app; the server only trusts it after

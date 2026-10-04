@@ -15,6 +15,7 @@ from .routers import auth as auth_routes
 from .routers import feedback as feedback_routes
 from .routers import lists as list_routes
 from .routers import plus as plus_routes
+from .routers import shared_lists as shared_list_routes
 from .routers import route as route_routes
 from .routers import search as search_routes
 from .schemas import NearbyResponse, NearbyStoreResponse, StoreResponse
@@ -27,6 +28,7 @@ app.include_router(route_routes.router)
 app.include_router(analytics_routes.router)
 app.include_router(auth_routes.router)
 app.include_router(plus_routes.router)
+app.include_router(shared_list_routes.router)
 log = logging.getLogger(__name__)
 
 

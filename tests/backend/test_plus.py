@@ -235,6 +235,7 @@ def test_unverifiable_purchases_are_refused(api):
 
 
 def test_xcode_purchases_follow_the_setting(api, apple, monkeypatch):
+    monkeypatch.setattr(get_settings(), "aisle_plus_allow_xcode", False)
     xcode = apple.sign(environment="Xcode", originalTransactionId="55")
     assert api.post("/plus/sync", json={"transactions": [xcode]}, headers=device("a")).status_code == 400
     monkeypatch.setattr(get_settings(), "aisle_plus_allow_xcode", True)

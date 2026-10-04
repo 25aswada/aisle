@@ -58,6 +58,10 @@ targets:
           optional: you can always search for a store by name or address instead.
         NSLocalNetworkUsageDescription: >-
           Aisle connects to its server on your local network while it's in development.
+        # aisle://join/CODE opens a shared-list invite.
+        CFBundleURLTypes:
+          - CFBundleURLName: app.shopaisle.aisle
+            CFBundleURLSchemes: [aisle]
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
   AisleTests:
