@@ -142,14 +142,62 @@ struct GradientHeadline: View {
     let lead: String
     let accent: String
     var size: CGFloat = 36
+    /// Lets the accent's gradient drift slowly. Needs the accent on its own line
+    /// (`lead` ending in "\n"), since it's drawn as a separate text to be animated.
+    var flowing = false
 
     var body: some View {
-        (Text(lead) + Text(accent).foregroundStyle(Theme.accentInk))
-            .font(Theme.font(size, .bold, relativeTo: .largeTitle))
-            .tracking(-1)
-            .foregroundStyle(Theme.ink)
-            .fixedSize(horizontal: false, vertical: true)
-            .accessibilityAddTraits(.isHeader)
+        Group {
+            if flowing {
+                VStack(spacing: 0) {
+                    Text(lead.trimmingCharacters(in: .newlines))
+                    FlowingGradientText(text: accent)
+                }
+                .accessibilityElement(children: .combine)
+            } else {
+                Text(lead) + Text(accent).foregroundStyle(Theme.accentInk)
+            }
+        }
+        .font(Theme.font(size, .bold, relativeTo: .largeTitle))
+        .tracking(-1)
+        .foregroundStyle(Theme.ink)
+        .fixedSize(horizontal: false, vertical: true)
+        .accessibilityAddTraits(.isHeader)
+    }
+}
+
+/// Text filled with the accent gradient, its colours slowly drifting back and forth.
+/// The gradient is twice the text's width with mirrored stops (purple, pink, orange,
+/// pink, purple), and its window eases between two positions, so the motion never
+/// jumps. Still under Reduce Motion.
+private struct FlowingGradientText: View {
+    let text: String
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    /// Seconds for one full drift there and back.
+    private let period = 7.0
+    /// How far the window travels, in text widths. Small keeps it subtle.
+    private let travel = 0.3
+    private let colors = [0x9A6BD6, 0xDC6F9C, 0xEC9560, 0xDC6F9C, 0x9A6BD6].map { Color(hex: UInt32($0)) }
+
+    var body: some View {
+        if reduceMotion {
+            Text(text).foregroundStyle(Theme.accentInk)
+        } else {
+            TimelineView(.animation) { context in
+                let t = context.date.timeIntervalSinceReferenceDate / period
+                // 0 → 1 → 0 on a sine curve, so it slows at each end.
+                let offset = (1 - cos(t * 2 * .pi)) / 2 * travel
+                Text(text).foregroundStyle(
+                    LinearGradient(
+                        colors: colors,
+                        startPoint: UnitPoint(x: -offset, y: 0.5),
+                        endPoint: UnitPoint(x: 2 - offset, y: 0.5)
+                    )
+                )
+            }
+        }
     }
 }
 

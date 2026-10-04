@@ -270,7 +270,7 @@ private struct IntroStage: View {
             .accessibilityLabel("Aisle")
 
             VStack(spacing: 14) {
-                GradientHeadline(lead: "Find anything,\n", accent: "in any store.", size: 40)
+                GradientHeadline(lead: "Find anything,\n", accent: "in any store.", size: 40, flowing: true)
                     .multilineTextAlignment(.center)
                 Text("Ask for an item the way you'd say it. Aisle points you to the right spot, and tells you how sure it is.")
                     .font(Theme.font(17, relativeTo: .body))
