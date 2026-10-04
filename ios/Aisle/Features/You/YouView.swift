@@ -22,12 +22,14 @@ struct YouView: View {
     @State private var isPickingStore = false
     @State private var showHowItWorks = false
     @State private var confirmSignOut = false
+    @State private var scrolledUnderStatusBar: CGFloat = 0
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     topBar
+                        .trackingScrollUnderStatusBar($scrolledUnderStatusBar)
                     if let account = accounts.account {
                         ProfileHeader(account: account)
                             .padding(.top, 26)
@@ -66,7 +68,7 @@ struct YouView: View {
                 .padding(.top, 8)
                 .padding(.bottom, 32)
             }
-            .safeAreaInset(edge: .top, spacing: 0) { StatusBarBackdrop() }
+            .safeAreaInset(edge: .top, spacing: 0) { StatusBarBackdrop(scrolled: scrolledUnderStatusBar) }
             .background(AisleBackground())
             .toolbar(.hidden, for: .navigationBar)
             .sheet(isPresented: $isEditing) {

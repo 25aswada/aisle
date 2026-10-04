@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		05FC12E8D3FA74F6B4A657B8 /* OnboardingFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = B99C6CB8AF8BD5464965C162 /* OnboardingFlow.swift */; };
 		0868B5944EF7F2E05CAEEABD /* StoreDirections.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14F4ABCC18B7416BA4E13EF5 /* StoreDirections.swift */; };
+		0CD8E5664EA53D0FB2FEE253 /* ShopperStats.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B6177DDB775035FB051DAD6 /* ShopperStats.swift */; };
 		159DB262AB1B4E9FC1376D5E /* Account.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E28133ACF05710EB0935DF3 /* Account.swift */; };
 		15B790F0477BB144E84698A5 /* Store.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0805416F4A0EBB255FFB627 /* Store.swift */; };
 		1C11F1DBCA0F567C1442269D /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 62DE0639BE302C03E9AF6ABF /* AppConfig.swift */; };
@@ -82,6 +83,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		0B6177DDB775035FB051DAD6 /* ShopperStats.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShopperStats.swift; sourceTree = "<group>"; };
 		14F4ABCC18B7416BA4E13EF5 /* StoreDirections.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreDirections.swift; sourceTree = "<group>"; };
 		1A244A07E9C46849C5BAE3C8 /* StorePickerModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorePickerModelTests.swift; sourceTree = "<group>"; };
 		1EA8A8BFF660474A635C93F4 /* APIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIClient.swift; sourceTree = "<group>"; };
@@ -331,6 +333,7 @@
 			isa = PBXGroup;
 			children = (
 				4E28133ACF05710EB0935DF3 /* Account.swift */,
+				0B6177DDB775035FB051DAD6 /* ShopperStats.swift */,
 			);
 			path = Account;
 			sourceTree = "<group>";
@@ -523,6 +526,7 @@
 				FCC5FF0150AE423C10419E01 /* Route.swift in Sources */,
 				4B3D8C22EEAF139C4D6A57DE /* SearchResultCard.swift in Sources */,
 				70DD8615B5FDDF6F0104BEA2 /* SearchingView.swift in Sources */,
+				0CD8E5664EA53D0FB2FEE253 /* ShopperStats.swift in Sources */,
 				5D8635D9F77B8E2152CB998A /* ShoppingList.swift in Sources */,
 				A7B8720D41ED741D3BB76D31 /* ShoppingListStore.swift in Sources */,
 				89959A26C4D55B8332E66A29 /* ShoppingListView.swift in Sources */,
