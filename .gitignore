@@ -1,3 +1,7 @@
 __pycache__/
 .pytest_cache/
 .DS_Store
+
+# Website build output and local previews
+website/public/
+.sitepreview/
