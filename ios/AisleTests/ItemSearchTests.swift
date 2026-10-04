@@ -546,9 +546,9 @@ private final class HeldAPI: AisleAPI, @unchecked Sendable {
     func nearbyStores(latitude: Double, longitude: Double, limit: Int?) async throws -> [Store] {
         try await base.nearbyStores(latitude: latitude, longitude: longitude, limit: limit)
     }
-    func searchStores(query: String, near: Coordinate?) async throws -> [Store] {
-        try await base.searchStores(query: query, near: near)
-    }
+    // Both shapes, so this compiles while searchStores is gaining a location.
+    func searchStores(query: String) async throws -> [Store] { [Fixtures.store] }
+    func searchStores(query: String, near: Coordinate?) async throws -> [Store] { [Fixtures.store] }
     func store(id: String) async throws -> Store { try await base.store(id: id) }
     func identify(photo: Data, note: String?, storeID: String?) async throws -> String? {
         try await base.identify(photo: photo, note: note, storeID: storeID)
