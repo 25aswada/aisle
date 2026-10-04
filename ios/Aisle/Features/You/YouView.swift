@@ -449,19 +449,15 @@ private struct YouSection<Content: View>: View {
     }
 }
 
-/// A glyph on a soft gradient square, so settings rows stay on brand.
+/// A row's glyph, bare, in a fixed-width slot so the row text lines up.
 private struct IconTile: View {
     let systemImage: String
 
     var body: some View {
         Image(systemName: systemImage)
-            .font(.system(size: 15, weight: .semibold))
+            .font(.system(size: 18, weight: .semibold))
             .foregroundStyle(Theme.ink)
             .frame(width: 34, height: 34)
-            .background(
-                LinearGradient(colors: Theme.accentColors.map { $0.opacity(0.6) }, startPoint: .topLeading, endPoint: .bottomTrailing),
-                in: RoundedRectangle(cornerRadius: 11, style: .continuous)
-            )
             .accessibilityHidden(true)
     }
 }
