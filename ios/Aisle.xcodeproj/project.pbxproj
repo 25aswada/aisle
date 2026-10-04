@@ -29,6 +29,7 @@
 		5ACF238140B9DDE56FE153F3 /* ShoppingModeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 246C0B69B3F61F328740F91F /* ShoppingModeView.swift */; };
 		5D2C0505FE80FEA9B8C14D48 /* StoreSelectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E6452CE56BAD03E0834263E /* StoreSelectionTests.swift */; };
 		5D8635D9F77B8E2152CB998A /* ShoppingList.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5F34F9C2719C1FB102927590 /* ShoppingList.swift */; };
+		5EBED4D197E5A4EBAD9DC51C /* PlusViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC67A4D579579373CED54185 /* PlusViews.swift */; };
 		6307DD9A3EDCA4A1F547A86B /* Feedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = D013BA53FADF2AB56FCA7D95 /* Feedback.swift */; };
 		6D55C93158E8BB9A076EFA62 /* ShoppingListTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA92FEBC6C187376090D1B60 /* ShoppingListTests.swift */; };
 		6FA41AB5A696FEBA3B6D4A50 /* LiveOnboarding.swift in Sources */ = {isa = PBXBuildFile; fileRef = 496BBC47AF11D1538DE838C7 /* LiveOnboarding.swift */; };
@@ -39,6 +40,7 @@
 		7279D46DDD29BC46B14AD3AF /* AisleApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6470DDB95F2D49F70C7251AD /* AisleApp.swift */; };
 		738E7DD65402B6F914B1110D /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 327AC850D80060DC07A58341 /* Theme.swift */; };
 		763D77EA551898D70D72C44A /* YouView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 26428039EFD4FC4E3023FFCF /* YouView.swift */; };
+		790E90D0AC7C2C3848D3A993 /* PlusStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F15E3A9B2B74D695D67A224 /* PlusStore.swift */; };
 		7E1D3D2557C7F2F7413F2C20 /* Geist-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = DF43A2FC5DB139B6419BA211 /* Geist-Bold.ttf */; };
 		80E939493C56D0825C7991C0 /* ItemSearchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2710CE8DFA4696F6750EE7A /* ItemSearchTests.swift */; };
 		85DCE88F7D6A33412322962B /* Geist-Medium.ttf in Resources */ = {isa = PBXBuildFile; fileRef = F4C6125E1AC53F27D7DB3122 /* Geist-Medium.ttf */; };
@@ -118,6 +120,7 @@
 		8E6452CE56BAD03E0834263E /* StoreSelectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreSelectionTests.swift; sourceTree = "<group>"; };
 		9C6BE6461AED2D5FE72E6E32 /* Analytics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Analytics.swift; sourceTree = "<group>"; };
 		9C8D794D2EF42CB61E31D9D4 /* PolishTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolishTests.swift; sourceTree = "<group>"; };
+		9F15E3A9B2B74D695D67A224 /* PlusStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlusStore.swift; sourceTree = "<group>"; };
 		ABB2DBC3C15E5E57C3A76464 /* TestSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TestSupport.swift; sourceTree = "<group>"; };
 		ADDA028F2F6A589486F37BCD /* LocationProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationProvider.swift; sourceTree = "<group>"; };
 		AEA7188DFFF4134CEB8270FC /* DecodingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecodingTests.swift; sourceTree = "<group>"; };
@@ -147,6 +150,7 @@
 		F4C6125E1AC53F27D7DB3122 /* Geist-Medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Geist-Medium.ttf"; sourceTree = "<group>"; };
 		F5A3B0C2147E6BCCE122221E /* CameraSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraSheet.swift; sourceTree = "<group>"; };
 		FB59E9020541E01FE841D412 /* ItemSearch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ItemSearch.swift; sourceTree = "<group>"; };
+		FC67A4D579579373CED54185 /* PlusViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlusViews.swift; sourceTree = "<group>"; };
 		FDC36B0007068675A9412E92 /* Geist-SemiBold.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Geist-SemiBold.ttf"; sourceTree = "<group>"; };
 		FE9FE08311669988290AB5A0 /* AdaptiveStack.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdaptiveStack.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -225,6 +229,14 @@
 				26428039EFD4FC4E3023FFCF /* YouView.swift */,
 			);
 			path = You;
+			sourceTree = "<group>";
+		};
+		229D22A05AC8EE9867068DFD /* Plus */ = {
+			isa = PBXGroup;
+			children = (
+				FC67A4D579579373CED54185 /* PlusViews.swift */,
+			);
+			path = Plus;
 			sourceTree = "<group>";
 		};
 		27D5E14948AFAE53CDABD6F9 /* Stores */ = {
@@ -322,6 +334,7 @@
 				9A8C1EA4ACACE94BF66EEC19 /* Find */,
 				0F73C214918171DE8E0753ED /* List */,
 				0F9E0A14F29071222142CC12 /* Onboarding */,
+				229D22A05AC8EE9867068DFD /* Plus */,
 				7007368BF32B55E4E12BF44C /* Shared */,
 				FE7B0901AC674018078B829E /* Shopping */,
 				1B90F5369D16982E4DCCC486 /* You */,
@@ -333,6 +346,7 @@
 			isa = PBXGroup;
 			children = (
 				4E28133ACF05710EB0935DF3 /* Account.swift */,
+				9F15E3A9B2B74D695D67A224 /* PlusStore.swift */,
 				0B6177DDB775035FB051DAD6 /* ShopperStats.swift */,
 			);
 			path = Account;
@@ -521,6 +535,8 @@
 				6FA41AB5A696FEBA3B6D4A50 /* LiveOnboarding.swift in Sources */,
 				97794A08EF311AE5CCB6C4C1 /* LocationProvider.swift in Sources */,
 				05FC12E8D3FA74F6B4A657B8 /* OnboardingFlow.swift in Sources */,
+				790E90D0AC7C2C3848D3A993 /* PlusStore.swift in Sources */,
+				5EBED4D197E5A4EBAD9DC51C /* PlusViews.swift in Sources */,
 				CA6DA4E9F57439A98861270D /* RecentSearches.swift in Sources */,
 				B3946AE5F2A4078DA484597D /* RootView.swift in Sources */,
 				FCC5FF0150AE423C10419E01 /* Route.swift in Sources */,

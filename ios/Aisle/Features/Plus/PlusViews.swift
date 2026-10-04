@@ -41,6 +41,7 @@ struct PlusTabView: View {
     @Environment(PlusStore.self) private var plus
     @State private var showingPaywall = false
     @State private var restoreMessage: String?
+    @State private var scrolledUnderStatusBar: CGFloat = 0
 
     private let comparison: [(String, String, String)] = [
         ("Find items in any store", "✓", "✓"),
@@ -67,6 +68,7 @@ struct PlusTabView: View {
                                 .background(Theme.surface.opacity(0.92), in: Capsule())
                         }
                     }
+                    .trackingScrollUnderStatusBar($scrolledUnderStatusBar)
 
                     HeroCard(isPlus: plus.isPlus, yearlyPrice: plus.price(.yearly)) {
                         showingPaywall = true
@@ -93,7 +95,7 @@ struct PlusTabView: View {
                 .padding(.top, 8)
                 .padding(.bottom, 32)
             }
-            .safeAreaInset(edge: .top, spacing: 0) { StatusBarBackdrop() }
+            .safeAreaInset(edge: .top, spacing: 0) { StatusBarBackdrop(scrolled: scrolledUnderStatusBar) }
             .background(AisleBackground())
             .toolbar(.hidden, for: .navigationBar)
             .task { await plus.load() }
