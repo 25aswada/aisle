@@ -122,17 +122,8 @@ extension FindView {
                 }
             }
         case .loading:
-            QueryBubble(text: model.trimmedQuery)
-            AisleReply {
-                HStack(spacing: 8) {
-                    ProgressView()
-                    Text("Looking in \(store.name)…")
-                }
-            }
-            SearchResultCard(result: .placeholder, retailer: nil)
-                .redacted(reason: .placeholder)
-                .accessibilityElement(children: .ignore)
-                .accessibilityLabel("Finding \(model.trimmedQuery)")
+            SearchingView(query: model.trimmedQuery, storeName: store.name, retailer: store.retailerDisplayName)
+                .transition(.opacity)
         case .loaded(let result):
             QueryBubble(text: result.query.isEmpty ? result.item : result.query)
             AisleReply {
