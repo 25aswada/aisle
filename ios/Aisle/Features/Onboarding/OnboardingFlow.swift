@@ -1,49 +1,69 @@
 import SwiftUI
 
-/// First launch: the animated walkthrough, then an optional account.
+/// First launch: the animated walkthrough, then an account, which Aisle requires.
+/// `signInOnly` skips the walkthrough, for a phone that has seen it but is signed out.
 struct OnboardingFlow: View {
     static let completedKey = "aisle.onboardingComplete"
 
     let api: AisleAPI
     let location: LocationProviding
+    let signInOnly: Bool
     let onFinish: () -> Void
 
     @Environment(AccountStore.self) private var accounts
     @State private var path: [AccountFlowStep] = []
     @State private var signUp: SignUpModel
 
-    init(api: AisleAPI, location: LocationProviding, auth: AuthService, onFinish: @escaping () -> Void) {
+    init(api: AisleAPI, location: LocationProviding, auth: AuthService, signInOnly: Bool = false,
+         onFinish: @escaping () -> Void) {
         self.api = api
         self.location = location
+        self.signInOnly = signInOnly
         self.onFinish = onFinish
         _signUp = State(initialValue: SignUpModel(auth: auth))
     }
 
     var body: some View {
         NavigationStack(path: $path) {
-            LiveOnboarding(
-                api: api,
-                location: location,
-                onCreateAccount: { path.append(.method(returning: false)) },
-                onSignIn: { path.append(.method(returning: true)) },
-                onFinish: onFinish
-            )
+            Group {
+                if signInOnly {
+                    accountScreen(.method(returning: true), canLeave: false)
+                } else {
+                    LiveOnboarding(
+                        api: api,
+                        location: location,
+                        onCreateAccount: createAccount,
+                        onSignIn: { path.append(.method(returning: true)) },
+                        // Skipping or finishing the tour still leads to an account.
+                        onFinish: createAccount
+                    )
+                }
+            }
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: AccountFlowStep.self) { step in
-                AccountFlowScreen(
-                    step: step, model: signUp, path: $path,
-                    onLeave: {}, onSkip: onFinish,
-                    onSignedIn: { session in
-                        accounts.signIn(session)
-                        onFinish()
-                    }
-                )
-                .toolbar(.hidden, for: .navigationBar)
-                .navigationBarBackButtonHidden(true)
+                accountScreen(step, canLeave: true)
             }
         }
         .tint(Theme.ink)
         .font(.aisleBody)
+    }
+
+    /// Replaying the intro from You while signed in just ends it.
+    private func createAccount() {
+        if accounts.isSignedIn { onFinish() } else { path.append(.method(returning: false)) }
+    }
+
+    private func accountScreen(_ step: AccountFlowStep, canLeave: Bool) -> some View {
+        AccountFlowScreen(
+            step: step, model: signUp, path: $path,
+            onLeave: canLeave ? {} : nil, onSkip: nil,
+            onSignedIn: { session in
+                accounts.signIn(session)
+                onFinish()
+            }
+        )
+        .toolbar(.hidden, for: .navigationBar)
+        .navigationBarBackButtonHidden(true)
     }
 }
 

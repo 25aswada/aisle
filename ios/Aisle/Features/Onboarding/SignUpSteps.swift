@@ -4,23 +4,27 @@ struct SignUpMethodStep: View {
     @Bindable var model: SignUpModel
     /// "Sign in" from the intro shows a welcome-back headline; the steps are the same.
     var isReturning = false
-    let onBack: () -> Void
+    let onBack: (() -> Void)?
     let onPhone: () -> Void
     let onEmail: () -> Void
     let onProviderSuccess: () -> Void
-    let onSkip: () -> Void
+    /// Nil hides "Not now": in onboarding an account is required.
+    let onSkip: (() -> Void)?
 
     var body: some View {
-        OnboardingPage(onBack: onBack, trailingLabel: "Not now", onTrailing: onSkip) {
+        OnboardingPage(onBack: onBack, trailingLabel: onSkip == nil ? nil : "Not now", onTrailing: onSkip) {
             VStack(alignment: .leading, spacing: 12) {
-                AisleMark(size: 44)
-                    .padding(.bottom, 10)
+                // Without a Back button the top bar already shows the mark.
+                if onBack != nil {
+                    AisleMark(size: 44)
+                        .padding(.bottom, 10)
+                }
                 if isReturning {
                     GradientHeadline(lead: "Welcome ", accent: "back.")
                     OnboardingBody(text: "Sign in the way you signed up. New here? Any of these makes a free account.")
                 } else {
                     GradientHeadline(lead: "Your lists, ", accent: "on every device.")
-                    OnboardingBody(text: "Create a free account to keep your shopping lists, usual stores and recent searches in sync.")
+                    OnboardingBody(text: "Create your free account to start using Aisle. It keeps your shopping lists, usual stores and recent searches in sync.")
                 }
                 VStack(alignment: .leading, spacing: 12) {
                     Benefit(symbol: "checklist", text: "Lists that follow you to any phone")

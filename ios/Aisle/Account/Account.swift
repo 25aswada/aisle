@@ -19,9 +19,12 @@ enum CodeChannel: Equatable {
     case phone, email
 }
 
-/// The signed-in shopper, as the server knows them. Optional: everything in Aisle works without one.
+/// The signed-in shopper, as the server knows them. Required to use the app.
 struct Account: Codable, Equatable {
     var id: String
+    /// Stamped on this account's Aisle+ purchases (StoreKit's appAccountToken), so the
+    /// subscription belongs to this account rather than the Apple ID or phone.
+    var plusToken: UUID? = nil
     var firstName: String
     var email: String?
     var phone: String?
@@ -143,10 +146,12 @@ final class AccountStore {
         }
     }
 
-    /// Deletes the account on the server, then signs out here.
-    func deleteAccount() async throws {
+    /// Deletes the account on the server, then erases what the phone kept for it
+    /// (`eraseLocalData`) and signs out here. Nothing is erased if the server refuses.
+    func deleteAccount(eraseLocalData: () -> Void = {}) async throws {
         guard let token = tokens.token, let auth else { return }
         try await auth.deleteAccount(token: token)
+        eraseLocalData()
         tokens.token = nil
         account = nil
     }

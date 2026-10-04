@@ -7,6 +7,7 @@ struct AccountAPI {
 
     struct UserBody: Decodable {
         let id: Int
+        let plusToken: String?
         let firstName: String
         let email: String?
         let phone: String?
@@ -17,11 +18,12 @@ struct AccountAPI {
             case id, email, phone, providers
             case firstName = "first_name"
             case wantsTips = "wants_tips"
+            case plusToken = "plus_token"
         }
 
         var account: Account {
             Account(
-                id: String(id), firstName: firstName, email: email, phone: phone, wantsTips: wantsTips,
+                id: String(id), plusToken: plusToken.flatMap(UUID.init(uuidString:)), firstName: firstName, email: email, phone: phone, wantsTips: wantsTips,
                 providers: providers.compactMap(AuthProvider.init(rawValue:))
             )
         }

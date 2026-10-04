@@ -49,12 +49,15 @@ struct AisleApp: App {
     var body: some Scene {
         WindowGroup {
             Group {
-                if onboardingComplete {
+                // Aisle needs an account: the tabs open only once someone is signed in.
+                if onboardingComplete && accounts.isSignedIn {
                     RootView(api: api, location: location, analytics: analytics, recents: recentSearches)
                 } else {
-                    OnboardingFlow(api: api, location: location, auth: auth) {
+                    // Signed out after the intro (or after "Sign out"): straight to sign-in.
+                    OnboardingFlow(api: api, location: location, auth: auth, signInOnly: onboardingComplete) {
                         withAnimation(.easeInOut(duration: 0.3)) { onboardingComplete = true }
                     }
+                    .id(onboardingComplete)
                 }
             }
                 .environment(health)
@@ -75,9 +78,16 @@ struct AisleApp: App {
                         Task { _ = try? await api.storeLayout(storeID: id) }
                     }
                 }
-                .onChange(of: accounts.account?.id) {
-                    // Aisle+ follows the account once signed in.
-                    Task { await plus.syncWithServer() }
+                .onChange(of: accounts.account?.id, initial: true) { _, id in
+                    // The phone's lists, history and stats belong to one account.
+                    guard let id else { return }
+                    LocalAccountData.adopt(accountID: id, .init(
+                        lists: shoppingList, recents: recentSearches, storeSelection: storeSelection, offlineMaps: offlineMaps
+                    ))
+                }
+                .onChange(of: accounts.account?.plusToken, initial: true) { _, token in
+                    // Aisle+ belongs to the signed-in account; signed out, there's none.
+                    plus.accountToken = token
                 }
                 .onOpenURL { url in
                     // aisle://join/K7Q2MX from a shared-list invite.

@@ -1,8 +1,7 @@
 import SwiftUI
 
-/// The You tab: who you are (or an invitation to make an account), what Aisle has
-/// helped with, your home store, appearance, preferences, data and about.
-/// Lists and searches stay on the device either way.
+/// The You tab: who you are, what Aisle has helped with, your home store, appearance,
+/// preferences, data and about. Deleting the account erases what's on the phone too.
 struct YouView: View {
     let api: AisleAPI
     let location: LocationProviding
@@ -17,6 +16,9 @@ struct YouView: View {
     @Environment(RecentSearches.self) private var recents
     @Environment(StoreSelection.self) private var storeSelection
     @Environment(AccountStore.self) private var accounts
+    @Environment(PlusStore.self) private var plus
+    @Environment(ShoppingListStore.self) private var lists
+    @Environment(\.offlineMaps) private var offlineMaps
 
     @State private var isEditing = false
     @State private var isPickingStore = false
@@ -30,6 +32,7 @@ struct YouView: View {
     @State private var confirmSignOut = false
     @State private var isSigningIn = false
     @State private var confirmDelete = false
+    @State private var managingSubscription = false
     @State private var deleteError: String?
     @State private var scrolledUnderStatusBar: CGFloat = 0
 
@@ -111,18 +114,16 @@ struct YouView: View {
                 }
             }
             .confirmationDialog("Delete your account?", isPresented: $confirmDelete, titleVisibility: .visible) {
+                if plus.isPlus {
+                    Button("Cancel Aisle+ first") { managingSubscription = true }
+                }
                 Button("Delete account", role: .destructive) {
-                    Task {
-                        do {
-                            try await accounts.deleteAccount()
-                        } catch {
-                            deleteError = (error as? LocalizedError)?.errorDescription ?? "Couldn't delete your account. Try again."
-                        }
-                    }
+                    Task { await deleteAccount() }
                 }
             } message: {
-                Text("This permanently deletes your Aisle account and how you sign in. Your list and recent searches stay on this phone.")
+                Text(plus.isPlus ? Self.deleteMessage + " " + Self.subscriptionNote : Self.deleteMessage)
             }
+            .manageSubscriptionsSheet(isPresented: $managingSubscription)
             .alert("Couldn't delete your account", isPresented: Binding(
                 get: { deleteError != nil }, set: { if !$0 { deleteError = nil } }
             )) {
@@ -133,7 +134,7 @@ struct YouView: View {
             .confirmationDialog("Sign out of Aisle?", isPresented: $confirmSignOut, titleVisibility: .visible) {
                 Button("Sign out", role: .destructive) { accounts.signOut() }
             } message: {
-                Text("Your list and recent searches stay on this phone.")
+                Text("Your lists and history stay on this phone for when you sign back in. If someone else signs in here, they start fresh.")
             }
         }
     }
@@ -300,6 +301,21 @@ struct YouView: View {
                 }
                 .accessibilityIdentifier("deleteAccountButton")
             }
+        }
+    }
+
+    static let deleteMessage = "This permanently deletes your Aisle account, your lists, history and stats, and ends Aisle+ on this account. Aisle starts over as if newly installed."
+    static let subscriptionNote = "Apple bills Aisle+, and deleting your account doesn't cancel it. Cancel it first so you're not charged again."
+
+    private func deleteAccount() async {
+        do {
+            try await accounts.deleteAccount {
+                LocalAccountData.eraseForDeletedAccount(.init(
+                    lists: lists, recents: recents, storeSelection: storeSelection, offlineMaps: offlineMaps
+                ))
+            }
+        } catch {
+            deleteError = (error as? LocalizedError)?.errorDescription ?? "Couldn't delete your account. Try again."
         }
     }
 

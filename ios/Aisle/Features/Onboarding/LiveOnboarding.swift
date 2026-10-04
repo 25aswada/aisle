@@ -2,7 +2,8 @@ import SwiftUI
 
 /// First launch, as a short interactive story: the logo assembles, Aisle answers a
 /// question on its own, the shopper asks one, then learns the confidence levels,
-/// taps "Found it", picks a store and is offered (never forced into) an account.
+/// taps "Found it", picks a store and then makes an account, which Aisle requires.
+/// "Skip" skips the tour, not the account.
 struct LiveOnboarding: View {
     enum Step: Int, CaseIterable {
         case intro, demo, tryIt, confidence, found, location, done
@@ -56,7 +57,7 @@ struct LiveOnboarding: View {
                 go(.done)
             }, onLater: { go(.done) })
         case .done:
-            DoneStage(store: chosenStore, onCreateAccount: onCreateAccount, onFinish: onFinish)
+            DoneStage(store: chosenStore, onCreateAccount: onCreateAccount, onSignIn: onSignIn, onFinish: onFinish)
         }
     }
 
@@ -898,13 +899,16 @@ private struct LocationStage: View {
     }
 }
 
-// MARK: - 7. Done: optional account
+// MARK: - 7. Done: make an account
 
 private struct DoneStage: View {
     let store: Store?
     let onCreateAccount: () -> Void
+    let onSignIn: () -> Void
+    /// Only when already signed in (replaying the intro from You).
     let onFinish: () -> Void
 
+    @Environment(AccountStore.self) private var accounts
     @State private var burst = false
     @State private var landed = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -927,7 +931,9 @@ private struct DoneStage: View {
                     size: 36
                 )
                 .multilineTextAlignment(.center)
-                Text("Want your lists and recent finds on every device? Make a free account. It's optional, and you can do it later in You.")
+                Text(accounts.isSignedIn
+                     ? "That's the tour. Happy shopping."
+                     : "Last step: make your free account. It keeps your lists and recent finds on every device.")
                     .font(Theme.font(17, relativeTo: .body))
                     .foregroundStyle(Theme.secondaryInk)
                     .multilineTextAlignment(.center)
@@ -939,10 +945,15 @@ private struct DoneStage: View {
             Spacer(minLength: 24)
 
             VStack(spacing: 10) {
-                Button("Create free account", action: onCreateAccount)
-                    .buttonStyle(.aisleAccent)
-                Button("Maybe later", action: onFinish)
-                    .buttonStyle(.aisleSoft)
+                if accounts.isSignedIn {
+                    Button("Start shopping", action: onFinish)
+                        .buttonStyle(.aisleAccent)
+                } else {
+                    Button("Create free account", action: onCreateAccount)
+                        .buttonStyle(.aisleAccent)
+                    Button("I already have an account", action: onSignIn)
+                        .buttonStyle(.aisleSoft)
+                }
             }
             .padding(.horizontal, 24)
             .padding(.bottom, 12)

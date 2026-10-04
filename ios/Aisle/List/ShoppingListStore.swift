@@ -279,6 +279,20 @@ final class ShoppingListStore {
         }
     }
 
+    /// Back to a fresh install: one empty list, nothing shared, nothing waiting to sync.
+    /// For a deleted account.
+    func eraseAll() {
+        pushTasks.values.forEach { $0.cancel() }
+        pushTasks = [:]
+        inFlight = []
+        syncProblem = nil
+        pendingJoinCode = nil
+        let fresh = ShoppingList(name: "My list", items: [])
+        lists = [fresh]
+        currentID = fresh.id
+        defaults.removeObject(forKey: Self.legacyItemsKey)
+    }
+
     /// The phone signed out: shared lists stay as local copies until signing back in.
     func forgetSharing() {
         for index in lists.indices {

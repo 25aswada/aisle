@@ -9,6 +9,7 @@ private final class FakeAuth: AuthService {
     var profileUpdates: [(String?, Bool?)] = []
     var signedOutTokens: [String] = []
     var deleted: [String] = []
+    var deleteFails = false
     var meResult: Result<Account, Error> = .failure(AuthError.network)
 
     static func account(_ name: String = "", providers: [AuthProvider] = [.phone]) -> Account {
@@ -39,7 +40,10 @@ private final class FakeAuth: AuthService {
 
     func signOut(token: String) async { signedOutTokens.append(token) }
 
-    func deleteAccount(token: String) async throws { deleted.append(token) }
+    func deleteAccount(token: String) async throws {
+        if deleteFails { throw AuthError.network }
+        deleted.append(token)
+    }
 }
 
 @MainActor
@@ -177,9 +181,34 @@ final class SignUpTests: XCTestCase {
         let auth = FakeAuth()
         let store = AccountStore(defaults: .fresh("SignUpTests.Delete"), tokens: InMemoryTokenStore(), auth: auth)
         store.signIn(AuthSession(token: "tok", account: FakeAuth.account("Sam"), isNew: false))
-        try await store.deleteAccount()
+        var erased = false
+        try await store.deleteAccount { erased = true }
         XCTAssertEqual(auth.deleted, ["tok"])
+        XCTAssertTrue(erased)
         XCTAssertFalse(store.isSignedIn)
+    }
+
+    func testAFailedDeletionKeepsTheAccountAndTheData() async {
+        let auth = FakeAuth()
+        auth.deleteFails = true
+        let store = AccountStore(defaults: .fresh("SignUpTests.DeleteFails"), tokens: InMemoryTokenStore(), auth: auth)
+        store.signIn(AuthSession(token: "tok", account: FakeAuth.account("Sam"), isNew: false))
+        var erased = false
+        do {
+            try await store.deleteAccount { erased = true }
+            XCTFail("Expected the deletion to fail")
+        } catch {}
+        XCTAssertFalse(erased)
+        XCTAssertTrue(store.isSignedIn)
+    }
+
+    func testTheAccountCarriesItsAislePlusToken() throws {
+        let json = #"{"id": 7, "plus_token": "6F9619FF-8B86-D011-B42D-00C04FC964FF", "first_name": "Sam", "email": null, "phone": null, "wants_tips": false, "providers": ["apple"]}"#
+        let account = try JSONDecoder().decode(AccountAPI.UserBody.self, from: Data(json.utf8)).account
+        XCTAssertEqual(account.plusToken, UUID(uuidString: "6f9619ff-8b86-d011-b42d-00c04fc964ff"))
+        // Cached before the token existed: still decodes, without one.
+        let old = try JSONDecoder().decode(Account.self, from: Data(#"{"id": "7", "firstName": "Sam", "wantsTips": false, "providers": []}"#.utf8))
+        XCTAssertNil(old.plusToken)
     }
 
     func testAnAccountWithoutASessionIsSignedOut() {

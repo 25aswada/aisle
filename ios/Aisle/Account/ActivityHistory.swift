@@ -122,6 +122,11 @@ final class TripHistory {
         trips.removeAll { $0.id == id }
         HistoryFile.save(trips, to: "trips.json")
     }
+
+    func clear() {
+        trips.removeAll()
+        HistoryFile.remove("trips.json")
+    }
 }
 
 // MARK: - Contributions
@@ -159,6 +164,11 @@ final class ContributionLog {
         entries.insert(Entry(item: item, storeName: store.name, logoURL: store.retailerLogoURL,
                              kind: kind, place: place, date: .now), at: 0)
         HistoryFile.save(entries, to: "contributions.json")
+    }
+
+    func clear() {
+        entries.removeAll()
+        HistoryFile.remove("contributions.json")
     }
 }
 

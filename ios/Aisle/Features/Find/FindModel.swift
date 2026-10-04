@@ -41,6 +41,9 @@ final class FindModel {
     /// Set when a free-tier limit is hit, to open the Aisle+ sheet saying why.
     var upgradePrompt: String?
 
+    /// Where recents go when no shared `RecentSearches` is passed in.
+    static let ephemeralSuite = "aisle.ephemeral"
+
     @ObservationIgnored private let api: AisleAPI
     @ObservationIgnored private let analytics: AnalyticsTracking
     @ObservationIgnored let recents: RecentSearches
@@ -54,7 +57,7 @@ final class FindModel {
     ) {
         self.api = api
         self.analytics = analytics ?? NoopAnalytics()
-        self.recents = recents ?? RecentSearches(defaults: UserDefaults(suiteName: "aisle.ephemeral") ?? .standard)
+        self.recents = recents ?? RecentSearches(defaults: UserDefaults(suiteName: Self.ephemeralSuite) ?? .standard)
         self.cache = cache ?? SearchCache()
     }
 

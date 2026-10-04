@@ -13,16 +13,17 @@ struct AccountFlowScreen: View {
     let step: AccountFlowStep
     let model: SignUpModel
     @Binding var path: [AccountFlowStep]
-    /// Leaving the method screen when it's the root (the You tab sheet).
-    let onLeave: () -> Void
-    let onSkip: () -> Void
+    /// Leaving the method screen when it's the root (the You tab sheet). Nil hides Back there.
+    let onLeave: (() -> Void)?
+    /// "Not now" on the method screen. Nil (onboarding) means an account is required.
+    let onSkip: (() -> Void)?
     let onSignedIn: (AuthSession) -> Void
 
     var body: some View {
         switch step {
         case .method(let returning):
             SignUpMethodStep(
-                model: model, isReturning: returning, onBack: back,
+                model: model, isReturning: returning, onBack: path.isEmpty && onLeave == nil ? nil : back,
                 onPhone: { path.append(.phone) },
                 onEmail: { path.append(.email) },
                 onProviderSuccess: signedIn,
@@ -54,7 +55,7 @@ struct AccountFlowScreen: View {
     }
 
     private func back() {
-        if path.isEmpty { onLeave() } else { path.removeLast() }
+        if path.isEmpty { onLeave?() } else { path.removeLast() }
     }
 }
 

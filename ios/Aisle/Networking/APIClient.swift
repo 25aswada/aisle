@@ -278,9 +278,10 @@ struct PlusServerStatus: Decodable, Equatable {
 
 extension APIClient {
     /// Sends the App Store's signed transactions so the server can verify Aisle+.
-    func syncPlus(transactions: [String]) async throws -> PlusServerStatus {
-        struct Body: Encodable { let transactions: [String] }
-        return try await post("plus/sync", body: Body(transactions: transactions))
+    /// `claim` is "Restore purchases": also take over a subscription bought for a deleted account.
+    func syncPlus(transactions: [String], claim: Bool = false) async throws -> PlusServerStatus {
+        struct Body: Encodable { let transactions: [String]; let claim: Bool }
+        return try await post("plus/sync", body: Body(transactions: transactions, claim: claim))
     }
 
     func plusStatus() async throws -> PlusServerStatus {
