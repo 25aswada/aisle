@@ -8,9 +8,9 @@ enum Legal {
     static let version = "2026-10-04"
     static let effectiveDate = "October 4, 2026"
     static let contactEmail = "support@shopaisle.app"
-    /// Public copies of these documents and the support page, served by Aisle's server
-    /// (backend/app/legal.py), for the App Store listing and links in the app.
-    static let websiteBase = URL(string: "https://aisle-api-db30672cd6aa.herokuapp.com")!
+    /// Public copies of these documents and the support page on shopaisle.app (built from
+    /// backend/app/legal.py by website/build.py), for the App Store listing and links in the app.
+    static let websiteBase = URL(string: "https://shopaisle.app")!
     static var privacyURL: URL { websiteBase.appending(path: "privacy") }
     static var termsURL: URL { websiteBase.appending(path: "terms") }
     static var supportURL: URL { websiteBase.appending(path: "support") }
