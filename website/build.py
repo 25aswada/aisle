@@ -360,9 +360,10 @@ def main() -> None:
         target = OUT / path
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(html, encoding="utf-8")
-    # No extension, as Apple expects; vercel.json serves it as JSON.
+    # Apple fetches /.well-known/apple-app-site-association (no extension); saved as .json so
+    # Vercel serves it as JSON, and vercel.json rewrites Apple's path to it without a redirect.
     (OUT / ".well-known").mkdir()
-    (OUT / ".well-known/apple-app-site-association").write_text(json.dumps(APP_SITE_ASSOCIATION, indent=2) + "\n")
+    (OUT / ".well-known/apple-app-site-association.json").write_text(json.dumps(APP_SITE_ASSOCIATION, indent=2) + "\n")
     (OUT / "robots.txt").write_text(f"User-agent: *\nAllow: /\nSitemap: https://{DOMAIN}/sitemap.xml\n")
     urls = "".join(f"<url><loc>https://{DOMAIN}{p}</loc></url>" for p in ["/", "/privacy/", "/terms/", "/support/"])
     (OUT / "sitemap.xml").write_text(f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{urls}</urlset>\n')
