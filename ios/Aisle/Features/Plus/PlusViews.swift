@@ -776,7 +776,7 @@ struct PaywallView: View {
     private static let table: [(String, Bool)] = [
         ("Find items in any store", true),
         ("Unlimited lists", false),
-        ("Unlimited photo search", false),
+        ("Unlimited search", false),
         ("Unlimited follow-ups", false),
         ("Shared family lists", false),
         ("Multi-store trips", false),

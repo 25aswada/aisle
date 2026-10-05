@@ -201,7 +201,7 @@ def home() -> str:
                  ["Find items in any store", "A shopping list, sorted by department", "Start Shopping routes",
                   f"{3} photo searches a day", f"{5} follow-up questions a day"], False) + \
         plan("Aisle+", "$3.99", "/ month", "or $29.99 a year · billed by Apple, cancel anytime",
-             ["Unlimited photo search and follow-ups", "Shared family lists", "Unlimited lists", "Multi-store trips", "Offline store maps"], True)
+             ["Unlimited search and follow-ups", "Shared family lists", "Unlimited lists", "Multi-store trips", "Offline store maps"], True)
 
     faqs = [("Which stores does Aisle work in?", "Grocery, pharmacy, big-box and hardware stores you can find on the map. Aisle uses what it knows about each store and tells you how sure it is."),
             ("How does Aisle know where things are?", "From store data where it has it, shoppers’ confirmations like “Found it”, typical layouts for each kind of store, and AI estimates. Confirmed spots count most."),
