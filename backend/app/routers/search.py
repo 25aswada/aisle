@@ -5,8 +5,12 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.orm import Session
 
-from ..ai.explain import Explainer, chat_safely, follow_up_system_prompt, identify_safely, wanted_item_safely
-from ..ai.providers import LocationModel, get_explainer, get_location_model
+from ..ai.explain import (
+    FLAGGED_REPLY, OFF_TOPIC_REPLY, UNSAFE_REPLY, Explainer, Moderator, chat_safely, flagged_safely,
+    follow_up_system_prompt, identify_safely, topic_safely,
+)
+from ..ai.providers import LocationModel, get_explainer, get_location_model, get_moderator
+from ..ai.signing import sign_reply, verified_conversation
 from ..database import get_db
 from ..models import Store
 from ..schemas import (
@@ -25,13 +29,14 @@ router = APIRouter()
 Database = Annotated[Session, Depends(get_db)]
 Model = Annotated[LocationModel | None, Depends(get_location_model)]
 ExplainerDep = Annotated[Explainer | None, Depends(get_explainer)]
+ModeratorDep = Annotated[Moderator | None, Depends(get_moderator)]
 DeviceID = Annotated[str | None, Header(alias="X-Aisle-Device", max_length=64)]
 
 
 @router.post("/search", response_model=SearchResponse)
 def search_item(
-    body: SearchRequest, db: Database, model: Model, explainer: ExplainerDep, caller: CallerDep,
-    device_id: DeviceID = None,
+    body: SearchRequest, db: Database, model: Model, explainer: ExplainerDep, moderator: ModeratorDep,
+    caller: CallerDep, device_id: DeviceID = None,
 ):
     rate_limit(db, caller.subject, "search", get_settings().aisle_searches_per_hour)
     # 402 once a free account's (or a guest's) searches for today are used.
@@ -41,7 +46,7 @@ def search_item(
         # Out of AI answers for today (or no AI configured): Aisle's own data and wording.
         model = explainer = None
     try:
-        result = search(db, body.query, body.store_id, model, device_id, explainer)
+        result = search(db, body.query, body.store_id, model, device_id, explainer, moderator)
     except StoreNotFound:
         for used in (allowance, counted):
             if used:
@@ -76,13 +81,36 @@ def conversation_for_model(messages: list[dict]) -> list[dict]:
     return trimmed
 
 
+def without_redirects(messages: list[dict]) -> list[dict]:
+    """The conversation without messages Aisle turned away and its redirects, so they
+    neither count as follow-ups nor stay in the model's view. Only signed turns are left
+    by this point, so a redirect can't be made up."""
+    kept: list[dict] = []
+    for message in messages:
+        if message["role"] == "assistant" and message["content"] in (OFF_TOPIC_REPLY, FLAGGED_REPLY):
+            if len(kept) > 1 and kept[-1]["role"] == "user":  # Never the search that started it.
+                kept.pop()
+            continue
+        kept.append(message)
+    return kept
+
+
+def aisle_says(store_id: int, reply: str | None, result: SearchResponse | None = None) -> ChatResponse:
+    """A follow-up's answer, its reply signed so the app can send it back as Aisle's turn."""
+    signature = sign_reply(store_id, reply) if reply else None
+    return ChatResponse(reply=reply, search=result, reply_signature=signature)
+
+
 @router.post("/chat", response_model=ChatResponse)
 def follow_up(
-    body: ChatRequest, db: Database, model: Model, explainer: ExplainerDep, caller: CallerDep,
-    device_id: DeviceID = None,
+    body: ChatRequest, db: Database, model: Model, explainer: ExplainerDep, moderator: ModeratorDep,
+    caller: CallerDep, device_id: DeviceID = None,
 ):
     """The next reply in a conversation that started with a search at this store. When the
     shopper asks where to find a new item, that item's search comes back with the reply.
+    Aisle's earlier turns only reach the model with the signature they were sent with.
+    A message Aisle isn't for (or one moderation flags) gets a short redirect instead of
+    an answer, and isn't counted.
 
     Needs an account. Free shoppers get a few a day: a follow-up with a photo counts as a
     photo search."""
@@ -91,20 +119,38 @@ def follow_up(
     if store is None:
         raise HTTPException(status_code=404, detail="Store not found")
     rate_limit(db, caller.subject, "follow_up", get_settings().aisle_follow_ups_per_hour)
-    require_follow_up_allowed(db, caller, [m.model_dump(exclude_none=True) for m in body.messages])
-    messages = conversation_for_model([m.model_dump(exclude_none=True) for m in body.messages])
-    feature = PHOTO_SEARCH if messages[-1].get("image") else FOLLOW_UP
+    sent = [m.model_dump(exclude_none=True) for m in body.messages]
+    sent = without_redirects(verified_conversation(store.id, sent))
+    require_follow_up_allowed(db, caller, sent)
+    messages = conversation_for_model(sent)
+    newest = messages[-1]
+    feature = PHOTO_SEARCH if newest.get("image") else FOLLOW_UP
     allowance = reserve_allowance(db, caller, feature)
     place = f"{store.name} ({store.retailer_name}), {store.address}"
-    # In this request's context, so the reply's AI call is charged to today's budget too.
+    # The reply is written while the message is checked, so on-topic answers wait no
+    # longer. In this request's context, so the reply's AI call is charged to today's
+    # budget too.
     reply = _follow_up_pool.submit(copy_context().run, chat_safely, explainer, follow_up_system_prompt(place), messages)
-    item = wanted_item_safely(explainer, messages)
-    # The reply already answers in context, so the search skips writing its own.
-    result = search(db, item, store.id, model, device_id, explainer=None) if item else None
-    answer = ChatResponse(reply=reply.result(), search=result)
-    if not (answer.reply or answer.search):
+    screened = None
+    if moderator is not None:
+        screened = _follow_up_pool.submit(flagged_safely, moderator, newest["content"], newest.get("image"))
+    topic = topic_safely(explainer, messages)
+    flagged = bool(screened and screened.result())
+    if flagged or not topic.on_topic:
+        reply.cancel()  # Not shown, even if it's already being written.
         allowance.refund()
-    return answer
+        return aisle_says(store.id, FLAGGED_REPLY if flagged else OFF_TOPIC_REPLY)
+    # The reply already answers in context, so the search skips writing its own.
+    result = search(db, topic.item, store.id, model, device_id, explainer=None) if topic.item else None
+    text = reply.result()
+    if text == OFF_TOPIC_REPLY:  # The model found it out of scope after all.
+        allowance.refund()
+        return aisle_says(store.id, text)
+    if flagged_safely(moderator, text):
+        text = UNSAFE_REPLY
+    if not ((text and text != UNSAFE_REPLY) or result):
+        allowance.refund()
+    return aisle_says(store.id, text, result)
 
 
 @router.post("/identify", response_model=IdentifyResponse)

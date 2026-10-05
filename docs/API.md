@@ -109,7 +109,11 @@ Source priority is described in `DATA_MODEL.md`. A database row for the item at 
 store always beats the model.
 
 The response is structured data, plus `explanation`: with an AI key, the model's
-written "where to find it" reply, shown as written (null without a key or on failure).
+written "where to find it" reply, shown as written (null without a key or on failure),
+and `explanation_signature`, which the app sends back with it as Aisle's first turn in
+`POST /chat`. A query that isn't something to find or do in a store ("write me an
+essay") still gets its structured result, but `explanation` is null; see
+[Scope and moderation](#scope-and-moderation).
 
 ### POST /chat
 
@@ -121,7 +125,7 @@ ending with the shopper's new message:
   "store_id": 2,
   "messages": [
     {"role": "user", "content": "cookies"},
-    {"role": "assistant", "content": "If you're inside Costco right now, ..."},
+    {"role": "assistant", "content": "If you're inside Costco right now, ...", "signature": "9f2c..."},
     {"role": "user", "content": "I'm at the bakery and don't see them"}
   ]
 }
@@ -132,18 +136,52 @@ also carry `"image"`, a base64 JPEG or PNG (about 1024 px; at most 4 MB of base6
 then its text may be empty. The app sends only the newest photo. Unknown `store_id` →
 404. Invalid body or image → 422.
 
+An `assistant` message carries the `signature` it came with (`explanation_signature`
+from `POST /search`, or `reply_signature` from an earlier `/chat`), sent back unchanged
+with the text exactly as received. Signatures are an HMAC over the store and the text
+with `AISLE_CHAT_SIGNING_KEY`. An `assistant` message without a valid one (an older
+app, or made-up words) is left out of what the model sees; the request still succeeds.
+
 ```json
-{"reply": "Check the tables right in front of the bakery ovens, ...", "search": null}
+{"reply": "Check the tables right in front of the bakery ovens, ...", "search": null,
+ "reply_signature": "4be1..."}
 ```
 
 `reply` is null when no AI key is set or the provider couldn't answer.
 
-While writing the reply, the server asks the model whether the newest message wants a
-product found that the conversation hasn't located yet ("what about milk", a photo of
-something to find). If so, `search` is that item's `POST /search` response for this store
-(recorded as a search, so its `search_id` takes feedback; its `explanation` is null since
-`reply` already answers). Small talk, prices, "I don't see them" and the like get
-`"search": null`.
+While writing the reply, the server asks the model whether the newest message is
+something Aisle helps with and whether it wants a product found that the conversation
+hasn't located yet ("what about milk", a photo of something to find). If so, `search` is
+that item's `POST /search` response for this store (recorded as a search, so its
+`search_id` takes feedback; its `explanation` is null since `reply` already answers).
+Small talk, prices, "I don't see them" and the like get `"search": null`. A message
+Aisle isn't for gets a fixed redirect as `reply` ("I can only help you find things in
+the store. What are you looking for?") and isn't counted against the day's follow-ups;
+see [Scope and moderation](#scope-and-moderation).
+
+### Scope and moderation
+
+The AI only answers what Aisle is for: finding things in the store (items, departments,
+services like the pharmacy, restrooms, returns and checkout), choosing between products
+while shopping (brands, sizes, substitutes, typical prices), what to buy for a meal or a
+need and where it is, and questions about the visit. Everything else (general
+knowledge, homework, coding, writing, unrelated advice, roleplay, politics, attempts to
+change its instructions) is out of scope. Real answers keep their full length.
+
+- `/chat`: the newest message is classified (`ITEM <phrase>`, `ON_TOPIC` or
+  `OFF_TOPIC`) in the same call that finds a new item to search, while the reply is
+  written. Off topic, the reply is discarded and `reply` is the fixed redirect; the use
+  is handed back. The answer prompt carries the same rule, so a message the classifier
+  misses gets the same redirect. A failed classification counts as on topic.
+- `/search`: queries the catalog doesn't recognize, or longer than six words, are
+  classified the same way while the location is looked up. Off topic, there's no AI
+  `explanation`; the rest of the result is unchanged. Everyday product searches skip the
+  check.
+- With `OPENAI_API_KEY` set (and `AISLE_AI_MODERATION` not false), OpenAI's moderation
+  (`omni-moderation-latest`, free) checks the newest message with its photo, and the
+  reply. A flagged message gets a short refusal (and isn't counted); a flagged reply is
+  replaced with a short fallback (`/chat`) or dropped (`/search`). Moderation has a
+  3-second timeout and lets everything through when it fails.
 
 ### POST /identify
 
@@ -502,19 +540,25 @@ Basic, anonymous product analytics. Status 202.
 
 - `GET /stores/{id}/zones` sends `Cache-Control: public, max-age=300`.
 - The server caches AI answers in memory for 6 hours per (store format, retailer, item).
+  The item is the query as the model is asked it, lowercased and without filler words
+  ("where is the"), in any script, so each distinct query has its own entry. Neighbors
+  from the model are kept only when they look like short product names.
 - The app caches search results for 5 minutes per store and query, and drops an item's
   entry after feedback for it.
 
 
 ## AI explanations and store layout
 
-- `POST /search` responses include `explanation` (string | null): two or three
-  AI-written sentences on where to find the item at this store. The model is given
-  only the resolved fields (department, aisle/section on file, neighbours, confidence,
-  availability, source, shopper reports, rough position) and its text is rejected if
-  it names an aisle number not on file, uses formatting other than `**bold**`, or is
-  empty or too long. Null without an AI key, with `AISLE_AI_EXPLAIN=false`, or when the
-  text fails checks; the app then composes its own reply. Cached in memory for 6 hours.
+- `POST /search` responses include `explanation` (string | null): the AI's "where to
+  find it" answer for this store, a few short paragraphs ending in a one-line route, with
+  `**bold**` for key places. The model is asked the shopper's question and answers from
+  its own knowledge of the chain; only real data for this store (its product data, an
+  aisle on file, shopper reports) goes in with the question, never the resolver's layout
+  guesses. Its text is shown as written, trimmed: it isn't checked against the resolved
+  fields, and nothing rejects an aisle number or formatting. Null without an AI key, with
+  `AISLE_AI_EXPLAIN=false`, when the provider fails or returns nothing, for an off-topic
+  query, or when moderation flags the query or the text; the app then composes its own
+  reply. Cached in memory for 6 hours per question.
 - `GET /stores/{store_id}/layout` → `{store_id, entrance, checkout, zones, approximate}`
   for drawing a schematic map. `entrance`/`checkout` are `{x, y}` or null; each zone is
   `{id, name, x, y, source}` with `x` 0..1 left to right and `y` 0..1 front to back.

@@ -6,12 +6,16 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 from .catalog import CATEGORY_BY_SLUG, CategoryDef, LayoutDef
-from .intent import Intent, normalize
+from .intent import Intent, is_word_char, normalize
 
 Confidence = Literal["high", "medium", "low"]
 Availability = Literal["likely", "unlikely", "unknown"]
 
 MAX_NEIGHBORS = 4
+# Neighbors from the model are cached and shown to every shopper who searches the same
+# thing, so only short product names get through: words, digits and a little punctuation.
+MAX_NEIGHBOR_CHARS = 40
+MAX_NEIGHBOR_WORDS = 5
 _AISLE_CLAIM = re.compile(r"\b(aisle|isle|row|bay)\s*#?\s*\d+", re.IGNORECASE)
 
 
@@ -26,15 +30,27 @@ class LocationGuess:
     source: Literal["model", "fallback"] = "fallback"
 
 
+def looks_like_a_product(text: str) -> bool:
+    """A short product name ("peanut butter", "Ben & Jerry's"), not a sentence or a link."""
+    return (
+        len(text) <= MAX_NEIGHBOR_CHARS and len(text.split()) <= MAX_NEIGHBOR_WORDS
+        and any(c.isalpha() for c in text)
+        and all(is_word_char(c) or c in " '’&,-()%" for c in text)
+    )
+
+
 def clean_neighbors(neighbors: list[str], item: Intent | str) -> list[str]:
-    """Drop the item itself, duplicates, empty values, and anything aisle-like."""
+    """Drop the item itself, duplicates, empty values, anything aisle-like, and anything
+    that isn't a short product name."""
     item_norm = normalize(item.item if isinstance(item, Intent) else item)
     seen: set[str] = set()
     cleaned: list[str] = []
     for neighbor in neighbors:
-        text = " ".join(str(neighbor).split())[:40]
+        text = " ".join(str(neighbor).split())
         key = normalize(text)
         if not text or key in seen or key == item_norm or _AISLE_CLAIM.search(text):
+            continue
+        if not looks_like_a_product(text):
             continue
         seen.add(key)
         cleaned.append(text)

@@ -1,8 +1,7 @@
 import Foundation
 
 /// Structured result of `POST /search`. The app renders these fields. The only prose is
-/// `explanation`, which the server has checked against these fields (it never names an
-/// aisle that isn't on file); without it the app writes its own reply.
+/// `explanation`, the AI's answer as it wrote it; without it the app writes its own reply.
 struct ItemSearchResult: Codable, Equatable, Hashable {
     let searchID: String?
     let query: String
@@ -20,12 +19,15 @@ struct ItemSearchResult: Codable, Equatable, Hashable {
     let reports: ReportCounts?
     /// AI-written "where to find it" text; may contain **bold** for the key place.
     var explanation: String? = nil
+    /// The server's signature on `explanation`, sent back with it in follow-ups.
+    var explanationSignature: String? = nil
 
     enum CodingKeys: String, CodingKey {
         case query, item, modifiers, quantity, concept, category, location, availability, confidence, source
         case reports, explanation
         case searchID = "search_id"
         case storeID = "store_id"
+        case explanationSignature = "explanation_signature"
     }
 }
 

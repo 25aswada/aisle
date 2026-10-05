@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from dataclasses import dataclass, field
 from functools import lru_cache
 
@@ -61,10 +62,17 @@ def singularize(word: str) -> str:
     return word
 
 
+def is_word_char(char: str) -> bool:
+    """A letter or digit in any script, or a mark that's part of one (Hindi vowel signs)."""
+    return char.isalnum() or unicodedata.category(char).startswith("M")
+
+
 def tokenize(text: str) -> list[str]:
-    text = text.lower().replace("&", " and ").replace("’", "'")
+    # NFKC folds lookalikes ("ｍｉｌｋ" is milk); every script is kept, so queries in other
+    # languages stay distinct instead of all becoming nothing.
+    text = unicodedata.normalize("NFKC", text).lower().replace("&", " and ").replace("’", "'")
     text = re.sub(r"'s\b", "", text)
-    text = re.sub(r"[^a-z0-9%\s-]", " ", text)
+    text = "".join(c if is_word_char(c) or c in "%-" or c.isspace() else " " for c in text)
     text = text.replace("-", " ")
     return [t for t in text.split() if t]
 
@@ -109,6 +117,9 @@ class Intent:
     modifiers: list[str] = field(default_factory=list)
     quantity: str | None = None
     match: CategoryMatch | None = None
+    # What the shopper asked for, without the filler around it ("2 gallons of oat milk"):
+    # the AI's location guess is asked about this, and cached by it.
+    phrase: str = ""
 
 
 def _strip_filler(text: str) -> str:
@@ -122,6 +133,7 @@ def _strip_filler(text: str) -> str:
 def parse_intent(raw: str) -> Intent:
     """Parse one item query such as "where is the organic maple syrup?"."""
     tokens = tokenize(_strip_filler(raw))
+    phrase = " ".join(tokens)
     quantity_parts: list[str] = []
     while tokens and known_phrase(tuple(singularize(t) for t in tokens)) is None and (
         tokens[0].isdigit() or tokens[0] in QUANTITY_UNITS
@@ -146,6 +158,7 @@ def parse_intent(raw: str) -> Intent:
         modifiers=[t for i, t in enumerate(tokens) if i not in keep],
         quantity=" ".join(t for t in quantity_parts if t != "of") or None,
         match=match,
+        phrase=phrase,
     )
 
 

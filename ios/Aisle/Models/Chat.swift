@@ -14,6 +14,8 @@ struct ChatTurn: Identifiable, Equatable {
     var photo: Data? = nil
     /// When Aisle's reply answers "where's this new item?": that item's search, shown as a card.
     var result: ItemSearchResult? = nil
+    /// The server's signature on Aisle's reply, sent back with it in later follow-ups.
+    var signature: String? = nil
 }
 
 /// `POST /chat` wire format.
@@ -22,11 +24,15 @@ struct ChatMessage: Codable, Equatable {
     let content: String
     /// Base64 JPEG, on a shopper's message only.
     var image: String? = nil
+    /// On Aisle's message: the signature it came with. The server only passes Aisle's
+    /// earlier replies on to the AI with one.
+    var signature: String? = nil
 
-    init(role: ChatTurn.Role, content: String, photo: Data? = nil) {
+    init(role: ChatTurn.Role, content: String, photo: Data? = nil, signature: String? = nil) {
         self.role = role.rawValue
         self.content = content
         self.image = photo?.base64EncodedString()
+        self.signature = signature
     }
 }
 
@@ -45,6 +51,12 @@ struct ChatRequestBody: Encodable {
 struct ChatReply: Decodable, Equatable {
     var reply: String?
     var search: ItemSearchResult? = nil
+    var replySignature: String? = nil
+
+    enum CodingKeys: String, CodingKey {
+        case reply, search
+        case replySignature = "reply_signature"
+    }
 }
 
 /// `POST /identify`: a photo and what the shopper typed with it.
