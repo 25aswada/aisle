@@ -287,11 +287,14 @@ struct PlusServerStatus: Decodable, Equatable {
     let isPlus: Bool
     let photoSearch: Usage
     let followUp: Usage
+    /// Searches answered with the AI's help. Optional so older servers still decode.
+    let aiSearch: Usage?
 
     enum CodingKeys: String, CodingKey {
         case isPlus = "is_plus"
         case photoSearch = "photo_search"
         case followUp = "follow_up"
+        case aiSearch = "ai_search"
     }
 }
 

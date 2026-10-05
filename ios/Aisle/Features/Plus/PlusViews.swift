@@ -773,15 +773,21 @@ struct PaywallView: View {
     /// Subscriptions use Apple's standard license agreement.
     static let termsURL = URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!
 
-    private static let table: [(String, Bool)] = [
-        ("Find items in any store", true),
-        ("Unlimited lists", false),
-        ("Unlimited search", false),
-        ("Unlimited follow-ups", false),
-        ("Shared family lists", false),
-        ("Multi-store trips", false),
-        ("Offline store maps", false),
-    ]
+    /// What each plan gets. Free values are what the free plan allows; Aisle+ is a check.
+    private enum FreeValue { case included, notIncluded, text(String) }
+
+    private var table: [(String, FreeValue)] {
+        [
+            ("Find items in any store", .included),
+            ("Unlimited search", .text("\(plus.freeSearchesPerDay)/day")),
+            ("Unlimited photo search", .text("\(plus.freePhotoSearchesPerDay)/day")),
+            ("Unlimited follow-ups", .text("\(plus.freeFollowUpsPerDay)/day")),
+            ("Unlimited lists", .text("1")),
+            ("Shared family lists", .notIncluded),
+            ("Multi-store trips", .notIncluded),
+            ("Offline store maps", .notIncluded),
+        ]
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -828,6 +834,7 @@ struct PaywallView: View {
         .task {
             await plus.load()
             trial = await plus.trialLabel(.yearly)
+            await plus.refreshUsage()
         }
         .alert("Couldn't complete the purchase", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
             Button("OK", role: .cancel) {}
@@ -927,7 +934,7 @@ struct PaywallView: View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
                 Text("Features").frame(maxWidth: .infinity, alignment: .leading)
-                Text("Free").frame(width: 52)
+                Text("Free").frame(width: 56)
                 Text("Aisle+").fontWeight(.bold).foregroundStyle(Theme.accentInk).frame(width: 64)
             }
             .font(Theme.font(15, relativeTo: .subheadline))
@@ -935,21 +942,28 @@ struct PaywallView: View {
             .frame(minHeight: 34)
             .accessibilityHidden(true)
 
-            ForEach(Self.table, id: \.0) { feature, free in
+            ForEach(table, id: \.0) { feature, free in
                 HStack(spacing: 0) {
                     Text(feature)
                         .font(Theme.font(16, relativeTo: .body))
                         .foregroundStyle(Theme.ink)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Group {
-                        if free {
+                        switch free {
+                        case .included:
                             Image(systemName: "checkmark").font(.system(size: 15, weight: .medium))
                                 .foregroundStyle(Theme.secondaryInk)
-                        } else {
+                        case .notIncluded:
                             Capsule().fill(Theme.secondaryInk.opacity(0.6)).frame(width: 14, height: 1.5)
+                        case .text(let value):
+                            Text(value)
+                                .font(Theme.font(13, .semibold, relativeTo: .footnote))
+                                .foregroundStyle(Theme.secondaryInk)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
                         }
                     }
-                    .frame(width: 52)
+                    .frame(width: 56)
                     Image(systemName: "checkmark")
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(Color(hex: 0xDC6F9C))
@@ -957,7 +971,7 @@ struct PaywallView: View {
                 }
                 .frame(minHeight: 44)
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel("\(feature): \(free ? "free and Aisle+" : "Aisle+ only")")
+                .accessibilityLabel(accessibilityLabel(feature, free))
             }
         }
         .padding(.horizontal, 22)
@@ -965,6 +979,14 @@ struct PaywallView: View {
         .padding(.bottom, 12)
         .background(Theme.surface.opacity(0.92), in: RoundedRectangle(cornerRadius: 28, style: .continuous))
         .shadow(color: Theme.ink.opacity(0.06), radius: 16, y: 8)
+    }
+
+    private func accessibilityLabel(_ feature: String, _ free: FreeValue) -> String {
+        switch free {
+        case .included: return "\(feature): free and Aisle+"
+        case .notIncluded: return "\(feature): Aisle+ only"
+        case .text(let value): return "\(feature): free plan \(value), unlimited with Aisle+"
+        }
     }
 
     private var ctaTitle: String {
