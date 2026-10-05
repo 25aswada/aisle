@@ -6,6 +6,8 @@ import SwiftUI
 enum AccountFlowStep: Hashable {
     case method(returning: Bool)
     case phone, email, code, newAccount, terms, name
+    /// The Aisle+ offer after a new account is made. Shown by OnboardingFlow.
+    case plus
 }
 
 /// One sign-in screen, wired to push the next. There's no "Not now": Aisle needs an account.
@@ -40,6 +42,8 @@ struct AccountFlowScreen: View {
             }
         case .name:
             NameStep(model: model, onBack: back, onCreate: onSignedIn)
+        case .plus:
+            EmptyView()
         }
     }
 

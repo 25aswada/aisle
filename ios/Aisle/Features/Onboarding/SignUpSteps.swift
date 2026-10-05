@@ -297,6 +297,9 @@ struct CodeStep: View {
         .onChange(of: model.code) {
             if model.isCodeComplete { verify() }
         }
+        // A tick per digit, and a buzz when the code is wrong.
+        .sensoryFeedback(.selection, trigger: model.code.count)
+        .sensoryFeedback(.error, trigger: model.errorMessage) { _, new in new != nil }
     }
 
     /// One hidden field drives six boxes, so paste and the one-time-code keyboard suggestion work.

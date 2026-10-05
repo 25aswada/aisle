@@ -94,6 +94,21 @@ final class PlusStore {
     }
 
     /// Free-trial length of a plan, e.g. "7-day", when the App Store offers one to this user.
+    /// Length of a plan's free trial in days, when this user can get one.
+    func trialDays(_ plan: Plan) async -> Int? {
+        guard let product = products[plan], let offer = product.subscription?.introductoryOffer,
+              offer.paymentMode == .freeTrial,
+              await product.subscription?.isEligibleForIntroOffer == true else { return nil }
+        let value = offer.period.value
+        switch offer.period.unit {
+        case .day: return value
+        case .week: return value * 7
+        case .month: return value * 30
+        case .year: return value * 365
+        @unknown default: return nil
+        }
+    }
+
     func trialLabel(_ plan: Plan) async -> String? {
         guard let product = products[plan], let offer = product.subscription?.introductoryOffer,
               offer.paymentMode == .freeTrial,

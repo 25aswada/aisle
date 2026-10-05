@@ -42,6 +42,8 @@ struct LiveOnboarding: View {
         }
         .font(.aisleBody)
         .foregroundStyle(Theme.ink)
+        // A soft tick each time the walkthrough moves on.
+        .sensoryFeedback(.impact(weight: .light, intensity: 0.6), trigger: step)
     }
 
     @ViewBuilder

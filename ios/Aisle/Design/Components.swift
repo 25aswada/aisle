@@ -238,6 +238,7 @@ struct AccentButtonStyle: ButtonStyle {
 private struct AccentButtonBody: View {
     let configuration: ButtonStyleConfiguration
     @Environment(\.isEnabled) private var isEnabled
+    @Environment(\.pressHaptics) private var pressHaptics
 
     var body: some View {
         configuration.label
@@ -253,12 +254,22 @@ private struct AccentButtonBody: View {
             .opacity(configuration.isPressed ? 0.85 : 1)
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
             .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
+            .pressHaptic(configuration.isPressed, enabled: pressHaptics, weight: .medium)
     }
 }
 
 /// Full-width white button, the quieter partner of the accent button.
 struct SoftButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
+        SoftButtonBody(configuration: configuration)
+    }
+}
+
+private struct SoftButtonBody: View {
+    let configuration: ButtonStyleConfiguration
+    @Environment(\.pressHaptics) private var pressHaptics
+
+    var body: some View {
         configuration.label
             .font(.aisleHeadline)
             .foregroundStyle(Theme.ink)
@@ -266,6 +277,21 @@ struct SoftButtonStyle: ButtonStyle {
             .padding(.horizontal, 16)
             .background(Theme.surface, in: RoundedRectangle(cornerRadius: Theme.Radius.button, style: .continuous))
             .opacity(configuration.isPressed ? 0.7 : 1)
+            .pressHaptic(configuration.isPressed, enabled: pressHaptics)
+    }
+}
+
+// MARK: - Press haptics
+
+extension EnvironmentValues {
+    /// Buttons give a light tap as they're pressed. On in onboarding and the paywall.
+    @Entry var pressHaptics = false
+}
+
+extension View {
+    /// A tap the moment a button goes down, when `enabled`.
+    func pressHaptic(_ isPressed: Bool, enabled: Bool, weight: SensoryFeedback.Weight = .light) -> some View {
+        sensoryFeedback(.impact(weight: weight), trigger: isPressed) { _, pressed in enabled && pressed }
     }
 }
 
