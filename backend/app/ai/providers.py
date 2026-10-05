@@ -10,7 +10,7 @@ from .budget import charge, estimate_prompt_tokens, estimate_tokens
 from .catalog import CATEGORIES, LayoutDef
 from .explain import (
     EXPLAIN_SYSTEM_PROMPT, FIND_PROMPT, IDENTIFY_PROMPT, READ_LIST_PROMPT, CachedExplainer, Explainer,
-    ExplainFacts, facts_prompt,
+    ExplainFacts, Moderator, facts_prompt,
 )
 from .intent import Intent
 from .reasoning import (
@@ -156,7 +156,7 @@ class AnthropicLocationModel(MeteredCalls):
         prompt = (
             f"Store: {retailer_name or 'unknown retailer'} ({layout.label}).\n"
             f"Departments: {departments}.\n"
-            f"Item searched: {intent.raw.strip()}"
+            f"Item searched: {intent.phrase}"
         )
         schema = response_schema(layout)
         try:
@@ -230,7 +230,7 @@ class OpenAILocationModel(MeteredCalls):
         prompt = (
             f"Store: {retailer_name or 'unknown retailer'} ({layout.label}).\n"
             f"Departments: {departments}.\n"
-            f"Item searched: {intent.raw.strip()}"
+            f"Item searched: {intent.phrase}"
         )
         schema = response_schema(layout)
         try:
@@ -372,3 +372,46 @@ def get_explainer() -> Explainer | None:
             log.warning("%s package not installed; no AI explanations", name)
     _cached_explainer = (key, explainer)
     return explainer
+
+
+# OpenAI's moderation model: free, for text and photos, with any OpenAI key (whichever
+# provider writes the answers).
+MODERATION_MODEL = "omni-moderation-latest"
+# A check that takes longer lets the message through rather than hold up the reply.
+MODERATION_TIMEOUT_SECONDS = 3.0
+
+
+class OpenAIModerator:
+    def __init__(self, api_key: str, timeout: float = MODERATION_TIMEOUT_SECONDS):
+        import openai  # Imported lazily so the fallback works without the SDK.
+
+        self._client = openai.OpenAI(api_key=api_key, timeout=timeout, max_retries=0)
+
+    def flagged(self, text: str, image: str | None = None) -> bool:
+        content: str | list[dict] = text
+        if image:
+            content = [{"type": "text", "text": text}] if text else []
+            content.append({"type": "image_url", "image_url": {"url": f"data:{_media_type(image)};base64,{image}"}})
+        response = self._client.moderations.create(model=MODERATION_MODEL, input=content)
+        return any(result.flagged for result in response.results)
+
+
+_cached_moderator: tuple[tuple, Moderator | None] | None = None
+
+
+def get_moderator() -> Moderator | None:
+    """Moderation for what shoppers send the AI and what it writes back, or None without
+    an OpenAI key or when turned off."""
+    global _cached_moderator
+    settings = get_settings()
+    key = (settings.openai_api_key if settings.aisle_ai_moderation else None,)
+    if _cached_moderator is not None and _cached_moderator[0] == key:
+        return _cached_moderator[1]
+    moderator: Moderator | None = None
+    if key[0]:
+        try:
+            moderator = OpenAIModerator(key[0])
+        except ImportError:
+            log.warning("openai package not installed; no moderation")
+    _cached_moderator = (key, moderator)
+    return moderator

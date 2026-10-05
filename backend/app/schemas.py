@@ -80,6 +80,9 @@ class ChatMessageIn(BaseModel):
     content: str = Field(default="", max_length=4000)
     # A photo the shopper sent with this message.
     image: str | None = Field(default=None, max_length=MAX_PHOTO_BASE64)
+    # On Aisle's messages: the signature it was sent with. Without a valid one the
+    # message doesn't reach the model.
+    signature: str | None = Field(default=None, max_length=128)
 
     @field_validator("image")
     @classmethod
@@ -128,6 +131,8 @@ class ChatResponse(BaseModel):
     # When the follow-up asks where to find a new item: that item's search, as from
     # POST /search (its `explanation` is null; `reply` is the answer to show).
     search: "SearchResponse | None" = None
+    # Sent back with `reply` as Aisle's turn in the next follow-up.
+    reply_signature: str | None = None
 
 
 class CategoryOut(BaseModel):
@@ -169,9 +174,11 @@ class SearchResponse(BaseModel):
     source: LocationSource
     # Shopper reports for the suggested zone at this store; null without a store or zone.
     reports: ReportCountsOut | None = None
-    # AI-written "where to find it" text, checked against the facts above; null without a
-    # model or when the text didn't pass checks (the app then writes its own).
+    # AI-written "where to find it" text; null without a model, when it couldn't answer, or
+    # when the query isn't something to find in a store (the app then writes its own).
     explanation: str | None = None
+    # Sent back with the explanation as Aisle's turn in a follow-up (see POST /chat).
+    explanation_signature: str | None = None
 
 
 AISLE_LABEL = re.compile(r"[A-Za-z0-9 #&'./-]{1,24}")

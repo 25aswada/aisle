@@ -21,7 +21,10 @@ class CachedLocationModel:
         self._lock = threading.Lock()
 
     def locate(self, intent: Intent, retailer_name: str | None, layout: LayoutDef) -> LocationGuess | None:
-        key = (layout.key, (retailer_name or "").lower(), intent.normalized, tuple(sorted(intent.modifiers)))
+        if not intent.phrase:
+            return None  # Nothing to ask about (only emoji or punctuation).
+        # Exactly what the model is asked about, so one query's guess is never another's.
+        key = (layout.key, (retailer_name or "").lower(), intent.phrase)
         now = self._clock()
         with self._lock:
             hit = self._entries.get(key)

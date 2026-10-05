@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.ai import budget
 from backend.app.ai.providers import get_explainer, get_location_model
+from backend.app.ai.signing import sign_reply
 from backend.app.config import get_settings
 from backend.app.database import get_db
 from backend.app.main import app
@@ -417,9 +418,10 @@ def test_photos_earlier_in_a_follow_up_go_nowhere(api, engine, monkeypatch):
     ai = RecordingAI()
     app.dependency_overrides[get_explainer] = lambda: ai
     headers, _, _ = account(engine)
+    said = {"role": "assistant", "content": "It's oat milk.", "signature": sign_reply(1, "It's oat milk.")}
     convo = [
-        {"role": "user", "content": "this?", "image": PHOTO}, {"role": "assistant", "content": "made up"},
-        {"role": "user", "content": "", "image": PHOTO}, {"role": "assistant", "content": "made up"},
+        {"role": "user", "content": "this?", "image": PHOTO}, said,
+        {"role": "user", "content": "", "image": PHOTO}, said,
         {"role": "user", "content": "what are these two things?"},
     ]
     assert api.post("/chat", json={"store_id": 1, "messages": convo}, headers=headers).status_code == 200
@@ -435,7 +437,13 @@ def test_long_conversations_are_trimmed_before_the_ai(api, engine, monkeypatch):
     ai = RecordingAI()
     app.dependency_overrides[get_explainer] = lambda: ai
     headers, _, _ = account(engine)
-    convo = [{"role": "user" if i % 2 == 0 else "assistant", "content": f"{i} " + "x" * 3990} for i in range(39)]
+    def turn(i):
+        content = f"{i} " + "x" * 3990
+        if i % 2 == 0:
+            return {"role": "user", "content": content}
+        return {"role": "assistant", "content": content, "signature": sign_reply(1, content)}
+
+    convo = [turn(i) for i in range(39)]
     assert api.post("/chat", json={"store_id": 1, "messages": convo}, headers=headers).status_code == 200
     sent = ai.chats[0]
     assert len(sent) == 11

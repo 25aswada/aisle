@@ -31,6 +31,7 @@ def no_real_ai_explanations(monkeypatch):
     from backend.app.config import get_settings
 
     monkeypatch.setattr(get_settings(), "aisle_ai_explain", False)
+    monkeypatch.setattr(get_settings(), "aisle_ai_moderation", False)
 
 
 @pytest.fixture

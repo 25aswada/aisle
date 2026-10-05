@@ -84,7 +84,7 @@ def test_model_cache_reuses_answers_until_ttl():
     cached = CachedLocationModel(inner, ttl_seconds=60, clock=lambda: now[0])
     layout = LAYOUTS["grocery"]
     assert cached.locate(parse_intent("durian"), "Acme", layout) is guess
-    assert cached.locate(parse_intent("Durians"), "acme", layout) is guess
+    assert cached.locate(parse_intent("Where is the Durian?"), "acme", layout) is guess
     assert inner.calls == 1
     now[0] = 61
     cached.locate(parse_intent("durian"), "Acme", layout)
@@ -98,6 +98,38 @@ def test_model_cache_does_not_store_failures():
     cached.locate(parse_intent("durian"), None, layout)
     cached.locate(parse_intent("durian"), None, layout)
     assert inner.calls == 2
+
+
+class RecordingModel:
+    name = "recording"
+
+    def __init__(self):
+        self.asked = []
+
+    def locate(self, intent, retailer_name, layout):
+        self.asked.append(intent.phrase)
+        return LocationGuess(category=None, department="Produce", neighbors=[intent.phrase], source="model")
+
+
+def test_queries_in_any_script_get_their_own_cache_entry():
+    inner = RecordingModel()
+    cached = CachedLocationModel(inner)
+    layout = LAYOUTS["grocery"]
+    queries = ["牛奶", "写一篇关于罗马的文章", "दूध", "молоко", "Молоко"]
+    guesses = [cached.locate(parse_intent(q), "Acme", layout) for q in queries]
+    # The model is asked about exactly what each entry is cached by.
+    assert inner.asked == ["牛奶", "写一篇关于罗马的文章", "दूध", "молоко"]
+    assert [g.neighbors for g in guesses] == [["牛奶"], ["写一篇关于罗马的文章"], ["दूध"], ["молоко"], ["молоко"]]
+    # Nothing left to ask about: no model call, and nothing cached.
+    assert cached.locate(parse_intent("🥛 ???"), "Acme", layout) is None
+    assert len(inner.asked) == 4
+
+
+def test_unicode_queries_are_tokenized():
+    assert parse_intent("Where is the ＯＡＴ ＭＩＬＫ?").phrase == "oat milk"
+    assert parse_intent("crème fraîche").normalized == "crème fraîche"
+    assert parse_intent("दूध कहाँ है").phrase == "दूध कहाँ है"
+    assert parse_intent("牛奶").normalized == "牛奶"
 
 
 def test_model_cache_evicts_oldest():

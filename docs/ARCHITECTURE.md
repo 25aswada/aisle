@@ -137,6 +137,9 @@ in on the same phone, the previous account's local data is erased too.
 - Errors go to Sentry when `SENTRY_DSN` is set, scrubbed of bodies, query strings, cookies,
   IPs and most headers (`backend/app/monitoring.py`).
 - AI spend is capped per day in dollars (`AISLE_AI_BUDGET_USD_PER_DAY`, `backend/app/ai/budget.py`).
+- `AISLE_CHAT_SIGNING_KEY` (a long random string) signs Aisle's replies so `/chat` only
+  passes on replies the server wrote (`backend/app/ai/signing.py`). Without it on Heroku,
+  the server logs an error at startup and only trusts replies the same dyno signed.
 
 ## Aisle+
 

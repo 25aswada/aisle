@@ -27,6 +27,12 @@ class Settings(BaseSettings):
     aisle_ai_explain_timeout_seconds: float = 16.0
     # With a key, the model also writes each result's "where to find it" explanation.
     aisle_ai_explain: bool = True
+    # With an OpenAI key, OpenAI's (free) moderation checks what shoppers send the AI and
+    # what it writes back.
+    aisle_ai_moderation: bool = True
+    # Signs Aisle's replies, so a conversation sent back to /chat can only quote what Aisle
+    # really said. Locally a fixed development key stands in; on Heroku it must be set.
+    aisle_chat_signing_key: str | None = None
     # logo.dev publishable key (pk_...). Without it stores show letter tiles.
     logo_dev_publishable_key: str | None = None
 
