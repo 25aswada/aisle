@@ -88,6 +88,8 @@ def test_prices_come_from_one_table_with_a_cautious_fallback():
     assert budget.price_for("claude-sonnet-5-5") == (2.0, 10.0)
     assert budget.price_for("gpt-5-2025-08-07") == (1.25, 10.0)
     assert budget.price_for("gpt-5-mini-2025-08-07") == (0.25, 2.0)
+    # The production default model.
+    assert budget.price_for("gpt-6-luna") == (0.10, 0.50)
     assert budget.price_for("some-new-model") == budget.UNKNOWN_PRICE
     assert budget.price_for(None) == budget.UNKNOWN_PRICE
     assert budget.UNKNOWN_PRICE >= max(budget.PRICES.values())
