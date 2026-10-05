@@ -6,12 +6,20 @@
   "outputDirectory": "website/public",
   "trailingSlash": true,
   "rewrites": [
-    { "source": "/join/(.+)", "destination": "/join/" }
+    {
+      "source": "/join/(.+)",
+      "destination": "/join/"
+    }
   ],
   "headers": [
     {
-      "source": "/.well-known/apple-app-site-association",
-      "headers": [{ "key": "Content-Type", "value": "application/json" }]
+      "source": "/.well-known/(.*)",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/json"
+        }
+      ]
     }
   ]
 }
