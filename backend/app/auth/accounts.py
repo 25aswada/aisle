@@ -21,8 +21,8 @@ from sqlalchemy.orm import Session
 from ..config import get_settings
 from ..limits import bump, day_window, hour_window, request_ip
 from ..models import (
-    AuthSession, EmailCode, PlusEntitlement, SharedList, SharedListMember, UsageCounter, UsedSignInNonce, User,
-    UserIdentity,
+    AuthSession, EmailCode, LocationObservation, PlusEntitlement, SharedList, SharedListMember, UsageCounter,
+    UsedSignInNonce, User, UserIdentity,
 )
 
 # A session nobody has used for this long is over; the app asks to sign in again.
@@ -211,15 +211,20 @@ def delete_user(db: Session, user: User) -> None:
     emailed codes for its addresses. Today's limit counts move to a hash of each way it
     signed in (kept about a week, like all counts), so signing up again doesn't reset
     them; nothing else carries over (SQLite can reuse the id). Sign-in code records only
-    hold hashes and go after two days. Searches and reports stay anonymous. Apple keeps
-    billing a subscription until it's canceled in Settings; "Restore purchases" can move
-    it to a new account. Shared lists it owns go to whoever has been on them longest."""
+    hold hashes and go after two days. Searches stay anonymous; reports are unlinked and
+    lose their notes. Apple keeps billing a subscription until it's canceled in Settings;
+    "Restore purchases" can move it to a new account. Shared lists it owns go to whoever
+    has been on them longest."""
     _hand_off_shared_lists(db, user)
     db.execute(update(AuthSession).where(AuthSession.user_id == user.id)
                .values(revoked_at=datetime.now(timezone.utc)))
     db.execute(delete(PlusEntitlement).where(PlusEntitlement.user_id == user.id))
     _set_aside_usage(db, user)
     db.execute(delete(UsageCounter).where(UsageCounter.subject == f"user:{user.id}"))
+    # Found-it reports stay to help other shoppers, but no longer point at the account: a
+    # random stand-in keeps them counting as one person's, and their free-text notes go.
+    db.execute(update(LocationObservation).where(LocationObservation.device_id == f"user:{user.id}")
+               .values(device_id=f"gone:{secrets.token_hex(12)}", note=None))
     emails = {e for e in (user.email, *(i.email for i in user.identities),
                           *(i.subject for i in user.identities if i.provider == "email")) if e}
     if emails:

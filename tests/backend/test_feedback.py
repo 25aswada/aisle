@@ -61,6 +61,18 @@ def test_found_it_records_observation(seeded_client, seeded_engine):
         assert observation.device_id.startswith("user:")
 
 
+def test_deleting_the_account_unlinks_its_reports(seeded_client, seeded_engine):
+    store_id = store_id_for(seeded_client, "Trader Joe's")
+    result = seeded_client.post("/search", json={"query": "maple syrup", "store_id": store_id}).json()
+    saved = _feedback(seeded_client, "dev-gone", store_id=store_id, item=result["item"], verdict="found",
+                      zone_id=result["location"]["zone_id"], note="by the pancake mix")
+    assert seeded_client.delete("/me", headers=_shopper(seeded_client, "dev-gone")).status_code == 204
+    with Session(seeded_engine) as session:
+        observation = session.get(LocationObservation, saved["id"])
+        assert observation.device_id.startswith("gone:")
+        assert observation.note is None
+
+
 def test_one_report_does_not_change_the_answer(seeded_client):
     store_id = store_id_for(seeded_client, "Trader Joe's")
     frozen = _zone(seeded_client, store_id, "Frozen Foods")
