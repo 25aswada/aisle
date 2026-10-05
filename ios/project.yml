@@ -4,6 +4,10 @@ options:
   deploymentTarget:
     iOS: "17.0"
   createIntermediateGroups: true
+packages:
+  RevenueCat:
+    url: https://github.com/RevenueCat/purchases-ios-spm
+    from: 5.92.0
 settings:
   base:
     SWIFT_VERSION: "5.0"
@@ -13,6 +17,9 @@ settings:
     AISLE_API_BASE_URL: "http://127.0.0.1:8000"
     # Sign in with Google (iOS OAuth client in Cloud project aisle-510605). Not a secret.
     AISLE_GOOGLE_CLIENT_ID: "192788314882-d6e46f6nv0nc8b00iaomfv57pgr65js9.apps.googleusercontent.com"
+    # RevenueCat's public iOS SDK key (appl_...), for purchase analytics. Not a secret.
+    # Empty turns RevenueCat off.
+    AISLE_REVENUECAT_API_KEY: ""
   configs:
     # Release builds talk to the Heroku app; Debug stays on this Mac (Config/Local.xcconfig).
     Release:
@@ -27,6 +34,8 @@ targets:
       # Local StoreKit testing only; referenced by the scheme, never shipped in the app.
       - path: Aisle/Aisle.storekit
         buildPhase: none
+    dependencies:
+      - package: RevenueCat
     configFiles:
       Debug: Config/Debug.xcconfig
     settings:
@@ -55,6 +64,7 @@ targets:
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         AisleAPIBaseURL: $(AISLE_API_BASE_URL)
         AisleGoogleClientID: $(AISLE_GOOGLE_CLIENT_ID)
+        AisleRevenueCatAPIKey: $(AISLE_REVENUECAT_API_KEY)
         NSCameraUsageDescription: >-
           Aisle uses the camera when you take a photo of something you want to find,
           so it can tell what it is and where it is in the store.

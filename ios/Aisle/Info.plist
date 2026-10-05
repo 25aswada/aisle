@@ -6,6 +6,8 @@
 	<string>$(AISLE_API_BASE_URL)</string>
 	<key>AisleGoogleClientID</key>
 	<string>$(AISLE_GOOGLE_CLIENT_ID)</string>
+	<key>AisleRevenueCatAPIKey</key>
+	<string>$(AISLE_REVENUECAT_API_KEY)</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>

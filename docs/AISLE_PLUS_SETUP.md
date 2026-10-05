@@ -62,3 +62,21 @@ uses `ios/Aisle/Aisle.storekit`, and the server accepts those purchases only wit
   and `APPLE_SIGNIN_PRIVATE_KEY` (the file's contents) on Heroku. Apple requires apps to
   revoke a user's Apple sign-in when they delete their account; without the key the server
   can't.
+
+## 6. RevenueCat (purchase analytics)
+
+The app reports Aisle+ purchases to RevenueCat for revenue and subscriber charts. It
+only watches: purchases still go through `PlusStore` and the server still decides who has
+Aisle+ (`ios/Aisle/Account/PurchaseAnalytics.swift`). Customers appear under the
+account's `plusToken`, the same ID purchases carry as their appAccountToken.
+
+- **App:** RevenueCat project "Aisle" → Apps → + → App Store, bundle ID
+  `app.shopaisle.aisle`. Its public SDK key (`appl_...`) goes in `AISLE_REVENUECAT_API_KEY`
+  in `ios/project.yml`; it ships in the app and isn't a secret. Don't use the Test Store
+  key: that store can't see App Store purchases. Empty turns RevenueCat off.
+- **In-App Purchase key:** App Store Connect → Users and Access → Integrations →
+  In-App Purchase → +. Upload the .p8 with its key ID and issuer ID to the RevenueCat app
+  so it can check transactions with Apple.
+- **Server notifications:** Apple sends them to one URL. Keep it on the Aisle server
+  (step 5); to also give them to RevenueCat, point Apple at RevenueCat's URL instead and
+  set the Aisle server's URL as RevenueCat's notification forwarding URL.
