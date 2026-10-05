@@ -4,5 +4,14 @@
   "installCommand": "",
   "buildCommand": "python3 website/build.py",
   "outputDirectory": "website/public",
-  "trailingSlash": true
+  "trailingSlash": true,
+  "rewrites": [
+    { "source": "/join/(.+)", "destination": "/join/" }
+  ],
+  "headers": [
+    {
+      "source": "/.well-known/apple-app-site-association",
+      "headers": [{ "key": "Content-Type", "value": "application/json" }]
+    }
+  ]
 }

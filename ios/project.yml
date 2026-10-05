@@ -53,6 +53,9 @@ targets:
       path: Aisle/Aisle.entitlements
       properties:
         com.apple.developer.applesignin: [Default]
+        # Invite links (https://shopaisle.app/join/CODE) open the app; the site serves
+        # /.well-known/apple-app-site-association (website/build.py).
+        com.apple.developer.associated-domains: ["applinks:shopaisle.app"]
     info:
       path: Aisle/Info.plist
       properties:
@@ -73,7 +76,8 @@ targets:
           optional: you can always search for a store by name or address instead.
         # Only standard HTTPS and hashing, which are exempt from export paperwork.
         ITSAppUsesNonExemptEncryption: false
-        # aisle://join/CODE opens a shared-list invite.
+        # aisle://join/CODE opens a shared-list invite (older invites; new ones are
+        # https://shopaisle.app/join/CODE universal links).
         CFBundleURLTypes:
           - CFBundleURLName: app.shopaisle.aisle
             CFBundleURLSchemes: [aisle]

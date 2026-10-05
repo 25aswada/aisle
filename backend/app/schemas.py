@@ -521,7 +521,8 @@ class SharedListChange(BaseModel):
 
 
 class SharedListChanges(BaseModel):
-    changes: list[SharedListChange] = Field(max_length=500)
+    # The app sends at most 100 at a time (bigger edits go in several requests).
+    changes: list[SharedListChange] = Field(max_length=100)
 
 
 class JoinSharedList(BaseModel):
@@ -529,6 +530,8 @@ class JoinSharedList(BaseModel):
 
 
 class SharedMemberOut(BaseModel):
+    # The membership's id, for the owner to remove someone.
+    id: int
     first_name: str
     is_owner: bool
     is_you: bool
@@ -537,7 +540,8 @@ class SharedMemberOut(BaseModel):
 class SharedListOut(BaseModel):
     id: str
     name: str
-    invite_code: str
+    # Only the owner gets the code: they decide who's invited.
+    invite_code: str | None = None
     version: int
     is_owner: bool
     members: list[SharedMemberOut]
@@ -551,3 +555,10 @@ class SharedListSummary(BaseModel):
     is_owner: bool
     item_count: int
     members: list[SharedMemberOut]
+
+
+class SharedListReport(BaseModel):
+    reason: Literal["spam", "harassment", "inappropriate", "other"]
+    note: str | None = Field(default=None, max_length=500)
+    # Also leave the list (not for its owner, who can delete it instead).
+    leave: bool = False

@@ -354,18 +354,26 @@ the same items. Every route needs a session. Joining with an invite code is free
 | --- | --- | --- |
 | `GET /lists` | | Summaries of the lists you're on: `id, name, version, is_owner, item_count, members` |
 | `POST /lists` | `{"name", "items": [item…]}` | Shares a list; 402 without Aisle+. 201 with the list |
-| `POST /lists/join` | `{"code"}` | Case and spacing don't matter; 404 for an unknown code. 20 tries an hour per account (60 per IP), then 429. 409 when the list has 20 people; 403 once the owner's Aisle+ has ended |
+| `POST /lists/join` | `{"code"}` | Case and spacing don't matter; 404 for an unknown code. 20 tries an hour per account (60 per IP), then 429. 409 when the list has 20 people; 403 once the owner's Aisle+ has ended, or if the owner removed you ("You can't join this list.") |
 | `GET /lists/{id}` | | The list; 404 if it's gone or you're not on it |
-| `POST /lists/{id}/changes` | `{"changes": [{"op": "upsert", "item": item} \| {"op": "delete", "id"}]}` | Latest write to an item wins; bumps `version` |
-| `PATCH /lists/{id}` | `{"name"}` | |
-| `DELETE /lists/{id}` | | The owner deletes it for everyone; anyone else leaves. 204 |
+| `POST /lists/{id}/changes` | `{"changes": [{"op": "upsert", "item": item} \| {"op": "delete", "id"}]}` | Up to 100 changes (422 past that). Latest write to an item wins; bumps `version`. `AISLE_LIST_CHANGES_PER_HOUR` (600) per account, then 429 |
+| `PATCH /lists/{id}` | `{"name"}` | Owner only (403 otherwise) |
+| `POST /lists/{id}/code` | | Owner only. A new invite code; the old one stops working, nobody is removed. The list |
+| `DELETE /lists/{id}/members/{member_id}` | | Owner only. Takes that person off and bans them from the list (any code, now or later); 400 for yourself, 404 if they're not on it. The list |
+| `POST /lists/{id}/report` | `{"reason": "spam" \| "harassment" \| "inappropriate" \| "other", "note"?, "leave"?}` | Anyone on the list. Stores a copy of the list in `content_reports` and emails it to support (with Resend, when configured); `leave: true` also leaves it (not for the owner). 10 an hour per account. 204 |
+| `DELETE /lists/{id}` | | The owner deletes it for everyone; anyone else leaves (and can rejoin with the code). 204 |
 
+Renaming and new codes share the writes limit (`AISLE_WRITES_PER_HOUR`, 120 per account).
 An item is `{"id", "text", "quantity", "category_name", "is_done", "position"}`; `id` is the
-phone's UUID for it. Invite codes are 8 characters (older lists keep their 6). A list is `{"id", "name", "invite_code", "version", "is_owner",
-"members": [{"first_name", "is_owner", "is_you"}], "items": [item…]}`, up to 500 items.
-The app keeps unconfirmed changes on the phone, sends them after a short pause, polls every
-few seconds while the list is open, and replays its own pending changes on top of the
-server's copy. Invites are `aisle://join/<code>` links.
+phone's UUID for it, unique within its list. Invite codes are 8 characters (older lists keep their 6). A list is `{"id", "name", "invite_code", "version", "is_owner",
+"members": [{"id", "first_name", "is_owner", "is_you"}], "items": [item…]}`, up to 500 items;
+`invite_code` is null unless you own it, and a member's `id` is what the owner removes.
+The app keeps unconfirmed changes on the phone, sends them (100 at a time) after a short
+pause, polls every few seconds while the list is open, and replays its own pending changes
+on top of the server's copy. Invites are `https://shopaisle.app/join/<code>` universal links
+(the website's `/join/` page for people without the app); older `aisle://join/<code>` links
+still open the app. If the owner deletes their account, the list passes to whoever has been
+on it longest, or is deleted if nobody else is.
 
 ## Aisle+
 
