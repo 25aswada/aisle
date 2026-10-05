@@ -205,9 +205,9 @@ final class GoogleSignIn: NSObject, ASWebAuthenticationPresentationContextProvid
         let callback = try await authorize(url)
         let items = URLComponents(url: callback, resolvingAgainstBaseURL: false)?.queryItems ?? []
         if let error = items.first(where: { $0.name == "error" })?.value {
-            // e.g. access_denied: the account isn't a test user while the app is in testing.
+            // access_denied: they declined on Google's screen, or Google refused the account.
             throw AuthError.server(error == "access_denied"
-                ? "Google didn't allow this sign-in. While Aisle is in testing, only approved accounts can use Google."
+                ? "Google didn't allow this sign-in. Try again, or sign in another way."
                 : "Google sign-in didn't finish (\(error)). Try again.")
         }
         guard items.first(where: { $0.name == "state" })?.value == state,
