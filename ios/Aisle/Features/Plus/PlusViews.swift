@@ -1035,7 +1035,7 @@ struct OnboardingPlusOffer: View {
     @State private var errorMessage: String?
 
     private static let benefits: [(symbol: String, title: String)] = [
-        ("camera", "Unlimited photo search and follow-ups"),
+        ("magnifyingglass", "Unlimited search and follow-ups"),
         ("person.2", "Shared family lists"),
         ("map", "Offline store maps"),
         ("point.topleft.down.to.point.bottomright.curvepath", "Multi-store trips"),
