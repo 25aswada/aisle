@@ -200,7 +200,7 @@ def home() -> str:
     plans = plan("Free", "$0", "forever", "Everything you need for a quick run.",
                  ["Find items in any store", "A shopping list, sorted by department", "Start Shopping routes",
                   "5 searches a day", "1 photo search a day", "1 follow-up question per search"], False) + \
-        plan("Aisle+", "$3.99", "/ month", "or $29.99 a year · billed by Apple, cancel anytime",
+        plan("Aisle+", "$5.99", "/ month", "or $39.99 a year · billed by Apple, cancel anytime",
              ["Unlimited search and follow-ups", "Shared family lists", "Unlimited lists", "Multi-store trips", "Offline store maps"], True)
 
     faqs = [("Which stores does Aisle work in?", "Grocery, pharmacy, big-box and hardware stores you can find on the map. Aisle uses what it knows about each store and tells you how sure it is."),
