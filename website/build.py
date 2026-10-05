@@ -319,7 +319,6 @@ def main() -> None:
         target = OUT / path
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(html, encoding="utf-8")
-    (OUT / "CNAME").write_text(DOMAIN + "\n")
     (OUT / "robots.txt").write_text(f"User-agent: *\nAllow: /\nSitemap: https://{DOMAIN}/sitemap.xml\n")
     urls = "".join(f"<url><loc>https://{DOMAIN}{p}</loc></url>" for p in ["/", "/privacy/", "/terms/", "/support/"])
     (OUT / "sitemap.xml").write_text(f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{urls}</urlset>\n')
