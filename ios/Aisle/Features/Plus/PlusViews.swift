@@ -1026,8 +1026,13 @@ struct PaywallView: View {
         isBuying = true
         defer { isBuying = false }
         do {
-            if try await plus.purchase(plan) == .purchased {
+            switch try await plus.purchase(plan) {
+            case .purchased:
                 withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) { welcomed = true }
+            case .linkedToAnotherAccount:
+                errorMessage = PlusStore.linkedToAnotherAccountMessage
+            case .pending, .cancelled:
+                break
             }
         } catch {
             errorMessage = (error as? LocalizedError)?.errorDescription ?? "Something went wrong. You weren't charged."
@@ -1270,8 +1275,13 @@ struct OnboardingPlusOffer: View {
         isBuying = true
         defer { isBuying = false }
         do {
-            if try await plus.purchase(plan) == .purchased {
+            switch try await plus.purchase(plan) {
+            case .purchased:
                 withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) { welcomed = true }
+            case .linkedToAnotherAccount:
+                errorMessage = PlusStore.linkedToAnotherAccountMessage
+            case .pending, .cancelled:
+                break
             }
         } catch {
             errorMessage = (error as? LocalizedError)?.errorDescription ?? "Something went wrong. You weren't charged."

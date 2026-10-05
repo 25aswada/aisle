@@ -565,6 +565,22 @@ def test_search_without_an_ai_answer_isnt_counted(api, engine):
     assert api.get("/plus/status", headers=headers).json()["ai_search"]["used"] == 0
 
 
+def test_aisle_plus_goes_past_the_free_daily_limits(api, apple, engine, monkeypatch):
+    monkeypatch.setattr(get_settings(), "aisle_free_follow_ups", 1)
+    monkeypatch.setattr(get_settings(), "aisle_free_photo_searches", 1)
+    headers, token, _ = account(engine)
+    sync(api, headers, apple.sign(appAccountToken=token))
+    status = api.get("/plus/status", headers=headers).json()
+    assert status["is_plus"]
+    said = {"role": "assistant", "content": "Dairy.", "signature": sign_reply(1, "Dairy.")}
+    convo = [{"role": "user", "content": "milk"}, said]
+    for question in ("and eggs?", "butter?", "cheese?", "yogurt?"):
+        convo.append({"role": "user", "content": question})
+        assert api.post("/chat", json={"store_id": 1, "messages": convo}, headers=headers).status_code == 200
+        convo.append(said)
+    assert all(api.post("/identify", json={"image": PHOTO}, headers=headers).status_code == 200 for _ in range(3))
+
+
 def test_aisle_plus_has_a_fair_use_ceiling(api, apple, engine, monkeypatch):
     monkeypatch.setattr(get_settings(), "aisle_plus_photo_searches", 2)
     headers, token, _ = account(engine)
