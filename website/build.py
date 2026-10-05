@@ -7,6 +7,7 @@ Run: python3 website/build.py
 from __future__ import annotations
 
 import importlib.util
+import json
 import re
 import shutil
 from html import escape
@@ -73,8 +74,9 @@ def footer() -> str:
 </div></footer>'''
 
 
-def page(title: str, path: str, body: str, desc: str = DESC, active: str = "") -> str:
+def page(title: str, path: str, body: str, desc: str = DESC, active: str = "", index: bool = True) -> str:
     url = f"https://{DOMAIN}{path}"
+    robots = "" if index else '<meta name="robots" content="noindex">\n'
     return f'''<!doctype html>
 <html lang="en">
 <head>
@@ -82,7 +84,7 @@ def page(title: str, path: str, body: str, desc: str = DESC, active: str = "") -
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{escape(title)}</title>
 <meta name="description" content="{escape(desc)}">
-<link rel="canonical" href="{url}">
+{robots}<link rel="canonical" href="{url}">
 <meta property="og:title" content="{escape(title)}">
 <meta property="og:description" content="{escape(desc)}">
 <meta property="og:url" content="{url}">
@@ -296,6 +298,45 @@ def support() -> str:
     return page("Support · Aisle", "/support/", body, "Help with Aisle and Aisle+.", "Support")
 
 
+def join() -> str:
+    """/join/CODE, a shared-list invite opened without Aisle (with it, iOS opens the app
+    instead; see APP_SITE_ASSOCIATION). vercel.json sends every /join/CODE here, and the
+    page reads the code from the address to show it."""
+    cards = [(PHONE, "Get Aisle", "Coming soon to iPhone", "Aisle is free, and so is joining a shared list."),
+             ('<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"></path><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"></path>',
+              "Tap the invite again", "On your iPhone", "With Aisle installed, the link opens the list in the app."),
+             ('<path d="M4 7h16M4 12h16M4 17h10"></path>', "Or enter the code", "List → ••• → Join a shared list",
+              "Type the invite code, shown above.")]
+    c = "".join(f'<div class="card">{ic(d, 28, 1.8)}<h3>{t}</h3><b>{v}</b><p>{p}</p></div>' for d, t, v, p in cards)
+    body = f'''<div class="wrap dochead" style="padding-bottom:100px">
+  <span class="date">Shared list invite</span>
+  <h1>You’re invited to <span class="g">a shared list.</span></h1>
+  <p>Someone wants to shop with you in Aisle. Everyone on the list sees what’s added and checked off, as it happens.</p>
+  <div class="card" id="invite" hidden style="margin-top:36px;max-width:420px;text-align:center">
+    <span class="sec" style="font-size:14px;font-weight:600">Invite code</span>
+    <b id="code" class="g" style="display:block;margin-top:6px;font-size:40px;letter-spacing:.12em;font-family:ui-monospace,SFMono-Regular,Menlo,monospace"></b>
+  </div>
+  <div class="helpcards">{c}</div>
+</div>
+<script>
+(function () {{
+  var m = location.pathname.match(/^[/]join[/]([A-Za-z0-9]{{4,20}})[/]?$/);
+  if (!m) return;
+  var code = m[1].toUpperCase();
+  document.getElementById('code').textContent = code.length === 8 ? code.slice(0, 4) + ' ' + code.slice(4) : code;
+  document.getElementById('invite').hidden = false;
+}})();
+</script>'''
+    return page("Join a shared list · Aisle", "/join/", body, "Open a shared Aisle list.", index=False)
+
+
+# Universal links: with Aisle installed, iOS opens https://shopaisle.app/join/CODE in the app.
+APP_SITE_ASSOCIATION = {"applinks": {"details": [{
+    "appIDs": ["983N58VUTZ.app.shopaisle.aisle"],
+    "components": [{"/": "/join/*", "comment": "Shared-list invites"}],
+}]}}
+
+
 def notfound() -> str:
     body = f'''<div class="wrap dochead" style="padding:120px 24px 160px;text-align:center"><h1>Not in <span class="g">this aisle.</span></h1>
 <p style="margin:18px auto 0">That page doesn’t exist. Try the <a href="/" style="font-weight:600">home page</a> or <a href="/support/" style="font-weight:600">support</a>.</p></div>'''
@@ -314,11 +355,15 @@ def main() -> None:
     for s in ["lotion-bottle", "glass-of-milk", "birthday-cake", "battery", "bread"]:
         shutil.copy(ICONS / f"{s}.imageset/{s}.png", OUT / f"assets/icons/{s}.png")
     pages = {"index.html": home(), "privacy/index.html": doc("privacy"), "terms/index.html": doc("terms"),
-             "support/index.html": support(), "404.html": notfound()}
+             "support/index.html": support(), "join/index.html": join(), "404.html": notfound()}
     for path, html in pages.items():
         target = OUT / path
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(html, encoding="utf-8")
+    # Apple fetches /.well-known/apple-app-site-association (no extension); saved as .json so
+    # Vercel serves it as JSON, and vercel.json rewrites Apple's path to it without a redirect.
+    (OUT / ".well-known").mkdir()
+    (OUT / ".well-known/apple-app-site-association.json").write_text(json.dumps(APP_SITE_ASSOCIATION, indent=2) + "\n")
     (OUT / "robots.txt").write_text(f"User-agent: *\nAllow: /\nSitemap: https://{DOMAIN}/sitemap.xml\n")
     urls = "".join(f"<url><loc>https://{DOMAIN}{p}</loc></url>" for p in ["/", "/privacy/", "/terms/", "/support/"])
     (OUT / "sitemap.xml").write_text(f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">{urls}</urlset>\n')

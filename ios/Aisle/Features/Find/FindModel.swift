@@ -43,6 +43,8 @@ final class FindModel {
     private(set) var followUpError: String?
     /// Set when a free-tier limit is hit, to open the Aisle+ sheet saying why.
     var upgradePrompt: String?
+    /// Set when a guest is out of today's searches, to offer a free account.
+    var signUpPrompt: SignUpReason?
 
     /// Where recents go when no shared `RecentSearches` is passed in.
     static let ephemeralSuite = "aisle.ephemeral"
@@ -139,6 +141,11 @@ final class FindModel {
             upgradePrompt = message
             return
         }
+        if case APIError.signInRequired(_, let message) = error {
+            phase = .failed(message)
+            signUpPrompt = .searchLimit
+            return
+        }
         if case APIError.httpStatus(404) = error {
             phase = .failed("This store is no longer available. Choose another store.")
             analytics.track(.searchFailed, ["error": "store_not_found"])
@@ -198,14 +205,22 @@ final class FindModel {
         defer { if generation == started { isReplying = false } }
 
         let question = result.query.isEmpty ? result.item : result.query
+        // Aisle's answer goes back exactly as the server signed it; the app's own wording
+        // has no signature, so the server leaves it out of what the AI sees.
+        let explanation = result.explanationSignature != nil ? result.explanation : nil
         var messages = [
             ChatMessage(role: .shopper, content: searchPhoto == nil ? question : "(a photo of \(question))"),
-            ChatMessage(role: .aisle, content: String(result.reply(at: retailer).characters)),
+            ChatMessage(
+                role: .aisle, content: explanation ?? String(result.reply(at: retailer).characters),
+                signature: explanation != nil ? result.explanationSignature : nil
+            ),
         ]
         // Only the newest photo goes along; Aisle's earlier replies already describe the rest.
         messages += turns.map { past in
             let content = past.photo != nil && past.id != turn.id && past.text.isEmpty ? "(sent a photo)" : past.text
-            return ChatMessage(role: past.role, content: content, photo: past.id == turn.id ? past.photo : nil)
+            return ChatMessage(
+                role: past.role, content: content, photo: past.id == turn.id ? past.photo : nil, signature: past.signature
+            )
         }
         do {
             let answer = try await api.chat(storeID: storeID, messages: messages)
@@ -217,7 +232,8 @@ final class FindModel {
             guard let reply else {
                 throw APIError.invalidResponse
             }
-            turns.append(ChatTurn(role: .aisle, text: reply, result: answer.search))
+            let signature = reply == answer.reply ? answer.replySignature : nil
+            turns.append(ChatTurn(role: .aisle, text: reply, result: answer.search, signature: signature))
             MemberActivity.recordFollowUp(question: text, answer: reply)
             if let found = answer.search {
                 // "Was it there?" now asks about this item.

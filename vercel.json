@@ -4,5 +4,15 @@
   "installCommand": "",
   "buildCommand": "python3 website/build.py",
   "outputDirectory": "website/public",
-  "trailingSlash": true
+  "trailingSlash": true,
+  "rewrites": [
+    {
+      "source": "/.well-known/apple-app-site-association",
+      "destination": "/.well-known/apple-app-site-association.json"
+    },
+    {
+      "source": "/join/(.+)",
+      "destination": "/join/"
+    }
+  ]
 }

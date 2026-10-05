@@ -9,6 +9,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
+from .ai.signing import check_signing_key
 from .cleanup import start_in_background as start_cleanup
 from .config import get_settings
 from .database import get_db
@@ -36,6 +37,7 @@ init_sentry(get_settings())
 async def lifespan(_: FastAPI):
     if _on_heroku:
         start_cleanup()  # Deletes data past its retention, every few hours.
+        check_signing_key()
     yield
 
 # The API's interactive docs stay off in production; they map every route for anyone.

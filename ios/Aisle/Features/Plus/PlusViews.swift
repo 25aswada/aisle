@@ -740,10 +740,12 @@ struct FlowingGradient: View {
 
 extension View {
     /// Opens the Aisle+ offer as a sheet when `reason` is set (e.g. a free-tier limit was
-    /// hit), with the reason above it, and clears it when the sheet closes.
+    /// hit), with the reason above it, and clears it when the sheet closes. A guest who
+    /// tries to buy is asked to make an account from on top of it.
     func plusUpgradeSheet(reason: Binding<String?>) -> some View {
         sheet(isPresented: Binding(get: { reason.wrappedValue != nil }, set: { if !$0 { reason.wrappedValue = nil } })) {
             PaywallView(reason: reason.wrappedValue)
+                .signUpPrompts()
         }
     }
 }
@@ -760,6 +762,8 @@ struct PaywallView: View {
     var inTab = false
 
     @Environment(PlusStore.self) private var plus
+    @Environment(AccountStore.self) private var accounts
+    @Environment(\.requireAccount) private var requireAccount
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -1012,19 +1016,32 @@ struct PaywallView: View {
         withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) { plan = newPlan }
     }
 
+    /// Aisle+ belongs to an account (its appAccountToken), so a guest makes one first and
+    /// then carries on buying.
     private func buy() async {
+        guard accounts.isSignedIn else {
+            // An account that already has Aisle+ has nothing left to buy.
+            return requireAccount(.plus) { Task { if !plus.isPlus { await buy() } } }
+        }
         isBuying = true
         defer { isBuying = false }
         do {
-            if try await plus.purchase(plan) == .purchased {
+            switch try await plus.purchase(plan) {
+            case .purchased:
                 withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) { welcomed = true }
+            case .linkedToAnotherAccount:
+                errorMessage = PlusStore.linkedToAnotherAccountMessage
+            case .pending, .cancelled:
+                break
             }
         } catch {
             errorMessage = (error as? LocalizedError)?.errorDescription ?? "Something went wrong. You weren't charged."
         }
     }
 
+    /// Restoring finds the purchases bought for an account, so a guest needs one too.
     private func restore() async {
+        guard accounts.isSignedIn else { return requireAccount(.plus) { Task { await restore() } } }
         do {
             try await plus.restore()
             if plus.isPlus {
@@ -1258,8 +1275,13 @@ struct OnboardingPlusOffer: View {
         isBuying = true
         defer { isBuying = false }
         do {
-            if try await plus.purchase(plan) == .purchased {
+            switch try await plus.purchase(plan) {
+            case .purchased:
                 withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) { welcomed = true }
+            case .linkedToAnotherAccount:
+                errorMessage = PlusStore.linkedToAnotherAccountMessage
+            case .pending, .cancelled:
+                break
             }
         } catch {
             errorMessage = (error as? LocalizedError)?.errorDescription ?? "Something went wrong. You weren't charged."

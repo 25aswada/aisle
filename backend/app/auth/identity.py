@@ -3,11 +3,14 @@
 The app signs in with Apple or Google on the device and sends us the ID token (a JWT
 the provider signed). We trust it only after checking its signature against the
 provider's published keys, that it was issued to our app (audience), by the provider
-(issuer), hasn't expired, and carries the nonce the app made for this sign-in.
+(issuer), hasn't expired, and carries the nonce the app made for this sign-in. Apple's
+server-to-server notifications (an Apple ID stopped using Aisle, or was deleted) are
+JWTs signed with the same keys and checked the same way.
 """
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 from dataclasses import dataclass
 from functools import lru_cache
@@ -35,10 +38,22 @@ class ProviderIdentity:
     given_name: str | None = None
 
 
+@dataclass(frozen=True)
+class AppleEvent:
+    """A Sign in with Apple server-to-server notification about one Apple ID: consent-revoked,
+    account-delete, email-disabled or email-enabled."""
+    type: str
+    subject: str
+    # The notification's own id (jti), so a replayed one is ignored.
+    id: str | None = None
+
+
 class IdentityVerifier(Protocol):
     def apple(self, identity_token: str, nonce: str) -> ProviderIdentity: ...
 
     def google(self, id_token: str, nonce: str) -> ProviderIdentity: ...
+
+    def apple_event(self, payload: str) -> AppleEvent: ...
 
 
 @lru_cache(maxsize=4)
@@ -47,12 +62,13 @@ def _keys(url: str) -> jwt.PyJWKClient:
     return jwt.PyJWKClient(url, cache_keys=True, lifespan=6 * 3600, timeout=10)
 
 
-def _decode(token: str, keys_url: str, audience: str, issuer: str | tuple[str, ...]) -> dict:
+def _decode(token: str, keys_url: str, audience: str, issuer: str | tuple[str, ...],
+            require: tuple[str, ...] = ("exp", "iat", "sub", "aud", "iss")) -> dict:
     try:
         key = _keys(keys_url).get_signing_key_from_jwt(token)
         return jwt.decode(
             token, key.key, algorithms=["RS256"], audience=audience, issuer=issuer,
-            options={"require": ["exp", "iat", "sub", "aud", "iss"]},
+            options={"require": list(require)},
         )
     except jwt.PyJWKClientConnectionError as error:
         log.warning("Couldn't fetch sign-in keys from %s", keys_url)
@@ -96,3 +112,17 @@ class JWKSIdentityVerifier:
             email_verified=_truthy(claims.get("email_verified")),
             given_name=claims.get("given_name"),
         )
+
+    def apple_event(self, payload: str) -> AppleEvent:
+        # Signed like an identity token, but the Apple ID is inside "events", and an expiry
+        # isn't promised (it's checked when there is one).
+        claims = _decode(payload, APPLE_KEYS_URL, self.apple_bundle_id, APPLE_ISSUER, require=("iat", "aud", "iss"))
+        events = claims.get("events")
+        if isinstance(events, str):  # Apple sends the event as JSON text inside the JWT.
+            try:
+                events = json.loads(events)
+            except ValueError as error:
+                raise InvalidToken("unreadable event") from error
+        if not isinstance(events, dict) or not events.get("type") or not events.get("sub"):
+            raise InvalidToken("no event")
+        return AppleEvent(type=str(events["type"]), subject=str(events["sub"]), id=claims.get("jti"))

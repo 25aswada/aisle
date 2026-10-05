@@ -265,6 +265,20 @@ class ResendEmailSender:
             log.warning("Resend send failed: HTTP %s", response.status_code)
             raise ConnectionError("Resend send failed")
 
+    def send_text(self, email: str, subject: str, text: str) -> None:
+        """A plain email to Aisle itself, like a report of a shared list to support."""
+        try:
+            response = self._client.post(
+                "https://api.resend.com/emails",
+                json={"from": self._sender, "to": [email], "subject": subject, "text": text},
+                headers={"Authorization": f"Bearer {self._api_key}"},
+            )
+        except httpx.HTTPError as error:
+            raise ConnectionError("Resend unreachable") from error
+        if response.status_code not in (200, 201):
+            log.warning("Resend send failed: HTTP %s", response.status_code)
+            raise ConnectionError("Resend send failed")
+
 
 # The app's accent ink (lavender, pink, peach), one stop per letter, so the word reads as
 # a gradient even in Gmail, which drops background-clip text.

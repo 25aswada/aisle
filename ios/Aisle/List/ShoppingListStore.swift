@@ -24,7 +24,7 @@ final class ShoppingListStore {
     }
     /// The last problem syncing a shared list, for a quiet notice. Nil when all is well.
     private(set) var syncProblem: String?
-    /// A join code from a link (aisle://join/CODE), waiting for the List tab to handle.
+    /// A join code from an invite link (see `InviteLink`), waiting for the List tab to handle.
     var pendingJoinCode: String?
 
     @ObservationIgnored private let defaults: UserDefaults
@@ -101,7 +101,7 @@ final class ShoppingListStore {
 
     func renameList(_ id: UUID, to name: String) {
         let trimmed = String(name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(60))
-        guard !trimmed.isEmpty, let index = lists.firstIndex(where: { $0.id == id }) else { return }
+        guard !trimmed.isEmpty, let index = lists.firstIndex(where: { $0.id == id }), lists[index].canRename else { return }
         lists[index].name = trimmed
         if let serverID = lists[index].shared?.serverID, let service {
             Task { _ = try? await service.rename(serverID: serverID, name: trimmed) }
@@ -275,6 +275,39 @@ final class ShoppingListStore {
         currentID = list.id
     }
 
+    /// The owner takes someone off a shared list. They can't join it again.
+    func removeMember(_ member: SharedMember, from listID: UUID) async throws {
+        guard let serverID = lists.first(where: { $0.id == listID })?.shared?.serverID,
+              let memberID = member.id, let service else { return }
+        do {
+            let payload = try await service.removeMember(serverID: serverID, memberID: memberID)
+            if let i = lists.firstIndex(where: { $0.shared?.serverID == serverID }) { apply(payload, at: i) }
+        } catch SharedListError.gone {
+            // They'd already left, or the list is gone: catch up with the server.
+            await sync(listID, service: service)
+        }
+    }
+
+    /// The owner makes a new invite link and code; the old ones stop working.
+    func newInviteLink(for listID: UUID) async throws {
+        guard let serverID = lists.first(where: { $0.id == listID })?.shared?.serverID, let service else { return }
+        let payload = try await service.newInviteCode(serverID: serverID)
+        if let i = lists.firstIndex(where: { $0.shared?.serverID == serverID }) { apply(payload, at: i) }
+    }
+
+    /// Reports a shared list to Aisle. With `alsoLeave` (not for its owner), you leave it
+    /// too and it goes from this phone.
+    func report(_ listID: UUID, reason: SharedListReportReason, note: String, alsoLeave: Bool) async throws {
+        guard let shared = lists.first(where: { $0.id == listID })?.shared else { return }
+        guard let service else { throw SharedListError.signedOut }
+        let leaving = alsoLeave && !shared.isOwner
+        let note = String(note.trimmingCharacters(in: .whitespacesAndNewlines).prefix(500))
+        try await service.report(serverID: shared.serverID, reason: reason, note: note.isEmpty ? nil : note, leave: leaving)
+        if leaving, let i = lists.firstIndex(where: { $0.shared?.serverID == shared.serverID }) {
+            removeLocally(at: i)
+        }
+    }
+
     /// Sends pending changes and picks up everyone else's, for every shared list.
     func refreshShared() async {
         guard let service else { return }
@@ -321,6 +354,10 @@ final class ShoppingListStore {
 
     // MARK: Sync engine
 
+    /// Changes per request, the server's limit. A big edit (clearing a long list) goes in
+    /// several.
+    static let changesPerSend = 100
+
     private func record(_ changes: [SharedChange], in index: Int) {
         guard !changes.isEmpty else { return }
         // A newer change to an item replaces any older one still waiting.
@@ -346,7 +383,8 @@ final class ShoppingListStore {
               let serverID = lists[index].shared?.serverID else { return }
         inFlight.insert(listID)
         defer { inFlight.remove(listID) }
-        let sending = lists[index].pending
+        // The server takes so many at a time; the rest go right after.
+        let sending = Array(lists[index].pending.prefix(Self.changesPerSend))
         do {
             let payload = sending.isEmpty
                 ? try await service.fetch(serverID: serverID)

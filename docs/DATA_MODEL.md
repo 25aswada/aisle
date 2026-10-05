@@ -68,6 +68,11 @@ Names come from a fixed list; properties are small scalars with no user text.
 Deleting a user deletes its identities and revokes its sessions. Searches, reports and
 analytics stay anonymous and are not linked to users.
 
+- `apple_revocations(id, refresh_token null, authorization_code null, attempts,
+  next_attempt_at, created_at)`: a deleted account's Apple sign-in that couldn't be
+  revoked at the time. Not linked to any user; cleanup retries it and deletes the row on
+  success, or gives up within two weeks.
+
 ## Aisle+
 
 - `plus_entitlements(id, original_transaction_id unique, product_id, environment,
@@ -80,10 +85,18 @@ analytics stay anonymous and are not linked to users.
 
 - `shared_lists(id uuid, owner_id, name, invite_code unique, version, created_at, updated_at)`.
 - `shared_list_members(id, list_id, user_id, joined_at)`, unique on `(list_id, user_id)`.
-- `shared_list_items(id (the phone's UUID), list_id, text, quantity, category_name, is_done,
-  position, updated_at)`.
+- `shared_list_items(list_id, id (the phone's UUID), text, quantity, category_name, is_done,
+  position, updated_at)`, keyed by `(list_id, id)`: the same phone id on two lists is two items.
+- `shared_list_bans(id, list_id, user_id, created_at)`, unique on `(list_id, user_id)`: people
+  the owner removed. They can't join that list again, whatever its code.
+- `content_reports(id, reporter_id null, list_id null, reason, note null, snapshot, created_at,
+  emailed_at null, reviewed_at null)`: reports of shared lists. `snapshot` is the list as it
+  was reported (`name`, `owner_id`, `items`), so a report outlives the list and both
+  accounts (the ids become null).
 
-Deleting the owner's account deletes their lists; deleting a member's removes them.
+Deleting the owner's account hands each of their lists to its longest-standing other member
+(`auth.accounts.delete_user`); a list with nobody else on it is deleted. Deleting a member's
+account removes them.
 
 ### Seeding and imports
 

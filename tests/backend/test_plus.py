@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from backend.app.ai import budget
 from backend.app.ai.providers import get_explainer, get_location_model
+from backend.app.ai.signing import sign_reply
 from backend.app.config import get_settings
 from backend.app.database import get_db
 from backend.app.main import app
@@ -417,9 +418,10 @@ def test_photos_earlier_in_a_follow_up_go_nowhere(api, engine, monkeypatch):
     ai = RecordingAI()
     app.dependency_overrides[get_explainer] = lambda: ai
     headers, _, _ = account(engine)
+    said = {"role": "assistant", "content": "It's oat milk.", "signature": sign_reply(1, "It's oat milk.")}
     convo = [
-        {"role": "user", "content": "this?", "image": PHOTO}, {"role": "assistant", "content": "made up"},
-        {"role": "user", "content": "", "image": PHOTO}, {"role": "assistant", "content": "made up"},
+        {"role": "user", "content": "this?", "image": PHOTO}, said,
+        {"role": "user", "content": "", "image": PHOTO}, said,
         {"role": "user", "content": "what are these two things?"},
     ]
     assert api.post("/chat", json={"store_id": 1, "messages": convo}, headers=headers).status_code == 200
@@ -435,7 +437,13 @@ def test_long_conversations_are_trimmed_before_the_ai(api, engine, monkeypatch):
     ai = RecordingAI()
     app.dependency_overrides[get_explainer] = lambda: ai
     headers, _, _ = account(engine)
-    convo = [{"role": "user" if i % 2 == 0 else "assistant", "content": f"{i} " + "x" * 3990} for i in range(39)]
+    def turn(i):
+        content = f"{i} " + "x" * 3990
+        if i % 2 == 0:
+            return {"role": "user", "content": content}
+        return {"role": "assistant", "content": content, "signature": sign_reply(1, content)}
+
+    convo = [turn(i) for i in range(39)]
     assert api.post("/chat", json={"store_id": 1, "messages": convo}, headers=headers).status_code == 200
     sent = ai.chats[0]
     assert len(sent) == 11
@@ -465,8 +473,54 @@ def test_free_searches_stop_at_the_daily_limit_and_aisle_plus_lifts_it(api, appl
     assert api.get("/plus/status", headers=headers).json()["search"]["used"] == 5
 
 
-def test_signed_out_searches_arent_held_to_the_free_daily_limit(api):
-    assert all(search(api).status_code == 200 for _ in range(6))
+def test_guests_get_a_few_searches_a_day_then_are_asked_to_sign_up(api, engine):
+    guest = device("guest-a")
+    assert [search(api, guest).status_code for _ in range(3)] == [200] * 3
+    blocked = search(api, guest)
+    assert blocked.status_code == 402
+    assert blocked.json()["detail"] == {
+        "code": "sign_in_required", "feature": "search", "limit": 3,
+        "message": "Create a free account to keep searching.",
+    }
+    assert api.get("/plus/status", headers=guest).json()["search"] == {"used": 3, "limit": 3}
+    # A refused search isn't counted, and an account has its own five.
+    with Session(engine) as db:
+        counts = {c.subject: c.count for c in db.query(UsageCounter).filter_by(feature="guest_search")}
+    assert counts == {"device:guest-a": 3, "ip:testclient": 3}
+    headers, _, _ = account(engine, "guest-a")
+    assert [search(api, headers).status_code for _ in range(5)] == [200] * 5
+
+
+def test_guest_limits_also_hold_per_network(api):
+    # New install ids on one network get three times a device's allowance in all.
+    for phone in ("guest-a", "guest-b", "guest-c"):
+        assert all(search(api, device(phone)).status_code == 200 for _ in range(3))
+    assert search(api, device("guest-d")).status_code == 402
+    # Without a device id, only the network's count applies.
+    assert search(api).json()["detail"]["code"] == "sign_in_required"
+
+
+def test_guest_searches_that_find_nothing_or_have_no_store_arent_counted(api):
+    guest = device("guest-a")
+    assert api.post("/search", json={"query": "milk", "store_id": 999}, headers=guest).status_code == 404
+    # The intro's practice question has no store: a general answer, not one of the day's.
+    assert all(api.post("/search", json={"query": "milk"}, headers=guest).status_code == 200 for _ in range(4))
+    assert api.get("/plus/status", headers=guest).json()["search"]["used"] == 0
+
+
+def test_guests_get_a_few_trip_routes_a_day(api, engine, monkeypatch):
+    monkeypatch.setattr(get_settings(), "aisle_guest_routes", 2)
+    trip = {"store_id": 1, "items": [{"id": "1", "text": "milk"}]}
+    guest = device("guest-a")
+    assert [api.post("/route", json=trip, headers=guest).status_code for _ in range(2)] == [200, 200]
+    blocked = api.post("/route", json=trip, headers=guest)
+    assert blocked.status_code == 402
+    assert blocked.json()["detail"]["code"] == "sign_in_required"
+    assert blocked.json()["detail"]["message"] == "Create a free account to keep planning trips."
+    # A missing store isn't counted; accounts aren't held to it.
+    assert api.post("/route", json={**trip, "store_id": 999}, headers=device("guest-b")).status_code == 404
+    headers, _, _ = account(engine, "guest-a")
+    assert all(api.post("/route", json=trip, headers=headers).status_code == 200 for _ in range(3))
 
 
 def test_free_plan_gets_one_follow_up_per_search(api, apple, engine):
@@ -509,6 +563,22 @@ def test_search_without_an_ai_answer_isnt_counted(api, engine):
     headers, _, _ = account(engine)
     search(api, headers)
     assert api.get("/plus/status", headers=headers).json()["ai_search"]["used"] == 0
+
+
+def test_aisle_plus_goes_past_the_free_daily_limits(api, apple, engine, monkeypatch):
+    monkeypatch.setattr(get_settings(), "aisle_free_follow_ups", 1)
+    monkeypatch.setattr(get_settings(), "aisle_free_photo_searches", 1)
+    headers, token, _ = account(engine)
+    sync(api, headers, apple.sign(appAccountToken=token))
+    status = api.get("/plus/status", headers=headers).json()
+    assert status["is_plus"]
+    said = {"role": "assistant", "content": "Dairy.", "signature": sign_reply(1, "Dairy.")}
+    convo = [{"role": "user", "content": "milk"}, said]
+    for question in ("and eggs?", "butter?", "cheese?", "yogurt?"):
+        convo.append({"role": "user", "content": question})
+        assert api.post("/chat", json={"store_id": 1, "messages": convo}, headers=headers).status_code == 200
+        convo.append(said)
+    assert all(api.post("/identify", json={"image": PHOTO}, headers=headers).status_code == 200 for _ in range(3))
 
 
 def test_aisle_plus_has_a_fair_use_ceiling(api, apple, engine, monkeypatch):

@@ -1,8 +1,9 @@
 # API
 
-Local origin: `http://127.0.0.1:8000`. JSON in and out. The app requires an account, but
-the API stays usable without one where it can: store lookups, `/search` and `/route` are
-public (with smaller AI limits signed out). These need a session (401 without one): `/me`
+Local origin: `http://127.0.0.1:8000`. JSON in and out. The app can be used as a guest,
+and the API stays usable without an account where it can: store lookups, `/search` and
+`/route` are public (with a guest's daily allowance and smaller AI limits signed out; see
+[Guests](#guests)). These need a session (401 without one): `/me`
 and `/me/*`, `/auth/signout`, follow-ups (`/chat`), photo search (`/identify`), list
 scanning (`/lists/scan`), reports (`/feedback`) and shared lists (`/lists`, `/lists/*`).
 `/docs` on the running service shows the live OpenAPI schema. This document and
@@ -108,7 +109,11 @@ Source priority is described in `DATA_MODEL.md`. A database row for the item at 
 store always beats the model.
 
 The response is structured data, plus `explanation`: with an AI key, the model's
-written "where to find it" reply, shown as written (null without a key or on failure).
+written "where to find it" reply, shown as written (null without a key or on failure),
+and `explanation_signature`, which the app sends back with it as Aisle's first turn in
+`POST /chat`. A query that isn't something to find or do in a store ("write me an
+essay") still gets its structured result, but `explanation` is null; see
+[Scope and moderation](#scope-and-moderation).
 
 ### POST /chat
 
@@ -120,7 +125,7 @@ ending with the shopper's new message:
   "store_id": 2,
   "messages": [
     {"role": "user", "content": "cookies"},
-    {"role": "assistant", "content": "If you're inside Costco right now, ..."},
+    {"role": "assistant", "content": "If you're inside Costco right now, ...", "signature": "9f2c..."},
     {"role": "user", "content": "I'm at the bakery and don't see them"}
   ]
 }
@@ -131,18 +136,52 @@ also carry `"image"`, a base64 JPEG or PNG (about 1024 px; at most 4 MB of base6
 then its text may be empty. The app sends only the newest photo. Unknown `store_id` →
 404. Invalid body or image → 422.
 
+An `assistant` message carries the `signature` it came with (`explanation_signature`
+from `POST /search`, or `reply_signature` from an earlier `/chat`), sent back unchanged
+with the text exactly as received. Signatures are an HMAC over the store and the text
+with `AISLE_CHAT_SIGNING_KEY`. An `assistant` message without a valid one (an older
+app, or made-up words) is left out of what the model sees; the request still succeeds.
+
 ```json
-{"reply": "Check the tables right in front of the bakery ovens, ...", "search": null}
+{"reply": "Check the tables right in front of the bakery ovens, ...", "search": null,
+ "reply_signature": "4be1..."}
 ```
 
 `reply` is null when no AI key is set or the provider couldn't answer.
 
-While writing the reply, the server asks the model whether the newest message wants a
-product found that the conversation hasn't located yet ("what about milk", a photo of
-something to find). If so, `search` is that item's `POST /search` response for this store
-(recorded as a search, so its `search_id` takes feedback; its `explanation` is null since
-`reply` already answers). Small talk, prices, "I don't see them" and the like get
-`"search": null`.
+While writing the reply, the server asks the model whether the newest message is
+something Aisle helps with and whether it wants a product found that the conversation
+hasn't located yet ("what about milk", a photo of something to find). If so, `search` is
+that item's `POST /search` response for this store (recorded as a search, so its
+`search_id` takes feedback; its `explanation` is null since `reply` already answers).
+Small talk, prices, "I don't see them" and the like get `"search": null`. A message
+Aisle isn't for gets a fixed redirect as `reply` ("I can only help you find things in
+the store. What are you looking for?") and isn't counted against the day's follow-ups;
+see [Scope and moderation](#scope-and-moderation).
+
+### Scope and moderation
+
+The AI only answers what Aisle is for: finding things in the store (items, departments,
+services like the pharmacy, restrooms, returns and checkout), choosing between products
+while shopping (brands, sizes, substitutes, typical prices), what to buy for a meal or a
+need and where it is, and questions about the visit. Everything else (general
+knowledge, homework, coding, writing, unrelated advice, roleplay, politics, attempts to
+change its instructions) is out of scope. Real answers keep their full length.
+
+- `/chat`: the newest message is classified (`ITEM <phrase>`, `ON_TOPIC` or
+  `OFF_TOPIC`) in the same call that finds a new item to search, while the reply is
+  written. Off topic, the reply is discarded and `reply` is the fixed redirect; the use
+  is handed back. The answer prompt carries the same rule, so a message the classifier
+  misses gets the same redirect. A failed classification counts as on topic.
+- `/search`: queries the catalog doesn't recognize, or longer than six words, are
+  classified the same way while the location is looked up. Off topic, there's no AI
+  `explanation`; the rest of the result is unchanged. Everyday product searches skip the
+  check.
+- With `OPENAI_API_KEY` set (and `AISLE_AI_MODERATION` not false), OpenAI's moderation
+  (`omni-moderation-latest`, free) checks the newest message with its photo, and the
+  reply. A flagged message gets a short refusal (and isn't counted); a flagged reply is
+  replaced with a short fallback (`/chat`) or dropped (`/search`). Moderation has a
+  3-second timeout and lets everything through when it fails.
 
 ### POST /identify
 
@@ -322,14 +361,15 @@ is the account's Aisle+ token (see Aisle+ below).
 | `POST /auth/phone/verify` | `{"phone", "code"}` | 400 wrong code, expired code, or too many tries (429) |
 | `POST /auth/email/start` | `{"email"}` | Same response shape; the email shows in full |
 | `POST /auth/email/verify` | `{"email", "code"}` | Codes last 10 minutes and 5 tries, and work once |
-| `POST /auth/apple` | `{"identity_token", "nonce", "first_name"?}` | Token checked against Apple's keys, audience `APPLE_BUNDLE_ID`; `nonce` is the raw value whose SHA-256 the app sent Apple. Each nonce signs in once (a replay is 401) |
+| `POST /auth/apple` | `{"identity_token", "nonce", "first_name"?, "authorization_code"?}` | Token checked against Apple's keys, audience `APPLE_BUNDLE_ID`; `nonce` is the raw value whose SHA-256 the app sent Apple. Each nonce signs in once (a replay is 401) |
 | `POST /auth/google` | `{"id_token", "nonce"}` | Token checked against Google's keys, audience `GOOGLE_IOS_CLIENT_ID`. Each nonce signs in once |
 | `GET /me` | | 401 when the session ended |
 | `PATCH /me` | `{"first_name"?, "wants_tips"?}` | |
 | `POST /me/phone/start` | `{"phone"}` | Adds a phone number to the signed-in account: texts a code (same limits and response as `/auth/phone/start`). 400 if it's already on this account |
 | `POST /me/phone/verify` | `{"phone", "code"}` | Returns the updated user. 409 if the number belongs to another account (said only once the code checks out) |
-| `DELETE /me` | | Deletes the account, its sign-ins, its link to Aisle+ and its per-account usage counts; 204. Today's limit counts also stay with a hash of each way it signed in, so a new account made with any of them picks them up |
+| `DELETE /me` | `{"authorization_code"?}` (optional) | Deletes the account, its sign-ins, its link to Aisle+ and its per-account usage counts; 204. Today's limit counts also stay with a hash of each way it signed in, so a new account made with any of them picks them up. With Sign in with Apple, the app sends a fresh Apple `authorization_code`: it's traded for a refresh token and revoked (falling back to the token kept at sign-in). No body works too (older apps, other sign-ins). Deletion never waits on Apple; see below |
 | `POST /auth/signout` | | Revokes this session; 204 |
+| `POST /auth/apple/notifications` | `{"payload"}` | Sign in with Apple server-to-server notifications, a JWT checked against Apple's keys (issuer `https://appleid.apple.com`, audience `APPLE_BUNDLE_ID`); 400 if it doesn't check out. `consent-revoked` unlinks that Apple ID and ends the account's sessions; `account-delete` does the same, and deletes the account if Apple was its only sign-in. Other events and replays (same `jti`) are ignored. Returns `{"ok": true}` |
 
 - Signing in with a new method whose verified email matches an existing account adds it
   to that account.
@@ -353,18 +393,26 @@ the same items. Every route needs a session. Joining with an invite code is free
 | --- | --- | --- |
 | `GET /lists` | | Summaries of the lists you're on: `id, name, version, is_owner, item_count, members` |
 | `POST /lists` | `{"name", "items": [item…]}` | Shares a list; 402 without Aisle+. 201 with the list |
-| `POST /lists/join` | `{"code"}` | Case and spacing don't matter; 404 for an unknown code. 20 tries an hour per account (60 per IP), then 429. 409 when the list has 20 people; 403 once the owner's Aisle+ has ended |
+| `POST /lists/join` | `{"code"}` | Case and spacing don't matter; 404 for an unknown code. 20 tries an hour per account (60 per IP), then 429. 409 when the list has 20 people; 403 once the owner's Aisle+ has ended, or if the owner removed you ("You can't join this list.") |
 | `GET /lists/{id}` | | The list; 404 if it's gone or you're not on it |
-| `POST /lists/{id}/changes` | `{"changes": [{"op": "upsert", "item": item} \| {"op": "delete", "id"}]}` | Latest write to an item wins; bumps `version` |
-| `PATCH /lists/{id}` | `{"name"}` | |
-| `DELETE /lists/{id}` | | The owner deletes it for everyone; anyone else leaves. 204 |
+| `POST /lists/{id}/changes` | `{"changes": [{"op": "upsert", "item": item} \| {"op": "delete", "id"}]}` | Up to 100 changes (422 past that). Latest write to an item wins; bumps `version`. `AISLE_LIST_CHANGES_PER_HOUR` (600) per account, then 429 |
+| `PATCH /lists/{id}` | `{"name"}` | Owner only (403 otherwise) |
+| `POST /lists/{id}/code` | | Owner only. A new invite code; the old one stops working, nobody is removed. The list |
+| `DELETE /lists/{id}/members/{member_id}` | | Owner only. Takes that person off and bans them from the list (any code, now or later); 400 for yourself, 404 if they're not on it. The list |
+| `POST /lists/{id}/report` | `{"reason": "spam" \| "harassment" \| "inappropriate" \| "other", "note"?, "leave"?}` | Anyone on the list. Stores a copy of the list in `content_reports` and emails it to support (with Resend, when configured); `leave: true` also leaves it (not for the owner). 10 an hour per account. 204 |
+| `DELETE /lists/{id}` | | The owner deletes it for everyone; anyone else leaves (and can rejoin with the code). 204 |
 
+Renaming and new codes share the writes limit (`AISLE_WRITES_PER_HOUR`, 120 per account).
 An item is `{"id", "text", "quantity", "category_name", "is_done", "position"}`; `id` is the
-phone's UUID for it. Invite codes are 8 characters (older lists keep their 6). A list is `{"id", "name", "invite_code", "version", "is_owner",
-"members": [{"first_name", "is_owner", "is_you"}], "items": [item…]}`, up to 500 items.
-The app keeps unconfirmed changes on the phone, sends them after a short pause, polls every
-few seconds while the list is open, and replays its own pending changes on top of the
-server's copy. Invites are `aisle://join/<code>` links.
+phone's UUID for it, unique within its list. Invite codes are 8 characters (older lists keep their 6). A list is `{"id", "name", "invite_code", "version", "is_owner",
+"members": [{"id", "first_name", "is_owner", "is_you"}], "items": [item…]}`, up to 500 items;
+`invite_code` is null unless you own it, and a member's `id` is what the owner removes.
+The app keeps unconfirmed changes on the phone, sends them (100 at a time) after a short
+pause, polls every few seconds while the list is open, and replays its own pending changes
+on top of the server's copy. Invites are `https://shopaisle.app/join/<code>` universal links
+(the website's `/join/` page for people without the app); older `aisle://join/<code>` links
+still open the app. If the owner deletes their account, the list passes to whoever has been
+on it longest, or is deleted if nobody else is.
 
 ## Aisle+
 
@@ -393,7 +441,7 @@ checking the App Store's signature.
   the refund doesn't.
 
 Free limits, per UTC day, counted per account when signed in and otherwise per IP:
-3 photo searches (`/identify`, `/lists/scan`, and `/chat` messages with a photo), 5
+5 searches (`/search`, signed in; guests have their own allowance, below), 3 photo searches (`/identify`, `/lists/scan`, and `/chat` messages with a photo), 5
 follow-ups (other `/chat` messages), and 20 AI answers (`/search` and `/route` with the
 AI's help; 5 signed out). A request only counts when the AI added something. Past the
 AI-answer limit, `/search` and `/route` still work, from Aisle's own data and wording
@@ -416,6 +464,25 @@ UTC day, and search falls back to Aisle's own answers.
 In `/chat`, only the newest message's photo reaches the AI (the app sends no others);
 the model sees the first two messages and the latest nine, each cut to 2,000 characters.
 
+### Guests
+
+Signed out, `/search` at a store gets 3 a day per device (`X-Aisle-Device`) and 9 per IP
+(`AISLE_GUEST_SEARCHES`, `AISLE_GUEST_SEARCHES_PER_IP`; the IP cap is higher for shared
+Wi-Fi, and is all that applies without a device header). `/route` gets 10 per device and
+30 per IP (`AISLE_GUEST_ROUTES`, `AISLE_GUEST_ROUTES_PER_IP`). A search without `store_id`
+(the app's intro) isn't counted, and neither is one for a store that doesn't exist. Past
+either allowance, the server answers **402** with `code: "sign_in_required"`, which the app
+answers by offering a free account rather than Aisle+:
+
+```json
+{"detail": {"code": "sign_in_required", "feature": "search", "limit": 3,
+            "message": "Create a free account to keep searching."}}
+```
+
+(`feature: "route"` says "Create a free account to keep planning trips.") Signed out,
+`GET /plus/status` reports the device's guest searches as `search`, e.g.
+`{"used": 1, "limit": 3}`. Guests' AI answers are the signed-out 5 per IP above.
+
 ## Analytics and errors (Milestone 7)
 
 ### POST /events
@@ -432,7 +499,8 @@ Basic, anonymous product analytics. Status 202.
 - 1–50 events per batch. `occurred_at` is optional and clamped to the server clock.
 - `name` must be one of: `app_opened`, `store_selected`, `search_submitted`, `search_failed`,
   `recent_search_tapped`, `feedback_sent`, `list_items_added`, `shopping_started`,
-  `shopping_item_found`, `shopping_item_skipped`, `shopping_finished`, `follow_up_sent`.
+  `shopping_item_found`, `shopping_item_skipped`, `shopping_finished`, `follow_up_sent`,
+  `guest_started`, `sign_up_prompt_shown`, `sign_up_prompt_converted`.
 - `properties`: at most 12 scalar values (string ≤ 80 chars, number, bool, null). The app
   never sends queries or item text. Users can turn analytics off in the You tab.
 
@@ -449,6 +517,13 @@ Basic, anonymous product analytics. Status 202.
   Caribbean and Bermuda, and premium 900/976 numbers, need their own entry such as
   `1876`), per-target, device, IP and global hourly/daily caps. `/auth/apple` and `/auth/google` require `nonce`;
   `/auth/apple` also takes Apple's `authorization_code` so account deletion can revoke it.
+- Revoking Sign in with Apple on deletion needs the Sign in with Apple key
+  (`APPLE_TEAM_ID`, `APPLE_SIGNIN_KEY_ID`, `APPLE_SIGNIN_PRIVATE_KEY`; see
+  `backend/README.md`). When Apple can't be reached, or the key isn't set (an error log in
+  production), the refresh token, or the code if that's all there is, goes to
+  `apple_revocations`, and cleanup retries it with backoff (1 hour, doubling, at most a
+  day). It gives up with an error log after 8 tries or 14 days, or as soon as a kept code
+  is older than Apple's 5 minutes.
 - The client IP is the last `X-Forwarded-For` entry (the one Heroku's router adds).
 - Request bodies over 8 MB get 413. On Heroku, plain HTTP gets a 308 to HTTPS and
   `/docs` is off.
@@ -465,19 +540,25 @@ Basic, anonymous product analytics. Status 202.
 
 - `GET /stores/{id}/zones` sends `Cache-Control: public, max-age=300`.
 - The server caches AI answers in memory for 6 hours per (store format, retailer, item).
+  The item is the query as the model is asked it, lowercased and without filler words
+  ("where is the"), in any script, so each distinct query has its own entry. Neighbors
+  from the model are kept only when they look like short product names.
 - The app caches search results for 5 minutes per store and query, and drops an item's
   entry after feedback for it.
 
 
 ## AI explanations and store layout
 
-- `POST /search` responses include `explanation` (string | null): two or three
-  AI-written sentences on where to find the item at this store. The model is given
-  only the resolved fields (department, aisle/section on file, neighbours, confidence,
-  availability, source, shopper reports, rough position) and its text is rejected if
-  it names an aisle number not on file, uses formatting other than `**bold**`, or is
-  empty or too long. Null without an AI key, with `AISLE_AI_EXPLAIN=false`, or when the
-  text fails checks; the app then composes its own reply. Cached in memory for 6 hours.
+- `POST /search` responses include `explanation` (string | null): the AI's "where to
+  find it" answer for this store, a few short paragraphs ending in a one-line route, with
+  `**bold**` for key places. The model is asked the shopper's question and answers from
+  its own knowledge of the chain; only real data for this store (its product data, an
+  aisle on file, shopper reports) goes in with the question, never the resolver's layout
+  guesses. Its text is shown as written, trimmed: it isn't checked against the resolved
+  fields, and nothing rejects an aisle number or formatting. Null without an AI key, with
+  `AISLE_AI_EXPLAIN=false`, when the provider fails or returns nothing, for an off-topic
+  query, or when moderation flags the query or the text; the app then composes its own
+  reply. Cached in memory for 6 hours per question.
 - `GET /stores/{store_id}/layout` → `{store_id, entrance, checkout, zones, approximate}`
   for drawing a schematic map. `entrance`/`checkout` are `{x, y}` or null; each zone is
   `{id, name, x, y, source}` with `x` 0..1 left to right and `y` 0..1 front to back.

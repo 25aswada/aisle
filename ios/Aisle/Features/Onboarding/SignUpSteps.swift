@@ -4,34 +4,40 @@ struct SignUpMethodStep: View {
     @Bindable var model: SignUpModel
     /// "Sign in" from the intro shows a welcome-back headline; the steps are the same.
     var isReturning = false
+    /// Why a guest is being asked, in the sign-up sheet: its own headline and benefit first.
+    var reason: SignUpReason?
     let onBack: (() -> Void)?
+    /// "Continue as guest" in onboarding.
+    var onGuest: (() -> Void)?
+    /// "Not now" in the sign-up sheet.
+    var onNotNow: (() -> Void)?
     let onPhone: () -> Void
     let onEmail: () -> Void
     let onProviderSuccess: () -> Void
 
     var body: some View {
-        OnboardingPage(onBack: onBack) {
+        OnboardingPage(onBack: onBack, trailingLabel: onNotNow == nil ? nil : "Not now", onTrailing: onNotNow) {
             VStack(alignment: .leading, spacing: 12) {
                 // Without a Back button the top bar already shows the mark.
                 if onBack != nil {
                     AisleMark(size: 44)
                         .padding(.bottom, 10)
                 }
-                if isReturning {
+                if let reason {
+                    GradientHeadline(lead: reason.headline.lead, accent: reason.headline.accent)
+                    OnboardingBody(text: reason.message)
+                } else if isReturning {
                     GradientHeadline(lead: "Welcome ", accent: "back.")
                     OnboardingBody(text: "Sign in the way you signed up. New here? Any of these makes a free account.")
                 } else {
                     GradientHeadline(lead: "One free account, ", accent: "and you're in.")
-                    OnboardingBody(text: "Create your free account to start using Aisle. It's how you share lists with family and keep Aisle+ when you get a new phone.")
+                    OnboardingBody(text: "It's free and takes a few seconds. Or look around as a guest first, and make one when you're ready.")
                 }
-                VStack(alignment: .leading, spacing: 12) {
-                    Benefit(symbol: "person.2", text: "Share lists with your family")
-                    Benefit(symbol: "sparkles", text: "Aisle+ comes with you to a new phone")
-                }
-                .padding(16)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Theme.surface.opacity(0.7), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-                .padding(.top, 16)
+                SignUpBenefits(benefits: reason?.benefits ?? SignUpReason.allBenefits)
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Theme.surface.opacity(0.7), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                    .padding(.top, 16)
             }
         } footer: {
             if let notice = model.notice {
@@ -84,6 +90,13 @@ struct SignUpMethodStep: View {
             .foregroundStyle(Theme.ink)
             .frame(maxWidth: .infinity, minHeight: 40)
             .accessibilityIdentifier("emailSignUpButton")
+            if let onGuest {
+                Button("Continue as guest", action: onGuest)
+                    .font(.aisleSubheadline.weight(.semibold))
+                    .foregroundStyle(Theme.secondaryInk)
+                    .frame(maxWidth: .infinity, minHeight: 40)
+                    .accessibilityIdentifier("continueAsGuestButton")
+            }
             Text(Legal.agreementLine)
                 .font(.aisleCaption)
                 .foregroundStyle(Theme.secondaryInk)
@@ -96,23 +109,6 @@ struct SignUpMethodStep: View {
     private func provider(_ provider: AuthProvider) {
         Task {
             if await model.continueWith(provider) { onProviderSuccess() }
-        }
-    }
-}
-
-private struct Benefit: View {
-    let symbol: String
-    let text: String
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: symbol)
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(Theme.accentInk)
-                .frame(width: 24)
-            Text(text)
-                .font(.aisleSubheadline)
-                .foregroundStyle(Theme.ink)
         }
     }
 }

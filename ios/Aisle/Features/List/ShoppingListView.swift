@@ -20,6 +20,7 @@ struct ShoppingListView: View {
     @State private var confirmingNewList = false
     @Environment(PlusStore.self) private var plus
     @Environment(AccountStore.self) private var accounts
+    @Environment(\.requireAccount) private var requireAccount
     @Environment(\.scenePhase) private var scenePhase
     @State private var sheet: ListSheet?
     @State private var confirmingDelete = false
@@ -164,7 +165,7 @@ struct ShoppingListView: View {
                 // An invite link (also when it opened the app on this tab).
                 guard let code = list.pendingJoinCode else { return }
                 list.pendingJoinCode = nil
-                sheet = .join(code)
+                requireAccount(.joinList) { sheet = .join(code) }
             }
             .sensoryFeedback(.impact(weight: .light), trigger: list.remaining.count)
             .fullScreenCover(item: $trip) { trip in
@@ -216,9 +217,11 @@ struct ShoppingListView: View {
                         Button("Share with family…", systemImage: "person.2.badge.plus") { shareTapped() }
                     }
                     Button("Join a shared list…", systemImage: "person.crop.circle.badge.plus") {
-                        sheet = .join("")
+                        requireAccount(.joinList) { sheet = .join("") }
                     }
-                    Button("Rename list…", systemImage: "pencil") { sheet = .rename }
+                    if list.current.canRename {
+                        Button("Rename list…", systemImage: "pencil") { sheet = .rename }
+                    }
                     Button("Past trips", systemImage: "clock.arrow.circlepath") { sheet = .pastTrips }
                     Divider()
                     Button("Clear checked items", systemImage: "checkmark.circle") { list.clearCompleted() }
@@ -475,6 +478,8 @@ struct ShoppingListView: View {
 
     /// Sharing needs Aisle+ (the server checks too).
     private func shareTapped() {
+        // Sharing takes an account, then Aisle+: a guest makes one and carries on to the offer.
+        guard accounts.isSignedIn else { return requireAccount(.shareList, then: shareTapped) }
         guard plus.isPlus else {
             composer.upgradePrompt = "Sharing lists with your family is part of Aisle+."
             return
@@ -517,6 +522,7 @@ struct ShoppingListView: View {
 
     /// Opens the camera over the list; the overlay slides its own card up.
     private func scanList() {
+        guard accounts.isSignedIn else { return requireAccount(.scanList, then: scanList) }
         composerFocused = false
         var instant = Transaction()
         instant.disablesAnimations = true

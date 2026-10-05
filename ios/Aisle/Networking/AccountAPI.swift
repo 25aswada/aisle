@@ -108,8 +108,10 @@ struct AccountAPI {
         return user.account
     }
 
-    func deleteMe(token: String) async throws {
-        _ = try await data("DELETE", "me", body: nil as String?, token: token)
+    /// With Sign in with Apple, a fresh code from Apple goes along so the server can revoke it.
+    func deleteMe(token: String, appleAuthorizationCode: String? = nil) async throws {
+        let body = appleAuthorizationCode.map { ["authorization_code": $0] }
+        _ = try await data("DELETE", "me", body: body, token: token)
     }
 
     func signOut(token: String) async throws {

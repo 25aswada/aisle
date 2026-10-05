@@ -80,6 +80,9 @@ class ChatMessageIn(BaseModel):
     content: str = Field(default="", max_length=4000)
     # A photo the shopper sent with this message.
     image: str | None = Field(default=None, max_length=MAX_PHOTO_BASE64)
+    # On Aisle's messages: the signature it was sent with. Without a valid one the
+    # message doesn't reach the model.
+    signature: str | None = Field(default=None, max_length=128)
 
     @field_validator("image")
     @classmethod
@@ -128,6 +131,8 @@ class ChatResponse(BaseModel):
     # When the follow-up asks where to find a new item: that item's search, as from
     # POST /search (its `explanation` is null; `reply` is the answer to show).
     search: "SearchResponse | None" = None
+    # Sent back with `reply` as Aisle's turn in the next follow-up.
+    reply_signature: str | None = None
 
 
 class CategoryOut(BaseModel):
@@ -169,9 +174,11 @@ class SearchResponse(BaseModel):
     source: LocationSource
     # Shopper reports for the suggested zone at this store; null without a store or zone.
     reports: ReportCountsOut | None = None
-    # AI-written "where to find it" text, checked against the facts above; null without a
-    # model or when the text didn't pass checks (the app then writes its own).
+    # AI-written "where to find it" text; null without a model, when it couldn't answer, or
+    # when the query isn't something to find in a store (the app then writes its own).
     explanation: str | None = None
+    # Sent back with the explanation as Aisle's turn in a follow-up (see POST /chat).
+    explanation_signature: str | None = None
 
 
 AISLE_LABEL = re.compile(r"[A-Za-z0-9 #&'./-]{1,24}")
@@ -343,6 +350,7 @@ ANALYTICS_EVENT_NAMES = (
     "app_opened", "store_selected", "search_submitted", "search_failed", "recent_search_tapped",
     "feedback_sent", "list_items_added", "shopping_started", "shopping_item_found",
     "shopping_item_skipped", "shopping_finished", "follow_up_sent",
+    "guest_started", "sign_up_prompt_shown", "sign_up_prompt_converted",
 )
 AnalyticsValue = str | int | float | bool | None
 
@@ -405,6 +413,17 @@ class AppleSignIn(BaseModel):
 class GoogleSignIn(BaseModel):
     id_token: str = Field(min_length=20, max_length=8000)
     nonce: str = Field(min_length=8, max_length=200)
+
+
+class AccountDeletion(BaseModel):
+    # A fresh Sign in with Apple code from the app, traded for a token to revoke. Accounts
+    # without Apple, and older apps, send no body.
+    authorization_code: str | None = Field(default=None, max_length=2000)
+
+
+class AppleNotification(BaseModel):
+    # Sign in with Apple's server-to-server notification: a JWT Apple signed.
+    payload: str = Field(min_length=20, max_length=8000)
 
 
 class CodeSent(BaseModel):
@@ -510,7 +529,8 @@ class SharedListChange(BaseModel):
 
 
 class SharedListChanges(BaseModel):
-    changes: list[SharedListChange] = Field(max_length=500)
+    # The app sends at most 100 at a time (bigger edits go in several requests).
+    changes: list[SharedListChange] = Field(max_length=100)
 
 
 class JoinSharedList(BaseModel):
@@ -518,6 +538,8 @@ class JoinSharedList(BaseModel):
 
 
 class SharedMemberOut(BaseModel):
+    # The membership's id, for the owner to remove someone.
+    id: int
     first_name: str
     is_owner: bool
     is_you: bool
@@ -526,7 +548,8 @@ class SharedMemberOut(BaseModel):
 class SharedListOut(BaseModel):
     id: str
     name: str
-    invite_code: str
+    # Only the owner gets the code: they decide who's invited.
+    invite_code: str | None = None
     version: int
     is_owner: bool
     members: list[SharedMemberOut]
@@ -540,3 +563,10 @@ class SharedListSummary(BaseModel):
     is_owner: bool
     item_count: int
     members: list[SharedMemberOut]
+
+
+class SharedListReport(BaseModel):
+    reason: Literal["spam", "harassment", "inappropriate", "other"]
+    note: str | None = Field(default=None, max_length=500)
+    # Also leave the list (not for its owner, who can delete it instead).
+    leave: bool = False

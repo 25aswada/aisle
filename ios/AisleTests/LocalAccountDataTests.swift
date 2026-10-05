@@ -84,6 +84,38 @@ final class LocalAccountDataTests: XCTestCase {
         XCTAssertEqual(defaults.string(forKey: LocalAccountData.ownerKey), "8")
     }
 
+    func testAGuestsListsHistoryAndStoreCarryIntoTheirNewAccount() {
+        let defaults = UserDefaults.fresh("LocalAccountDataTests.Guest")
+        let stores = used(defaults)
+        defaults.set(true, forKey: GuestMode.key)
+        defaults.set(true, forKey: GuestAccountCard.dismissedKey)
+        XCTAssertNil(defaults.string(forKey: LocalAccountData.ownerKey))
+
+        LocalAccountData.adopt(accountID: "7", stores, defaults: defaults)
+
+        XCTAssertEqual(stores.lists.lists.count, 2)
+        XCTAssertEqual(stores.recents.queries, ["maple syrup"])
+        XCTAssertEqual(stores.storeSelection.current?.id, Fixtures.store.id)
+        XCTAssertEqual(defaults.integer(forKey: ShopperStats.searchesKey), 1)
+        XCTAssertEqual(defaults.string(forKey: Legal.acceptedVersionKey), "2026-10")
+        XCTAssertEqual(defaults.string(forKey: LocalAccountData.ownerKey), "7")
+        // And it all survives a relaunch.
+        XCTAssertEqual(ShoppingListStore(defaults: defaults).lists.count, 2)
+        XCTAssertNotNil(StoreSelection(defaults: defaults).current)
+    }
+
+    func testDeletingAnAccountMadeFromGuestStartsOnboardingOver() {
+        let defaults = UserDefaults.fresh("LocalAccountDataTests.GuestDelete")
+        let stores = used(defaults)
+        defaults.set(true, forKey: GuestMode.key)
+        LocalAccountData.adopt(accountID: "7", stores, defaults: defaults)
+
+        LocalAccountData.eraseForDeletedAccount(stores, defaults: defaults)
+
+        XCTAssertFalse(defaults.bool(forKey: GuestMode.key))
+        XCTAssertFalse(defaults.bool(forKey: OnboardingFlow.completedKey))
+    }
+
     func testDataFromBeforeSignUpGoesToTheFirstAccount() {
         let defaults = UserDefaults.fresh("LocalAccountDataTests.First")
         let stores = used(defaults)

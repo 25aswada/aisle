@@ -69,6 +69,15 @@ final class RemoteAuthService: AuthService {
     func deleteAccount(token: String) async throws {
         try await api.deleteMe(token: token)
     }
+
+    func appleDeletionCode() async throws -> String? {
+        // Only the code is needed, so Apple asks for nothing new.
+        try await apple.signIn(hashedNonce: Nonce.sha256(Nonce.make()), scopes: []).authorizationCode
+    }
+
+    func deleteAccount(token: String, appleAuthorizationCode: String?) async throws {
+        try await api.deleteMe(token: token, appleAuthorizationCode: appleAuthorizationCode)
+    }
 }
 
 /// A one-time random string tying a sign-in to this request, so a stolen token can't be replayed.
@@ -106,9 +115,9 @@ final class AppleSignIn: NSObject, ASAuthorizationControllerDelegate, ASAuthoriz
 
     private var continuation: CheckedContinuation<Credential, Error>?
 
-    func signIn(hashedNonce: String) async throws -> Credential {
+    func signIn(hashedNonce: String, scopes: [ASAuthorization.Scope] = [.fullName, .email]) async throws -> Credential {
         let request = ASAuthorizationAppleIDProvider().createRequest()
-        request.requestedScopes = [.fullName, .email]
+        request.requestedScopes = scopes
         request.nonce = hashedNonce
         let controller = ASAuthorizationController(authorizationRequests: [request])
         controller.delegate = self
@@ -205,9 +214,9 @@ final class GoogleSignIn: NSObject, ASWebAuthenticationPresentationContextProvid
         let callback = try await authorize(url)
         let items = URLComponents(url: callback, resolvingAgainstBaseURL: false)?.queryItems ?? []
         if let error = items.first(where: { $0.name == "error" })?.value {
-            // e.g. access_denied: the account isn't a test user while the app is in testing.
+            // access_denied: they declined on Google's screen, or Google refused the account.
             throw AuthError.server(error == "access_denied"
-                ? "Google didn't allow this sign-in. While Aisle is in testing, only approved accounts can use Google."
+                ? "Google didn't allow this sign-in. Try again, or sign in another way."
                 : "Google sign-in didn't finish (\(error)). Try again.")
         }
         guard items.first(where: { $0.name == "state" })?.value == state,

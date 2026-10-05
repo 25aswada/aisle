@@ -30,7 +30,11 @@ final class PlusStore {
         }
     }
 
-    enum PurchaseResult { case purchased, pending, cancelled }
+    /// `linkedToAnotherAccount`: the Apple ID already pays for Aisle+ for another Aisle
+    /// account, so the App Store handed back that subscription instead of selling a new one.
+    enum PurchaseResult { case purchased, pending, cancelled, linkedToAnotherAccount }
+
+    static let linkedToAnotherAccountMessage = "This Apple ID already has Aisle+ for another Aisle account, so you weren't charged again. Sign in to that account to use it."
 
     private(set) var products: [Plan: Product] = [:]
     private(set) var isPlus = false
@@ -153,8 +157,14 @@ final class PlusStore {
         case .success(let verification):
             guard case .verified(let transaction) = verification else { throw PlusError.unverified }
             await transaction.finish()
-            await refreshEntitlement()
-            return .purchased
+            if isOwn(transaction) {
+                await refreshEntitlement()
+                return .purchased
+            }
+            // Already subscribed on this Apple ID for another account: move it here if the
+            // server allows (that account is gone, or it was bought signed out), as Restore would.
+            await refreshEntitlement(claim: true)
+            return isPlus ? .purchased : .linkedToAnotherAccount
         case .pending:
             return .pending
         case .userCancelled:
@@ -227,16 +237,23 @@ final class PlusStore {
                 signed.append(result.jwsRepresentation)
             }
         }
-        // Our own purchase counts at once (and offline); a restored one once the server agrees.
+        // Our own purchase counts at once, but once the server has seen the purchases its
+        // answer wins, since it decides the higher limits (a subscription can only be on one
+        // account). The App Store's word alone holds only when the server can't be reached.
         isPlus = own
-        await syncWithServer(signed, claim: claim)
-        isPlus = own || serverStatus?.isPlus == true
+        if await syncWithServer(signed, claim: claim) {
+            isPlus = serverStatus?.isPlus == true
+        } else {
+            isPlus = own || serverStatus?.isPlus == true
+        }
     }
 
     /// Tells the server about this device's subscription (or none), and picks up today's
-    /// free-tier use. Call again after signing in so Aisle+ follows the account.
-    func syncWithServer(_ signed: [String]? = nil, claim: Bool = false) async {
-        guard let client, accountToken != nil else { return }
+    /// free-tier use. Call again after signing in so Aisle+ follows the account. True when
+    /// the server took the purchases.
+    @discardableResult
+    func syncWithServer(_ signed: [String]? = nil, claim: Bool = false) async -> Bool {
+        guard let client, accountToken != nil else { return false }
         var transactions = signed ?? []
         if signed == nil {
             for await result in Transaction.currentEntitlements {
@@ -247,9 +264,11 @@ final class PlusStore {
         }
         do {
             serverStatus = try await client.syncPlus(transactions: transactions, claim: claim)
+            return true
         } catch {
             // Offline or not yet verifiable: the App Store's word still unlocks the app's own screens.
             serverStatus = try? await client.plusStatus()
+            return false
         }
     }
 

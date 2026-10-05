@@ -6,16 +6,19 @@ follow-ups, reports and sharing need one, and everything else also works signed 
 (with a smaller daily allowance of AI answers).
 """
 import hashlib
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..auth.accounts import (
     PhoneTaken, TooManyNewAccounts, add_phone, create_session, delete_user, first_use_of_nonce, has_account, revoke,
-    sign_in, user_for_token,
+    sign_in, unlink_identity, user_for_token,
 )
-from ..auth.apple_tokens import AppleTokens, AppleTokenService
+from ..auth.apple_revocation import revoke_for_deletion
+from ..auth.apple_tokens import AppleTokens, from_settings
 from ..auth.codes import (
     RESEND_COOLDOWN, CodeProblem, EmailSender, PhoneVerifier, ResendEmailSender, TwilioPhoneVerifier,
     check_email_code, check_sms_country, issue_email_code, normalize_email, normalize_phone,
@@ -26,12 +29,13 @@ from ..limits import client_ip, rate_limit
 from ..plus.access import Caller
 from ..config import get_settings
 from ..database import get_db
-from ..models import AuthSession, User
+from ..models import AuthSession, User, UserIdentity
 from ..schemas import (
-    AppleSignIn, AuthOut, CodeSent, EmailStart, EmailVerify, GoogleSignIn, PhoneStart, PhoneVerify,
-    ProfileUpdate, UserOut,
+    AccountDeletion, AppleNotification, AppleSignIn, AuthOut, CodeSent, EmailStart, EmailVerify, GoogleSignIn,
+    PhoneStart, PhoneVerify, ProfileUpdate, UserOut,
 )
 
+log = logging.getLogger(__name__)
 router = APIRouter()
 Database = Annotated[Session, Depends(get_db)]
 DeviceID = Annotated[str | None, Header(alias="X-Aisle-Device", max_length=64)]
@@ -55,10 +59,7 @@ def get_email_sender() -> EmailSender | None:
 
 
 def get_apple_tokens() -> AppleTokens | None:
-    s = get_settings()
-    if not (s.apple_team_id and s.apple_signin_key_id and s.apple_signin_private_key):
-        return None
-    return AppleTokenService(s.apple_bundle_id, s.apple_team_id, s.apple_signin_key_id, s.apple_signin_private_key)
+    return from_settings(get_settings())
 
 
 def get_identity_verifier() -> IdentityVerifier:
@@ -328,13 +329,43 @@ def add_phone_verify(body: PhoneVerify, db: Database, phones: Phones, session: S
 
 
 @router.delete("/me", status_code=204)
-def delete_me(db: Database, session: SignedIn, apple_tokens: AppleTokensDep):
-    if apple_tokens is not None:
-        for identity in session[0].identities:
-            if identity.provider == "apple" and identity.apple_refresh_token:
-                apple_tokens.revoke(identity.apple_refresh_token)
+def delete_me(db: Database, session: SignedIn, apple_tokens: AppleTokensDep, body: AccountDeletion | None = None):
+    # With an Apple sign-in, the app sends a fresh code from Apple so it can be revoked.
+    revoke_for_deletion(db, session[0], body.authorization_code if body else None, apple_tokens)
     delete_user(db, session[0])
     return Response(status_code=204)
+
+
+@router.post("/auth/apple/notifications")
+def apple_notification(body: AppleNotification, db: Database, identities: Identities):
+    """Sign in with Apple's server-to-server notifications. Set this URL in Certificates,
+    Identifiers & Profiles > the App ID > Sign in with Apple > Server-to-Server
+    Notification Endpoint.
+
+    consent-revoked (the person stopped using Apple with Aisle) unlinks that Apple ID and
+    signs the account out everywhere. account-delete (the Apple ID itself is gone) does the
+    same, and deletes the account when Apple was its only way in, since nobody can sign in
+    to it again."""
+    try:
+        event = identities.apple_event(body.payload)
+    except InvalidToken as error:
+        log.warning("Rejected a Sign in with Apple notification: %s", error)
+        raise HTTPException(status_code=400, detail="Not a genuine Sign in with Apple notification.")
+    except ConnectionError:
+        raise HTTPException(status_code=503, detail="Couldn't reach Apple. Try again in a moment.")
+    if event.type not in ("consent-revoked", "account-delete"):
+        return {"ok": True}  # email-disabled and email-enabled change nothing here.
+    if event.id and not first_use_of_nonce(db, "apple-event", event.id):
+        return {"ok": True}  # Already handled.
+    identity = db.scalar(select(UserIdentity).where(
+        UserIdentity.provider == "apple", UserIdentity.subject == event.subject))
+    if identity is None:
+        return {"ok": True}
+    if event.type == "account-delete" and all(i.provider == "apple" for i in identity.user.identities):
+        delete_user(db, identity.user)  # Apple has already ended its tokens.
+    else:
+        unlink_identity(db, identity)
+    return {"ok": True}
 
 
 @router.post("/auth/signout", status_code=204)

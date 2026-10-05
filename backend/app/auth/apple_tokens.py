@@ -1,8 +1,9 @@
 """Sign in with Apple tokens, kept so deleting an account can revoke its Apple sign-in.
 
 App Review requires apps that offer Sign in with Apple to revoke the user's tokens when
-they delete their account. At sign-in the app sends the one-time authorization code;
-we trade it with Apple for a refresh token, keep that, and revoke it on deletion.
+they delete their account. At sign-in, and again when deleting the account, the app
+sends Apple's one-time authorization code; we trade it with Apple for a refresh token and
+revoke that on deletion (see apple_revocation).
 Both calls need a client secret: a short-lived JWT signed with the app's Sign in with
 Apple key. Without the key configured this is off, and sign-in works as before.
 """
@@ -26,6 +27,14 @@ class AppleTokens(Protocol):
     def refresh_token(self, authorization_code: str) -> str | None: ...
 
     def revoke(self, refresh_token: str) -> bool: ...
+
+
+def from_settings(settings) -> AppleTokens | None:
+    """The token service, or None until the Sign in with Apple key is configured."""
+    s = settings
+    if not (s.apple_team_id and s.apple_signin_key_id and s.apple_signin_private_key):
+        return None
+    return AppleTokenService(s.apple_bundle_id, s.apple_team_id, s.apple_signin_key_id, s.apple_signin_private_key)
 
 
 class AppleTokenService:

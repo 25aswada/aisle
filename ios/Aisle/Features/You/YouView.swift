@@ -13,6 +13,8 @@ struct YouView: View {
     @AppStorage(ShopperStats.confirmedKey) private var confirmed = 0
     @AppStorage(ShopperStats.storesKey) private var storeIDs = ""
     @AppStorage(ShopperStats.firstUseKey) private var firstUse: Double = 0
+    @AppStorage(GuestAccountCard.dismissedKey) private var guestCardDismissed = false
+    @Environment(\.requireAccount) private var requireAccount
     @Environment(RecentSearches.self) private var recents
     @Environment(StoreSelection.self) private var storeSelection
     @Environment(AccountStore.self) private var accounts
@@ -34,6 +36,7 @@ struct YouView: View {
     @State private var confirmDelete = false
     @State private var managingSubscription = false
     @State private var deleteError: String?
+    @State private var appleNotConfirmed = false
     @State private var scrolledUnderStatusBar: CGFloat = 0
 
     var body: some View {
@@ -45,6 +48,11 @@ struct YouView: View {
                     if let account = accounts.account {
                         ProfileHeader(account: account)
                             .padding(.top, 26)
+                    } else if !guestCardDismissed {
+                        GuestAccountCard(onCreate: { requireAccount(.you) }, onDismiss: {
+                            withAnimation { guestCardDismissed = true }
+                        })
+                        .padding(.top, 24)
                     }
                     if searches > 0 {
                         StatsCard(searches: searches, confirmed: confirmed, stores: ShopperStats.storeCount(storeIDs))
@@ -119,7 +127,7 @@ struct YouView: View {
                     Task { await deleteAccount() }
                 }
             } message: {
-                Text(plus.isPlus ? Self.deleteMessage + " " + Self.subscriptionNote : Self.deleteMessage)
+                Text(deleteDialogMessage)
             }
             .manageSubscriptionsSheet(isPresented: $managingSubscription)
             .alert("Couldn't delete your account", isPresented: Binding(
@@ -129,10 +137,17 @@ struct YouView: View {
             } message: {
                 Text(deleteError ?? "")
             }
+            .alert("Confirm with Apple", isPresented: $appleNotConfirmed) {
+                Button("Try again") { Task { await deleteAccount() } }
+                Button("Delete anyway", role: .destructive) { Task { await deleteAccount(confirmWithApple: false) } }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text(Self.appleNotConfirmedMessage)
+            }
             .confirmationDialog("Sign out of Aisle?", isPresented: $confirmSignOut, titleVisibility: .visible) {
                 Button("Sign out", role: .destructive) { accounts.signOut() }
             } message: {
-                Text("Your lists and history stay on this phone for when you sign back in. If someone else signs in here, they start fresh.")
+                Text("Your lists and history stay on this phone for when you sign back in, or carry on as a guest. If someone else signs in here, they start fresh.")
             }
         }
     }
@@ -157,6 +172,17 @@ struct YouView: View {
                     .frame(height: 40)
                     .background(Theme.surface.opacity(0.92), in: Capsule())
                     .shadow(color: Theme.ink.opacity(0.06), radius: 12, y: 6)
+            } else {
+                // A guest can always get here, even after closing the card below.
+                Button("Sign in") { requireAccount(.you) }
+                    .font(Theme.font(14, .semibold, relativeTo: .subheadline))
+                    .foregroundStyle(Theme.onAccent)
+                    .padding(.horizontal, 16)
+                    .frame(height: 40)
+                    .background(Theme.accent, in: Capsule())
+                    .shadow(color: Theme.glow.opacity(0.16), radius: 9, y: 6)
+                    .accessibilityHint("Sign in or create a free account")
+                    .accessibilityIdentifier("youSignInButton")
             }
         }
     }
@@ -312,14 +338,27 @@ struct YouView: View {
 
     static let deleteMessage = "This permanently deletes your Aisle account, your lists, history and stats, and ends Aisle+ on this account. Aisle starts over as if newly installed."
     static let subscriptionNote = "Apple bills Aisle+, and deleting your account doesn't cancel it. Cancel it first so you're not charged again."
+    static let appleNote = "Apple will ask you to confirm, so your Apple sign-in ends too."
+    static let appleNotConfirmedMessage = "Apple's confirmation didn't finish, so nothing was deleted. Try again, or delete without it. Aisle still ends your Apple sign-in where it can, and you can also remove Aisle in Settings › Apple ID › Sign in with Apple."
 
-    private func deleteAccount() async {
+    private var deleteDialogMessage: String {
+        var parts = [Self.deleteMessage]
+        if accounts.account?.providers.contains(.apple) == true { parts.append(Self.appleNote) }
+        if plus.isPlus { parts.append(Self.subscriptionNote) }
+        return parts.joined(separator: " ")
+    }
+
+    private func deleteAccount(confirmWithApple: Bool = true) async {
         do {
-            try await accounts.deleteAccount {
+            try await accounts.deleteAccount(confirmWithApple: confirmWithApple) {
                 LocalAccountData.eraseForDeletedAccount(.init(
                     lists: lists, recents: recents, storeSelection: storeSelection, offlineMaps: offlineMaps
                 ))
             }
+        } catch AuthError.server(AccountStore.appleConfirmationNeeded) {
+            // Apple's sheet was dismissed, or can't finish on this phone (no Apple ID signed in
+            // reports the same way). Let them try again or go ahead without it.
+            appleNotConfirmed = true
         } catch {
             deleteError = (error as? LocalizedError)?.errorDescription ?? "Couldn't delete your account. Try again."
         }
