@@ -7,7 +7,7 @@ from ..ai.providers import LocationModel, get_location_model
 from ..config import get_settings
 from ..database import get_db
 from ..limits import rate_limit
-from ..plus.access import ai_search_allowance, require_plus
+from ..plus.access import ai_search_allowance, guest_route_allowance, require_plus
 from ..routing import Route, plan_multi_store, plan_route
 from ..schemas import (
     MultiRouteRequest, MultiRouteResponse, RouteLeg, RouteRequest, RouteResponse, RouteStop, RouteStopItem,
@@ -53,6 +53,7 @@ def route(body: RouteRequest, db: Database, model: Model, caller: CallerDep):
     store = get_store(db, body.store_id)
     if store is None:
         raise HTTPException(status_code=404, detail="Store not found")
+    guest_route_allowance(db, caller)  # 402 once a guest's routes for today are used.
     model, allowance = metered(db, caller, model)
     planned = plan_route(db, store, [(i.id, i.text) for i in body.items], model)
     settle(model, allowance)

@@ -4,8 +4,8 @@ import SwiftUI
 /// question on its own, the shopper asks one, then learns the confidence levels and
 /// taps "Found it". Then lists: one sorts itself, the shopper builds one, a paper list
 /// is photographed and read, and the list becomes a walk. Last, they pick a store and
-/// make an account, which Aisle requires.
-/// "Skip" skips the tour, not the account.
+/// make an account, or carry on as a guest.
+/// "Skip" skips the tour, to the same choice.
 struct LiveOnboarding: View {
     enum Step: Int, CaseIterable {
         case intro, demo, tryIt, confidence, found
@@ -914,7 +914,7 @@ private struct LocationStage: View {
     }
 }
 
-// MARK: - 7. Done: make an account
+// MARK: - 7. Done: make an account (or go on as a guest)
 
 private struct DoneStage: View {
     let store: Store?
@@ -948,7 +948,7 @@ private struct DoneStage: View {
                 .multilineTextAlignment(.center)
                 Text(accounts.isSignedIn
                      ? "That's the tour. Happy shopping."
-                     : "Last step: make your free account. Then you're ready to shop.")
+                     : "Last step: make your free account, or look around as a guest first.")
                     .font(Theme.font(17, relativeTo: .body))
                     .foregroundStyle(Theme.secondaryInk)
                     .multilineTextAlignment(.center)

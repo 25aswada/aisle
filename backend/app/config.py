@@ -76,8 +76,13 @@ class Settings(BaseSettings):
 
     # Aisle+. The free tier's daily limits (per account, or per network when signed out).
     # Searches a day for a signed-in free account; past it, search needs Aisle+.
-    # (Signed out, searches are limited by the hourly rate limit and AI answers below.)
     aisle_free_searches: int = 5
+    # Guests (signed out): store searches and trip routes a day, per device and, a few
+    # times higher for shared Wi-Fi, per network. Past them the app asks for a free account.
+    aisle_guest_searches: int = 3
+    aisle_guest_searches_per_ip: int = 9
+    aisle_guest_routes: int = 10
+    aisle_guest_routes_per_ip: int = 30
     aisle_free_photo_searches: int = 1
     aisle_free_follow_ups: int = 5
     # Follow-up questions about one search, on the free plan.
@@ -85,7 +90,7 @@ class Settings(BaseSettings):
     # Searches answered with the AI's help. Past the limit, searches still work with
     # Aisle's own answers and wording.
     aisle_free_ai_searches: int = 20
-    # Signed out (the app always signs in, so this is scripts), per network.
+    # Signed out (guests, and scripts), per network.
     aisle_signed_out_ai_searches: int = 5
     # Aisle+ is unlimited within fair use: daily ceilings no real shopper gets near.
     aisle_plus_photo_searches: int = 50

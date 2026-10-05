@@ -11,6 +11,7 @@
 		060FF4F189707D1A1048DC42 /* ContributionsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58B4F93B68680F1B3AB84C78 /* ContributionsView.swift */; };
 		0868B5944EF7F2E05CAEEABD /* StoreDirections.swift in Sources */ = {isa = PBXBuildFile; fileRef = 14F4ABCC18B7416BA4E13EF5 /* StoreDirections.swift */; };
 		0CD8E5664EA53D0FB2FEE253 /* ShopperStats.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0B6177DDB775035FB051DAD6 /* ShopperStats.swift */; };
+		0EC1C40E0248504795B614E0 /* GuestMode.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5322355781A1B5A43413E3C /* GuestMode.swift */; };
 		159DB262AB1B4E9FC1376D5E /* Account.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E28133ACF05710EB0935DF3 /* Account.swift */; };
 		15B790F0477BB144E84698A5 /* Store.swift in Sources */ = {isa = PBXBuildFile; fileRef = F0805416F4A0EBB255FFB627 /* Store.swift */; };
 		1610A85ED827FAF79ADEE3CF /* RevenueCat in Frameworks */ = {isa = PBXBuildFile; productRef = C4B03AE00BB6B5E2B9C1BAA8 /* RevenueCat */; };
@@ -88,6 +89,8 @@
 		C90A879D36C747766FED9196 /* AllListsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1FB1648A7564A619F9DCB11A /* AllListsView.swift */; };
 		CA6DA4E9F57439A98861270D /* RecentSearches.swift in Sources */ = {isa = PBXBuildFile; fileRef = 86B371EFE8FBC1EC87453EDF /* RecentSearches.swift */; };
 		CB34D035D4275BBC8D5B9689 /* Geist-OFL.txt in Resources */ = {isa = PBXBuildFile; fileRef = B5DF99D4E4C76377B3143E44 /* Geist-OFL.txt */; };
+		CCC985AA7B4C73819EA39A9F /* GuestModeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 988B69093D6D642A9156BBA7 /* GuestModeTests.swift */; };
+		CF43454AFB33D43B1A657A8D /* SignUpPrompts.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2ADB31B8EB188FD51171D634 /* SignUpPrompts.swift */; };
 		D07C52F967B4E3907957F9F5 /* Analytics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C6BE6461AED2D5FE72E6E32 /* Analytics.swift */; };
 		D6616CAAB960A9619FE58BD8 /* HealthMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = BABBC9C1CA447BB929731BDC /* HealthMonitor.swift */; };
 		D8011A3B26DC8779B4AF4494 /* DecodingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AEA7188DFFF4134CEB8270FC /* DecodingTests.swift */; };
@@ -133,6 +136,7 @@
 		26428039EFD4FC4E3023FFCF /* YouView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = YouView.swift; sourceTree = "<group>"; };
 		277896E81622D909B66024E0 /* SearchingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SearchingView.swift; sourceTree = "<group>"; };
 		27AD420D9DA4F00D8D2F8E95 /* Components.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Components.swift; sourceTree = "<group>"; };
+		2ADB31B8EB188FD51171D634 /* SignUpPrompts.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SignUpPrompts.swift; sourceTree = "<group>"; };
 		2F0984A53221C4145375C285 /* MoreComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoreComponents.swift; sourceTree = "<group>"; };
 		327AC850D80060DC07A58341 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		34D1C3CDD2308D8D6023AE61 /* OfflineMapsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineMapsTests.swift; sourceTree = "<group>"; };
@@ -165,6 +169,7 @@
 		8C1FC1D0092199083C278E19 /* FeedbackTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FeedbackTests.swift; sourceTree = "<group>"; };
 		8D10226C08B7787374747FE5 /* LocalAccountDataTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocalAccountDataTests.swift; sourceTree = "<group>"; };
 		8E6452CE56BAD03E0834263E /* StoreSelectionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StoreSelectionTests.swift; sourceTree = "<group>"; };
+		988B69093D6D642A9156BBA7 /* GuestModeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuestModeTests.swift; sourceTree = "<group>"; };
 		9C6BE6461AED2D5FE72E6E32 /* Analytics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Analytics.swift; sourceTree = "<group>"; };
 		9C8D794D2EF42CB61E31D9D4 /* PolishTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PolishTests.swift; sourceTree = "<group>"; };
 		9F15E3A9B2B74D695D67A224 /* PlusStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlusStore.swift; sourceTree = "<group>"; };
@@ -207,6 +212,7 @@
 		F0805416F4A0EBB255FFB627 /* Store.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Store.swift; sourceTree = "<group>"; };
 		F24864019C6AC609101CD5EE /* AccountFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountFlow.swift; sourceTree = "<group>"; };
 		F4C6125E1AC53F27D7DB3122 /* Geist-Medium.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Geist-Medium.ttf"; sourceTree = "<group>"; };
+		F5322355781A1B5A43413E3C /* GuestMode.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GuestMode.swift; sourceTree = "<group>"; };
 		F5A3B0C2147E6BCCE122221E /* CameraSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraSheet.swift; sourceTree = "<group>"; };
 		FB59E9020541E01FE841D412 /* ItemSearch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ItemSearch.swift; sourceTree = "<group>"; };
 		FC67A4D579579373CED54185 /* PlusViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlusViews.swift; sourceTree = "<group>"; };
@@ -288,6 +294,7 @@
 				F24864019C6AC609101CD5EE /* AccountFlow.swift */,
 				496BBC47AF11D1538DE838C7 /* LiveOnboarding.swift */,
 				B99C6CB8AF8BD5464965C162 /* OnboardingFlow.swift */,
+				2ADB31B8EB188FD51171D634 /* SignUpPrompts.swift */,
 				48FE9F68E0B7552531D0D01B /* SignUpSteps.swift */,
 				114B9F5E2D9792C6C3AFA19F /* TermsStep.swift */,
 				4843D865E1C542A02A4E7B3E /* WalkInLogo.swift */,
@@ -384,6 +391,7 @@
 				3D412FBC67A52F36995A4737 /* AppleAccountDeletionTests.swift */,
 				AEA7188DFFF4134CEB8270FC /* DecodingTests.swift */,
 				8C1FC1D0092199083C278E19 /* FeedbackTests.swift */,
+				988B69093D6D642A9156BBA7 /* GuestModeTests.swift */,
 				E2710CE8DFA4696F6750EE7A /* ItemSearchTests.swift */,
 				8D10226C08B7787374747FE5 /* LocalAccountDataTests.swift */,
 				34D1C3CDD2308D8D6023AE61 /* OfflineMapsTests.swift */,
@@ -450,6 +458,7 @@
 			children = (
 				4E28133ACF05710EB0935DF3 /* Account.swift */,
 				7E6B5443750FCC17E5254DF5 /* ActivityHistory.swift */,
+				F5322355781A1B5A43413E3C /* GuestMode.swift */,
 				B503C058E388DA73173ED85C /* LegalText.swift */,
 				1EDA2ABCE94A8CDD6E75123F /* LocalAccountData.swift */,
 				578DE87EE9D1C26D8DF5BC97 /* MemberActivity.swift */,
@@ -694,6 +703,7 @@
 				F59D0BB4186A6D378ADFEDE0 /* FindModel.swift in Sources */,
 				FD73A0DB5B9B81EF956C1442 /* FindView.swift in Sources */,
 				EC977C9F37E37640397841CE /* FloorPlanView.swift in Sources */,
+				0EC1C40E0248504795B614E0 /* GuestMode.swift in Sources */,
 				D6616CAAB960A9619FE58BD8 /* HealthMonitor.swift in Sources */,
 				C6C7BF9D14B046FF82CA31DF /* HealthResponse.swift in Sources */,
 				A7E1151289987C158655821A /* HomeExtras.swift in Sources */,
@@ -727,6 +737,7 @@
 				89959A26C4D55B8332E66A29 /* ShoppingListView.swift in Sources */,
 				5ACF238140B9DDE56FE153F3 /* ShoppingModeView.swift in Sources */,
 				BEA01E7B5BBE39A7758D354A /* ShoppingTripModel.swift in Sources */,
+				CF43454AFB33D43B1A657A8D /* SignUpPrompts.swift in Sources */,
 				B31B01FC69DA7F010153FF0A /* SignUpSteps.swift in Sources */,
 				15B790F0477BB144E84698A5 /* Store.swift in Sources */,
 				3A0DBBA3A2F64DD996D088BE /* StoreDetailView.swift in Sources */,
@@ -755,6 +766,7 @@
 				982BBBE9A646C332D10A14A8 /* AppleAccountDeletionTests.swift in Sources */,
 				D8011A3B26DC8779B4AF4494 /* DecodingTests.swift in Sources */,
 				FDD5013560706C1ABEF85881 /* FeedbackTests.swift in Sources */,
+				CCC985AA7B4C73819EA39A9F /* GuestModeTests.swift in Sources */,
 				80E939493C56D0825C7991C0 /* ItemSearchTests.swift in Sources */,
 				78BB5534CAB4F75A5AC009E5 /* LocalAccountDataTests.swift in Sources */,
 				39B0A9DDFEDACF8669581435 /* OfflineMapsTests.swift in Sources */,

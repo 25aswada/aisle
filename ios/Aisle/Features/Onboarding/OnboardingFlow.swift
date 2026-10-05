@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// First launch: the animated walkthrough, then an account, which Aisle requires.
-/// `signInOnly` skips the walkthrough, for a phone that has seen it but is signed out.
+/// First launch: the animated walkthrough, then an account, or "Continue as guest" after
+/// agreeing to the terms. `signInOnly` skips the walkthrough, for a phone that has seen it
+/// but is signed out (after "Sign out").
 struct OnboardingFlow: View {
     static let completedKey = "aisle.onboardingComplete"
 
@@ -13,6 +14,8 @@ struct OnboardingFlow: View {
     @Environment(AccountStore.self) private var accounts
     @Environment(PlusStore.self) private var plus
     @Environment(StoreSelection.self) private var storeSelection
+    @Environment(\.analytics) private var analytics
+    @AppStorage(GuestMode.key) private var isGuest = false
     @State private var path: [AccountFlowStep] = []
     @State private var signUp: SignUpModel
     /// Bumps when the shopper signs in, for the success haptic.
@@ -38,7 +41,7 @@ struct OnboardingFlow: View {
                         location: location,
                         onCreateAccount: createAccount,
                         onSignIn: { path.append(.method(returning: true)) },
-                        // Skipping or finishing the tour still leads to an account.
+                        // Skipping or finishing the tour leads to an account (or guest).
                         onFinish: createAccount
                     )
                 }
@@ -60,9 +63,21 @@ struct OnboardingFlow: View {
         if accounts.isSignedIn { onFinish() } else { path.append(.method(returning: false)) }
     }
 
+    /// Guests agree to the same terms (they say which AI providers see searches) first,
+    /// unless this phone already has.
+    private func continueAsGuest() {
+        if Legal.hasAccepted() { startAsGuest() } else { path.append(.guestTerms) }
+    }
+
+    private func startAsGuest() {
+        isGuest = true
+        analytics?.track(.guestStarted)
+        onFinish()
+    }
+
     private func accountScreen(_ step: AccountFlowStep) -> some View {
         AccountFlowScreen(
-            step: step, model: signUp, path: $path,
+            step: step, model: signUp, path: $path, onGuest: continueAsGuest,
             onSignedIn: { session in
                 signedIn += 1
                 accounts.signIn(session)
@@ -84,6 +99,13 @@ struct OnboardingFlow: View {
             OnboardingPlusOffer(firstName: accounts.account?.firstName, storeName: storeSelection.current?.name, onDone: onFinish)
                 .toolbar(.hidden, for: .navigationBar)
                 .navigationBarBackButtonHidden(true)
+        } else if step == .guestTerms {
+            TermsStep(onBack: { path.removeLast() }) {
+                Legal.recordAcceptance()
+                startAsGuest()
+            }
+            .toolbar(.hidden, for: .navigationBar)
+            .navigationBarBackButtonHidden(true)
         } else {
             accountScreen(step)
         }

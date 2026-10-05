@@ -43,6 +43,8 @@ final class FindModel {
     private(set) var followUpError: String?
     /// Set when a free-tier limit is hit, to open the Aisle+ sheet saying why.
     var upgradePrompt: String?
+    /// Set when a guest is out of today's searches, to offer a free account.
+    var signUpPrompt: SignUpReason?
 
     /// Where recents go when no shared `RecentSearches` is passed in.
     static let ephemeralSuite = "aisle.ephemeral"
@@ -137,6 +139,11 @@ final class FindModel {
         if case APIError.plusRequired(_, let message) = error {
             phase = .failed(message)
             upgradePrompt = message
+            return
+        }
+        if case APIError.signInRequired(_, let message) = error {
+            phase = .failed(message)
+            signUpPrompt = .searchLimit
             return
         }
         if case APIError.httpStatus(404) = error {

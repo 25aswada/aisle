@@ -257,6 +257,7 @@ final class AnalyticsNamesContractTests: XCTestCase {
             "app_opened", "store_selected", "search_submitted", "search_failed", "recent_search_tapped",
             "feedback_sent", "list_items_added", "shopping_started", "shopping_item_found",
             "shopping_item_skipped", "shopping_finished", "follow_up_sent",
+            "guest_started", "sign_up_prompt_shown", "sign_up_prompt_converted",
         ])
     }
 }

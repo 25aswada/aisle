@@ -465,8 +465,54 @@ def test_free_searches_stop_at_the_daily_limit_and_aisle_plus_lifts_it(api, appl
     assert api.get("/plus/status", headers=headers).json()["search"]["used"] == 5
 
 
-def test_signed_out_searches_arent_held_to_the_free_daily_limit(api):
-    assert all(search(api).status_code == 200 for _ in range(6))
+def test_guests_get_a_few_searches_a_day_then_are_asked_to_sign_up(api, engine):
+    guest = device("guest-a")
+    assert [search(api, guest).status_code for _ in range(3)] == [200] * 3
+    blocked = search(api, guest)
+    assert blocked.status_code == 402
+    assert blocked.json()["detail"] == {
+        "code": "sign_in_required", "feature": "search", "limit": 3,
+        "message": "Create a free account to keep searching.",
+    }
+    assert api.get("/plus/status", headers=guest).json()["search"] == {"used": 3, "limit": 3}
+    # A refused search isn't counted, and an account has its own five.
+    with Session(engine) as db:
+        counts = {c.subject: c.count for c in db.query(UsageCounter).filter_by(feature="guest_search")}
+    assert counts == {"device:guest-a": 3, "ip:testclient": 3}
+    headers, _, _ = account(engine, "guest-a")
+    assert [search(api, headers).status_code for _ in range(5)] == [200] * 5
+
+
+def test_guest_limits_also_hold_per_network(api):
+    # New install ids on one network get three times a device's allowance in all.
+    for phone in ("guest-a", "guest-b", "guest-c"):
+        assert all(search(api, device(phone)).status_code == 200 for _ in range(3))
+    assert search(api, device("guest-d")).status_code == 402
+    # Without a device id, only the network's count applies.
+    assert search(api).json()["detail"]["code"] == "sign_in_required"
+
+
+def test_guest_searches_that_find_nothing_or_have_no_store_arent_counted(api):
+    guest = device("guest-a")
+    assert api.post("/search", json={"query": "milk", "store_id": 999}, headers=guest).status_code == 404
+    # The intro's practice question has no store: a general answer, not one of the day's.
+    assert all(api.post("/search", json={"query": "milk"}, headers=guest).status_code == 200 for _ in range(4))
+    assert api.get("/plus/status", headers=guest).json()["search"]["used"] == 0
+
+
+def test_guests_get_a_few_trip_routes_a_day(api, engine, monkeypatch):
+    monkeypatch.setattr(get_settings(), "aisle_guest_routes", 2)
+    trip = {"store_id": 1, "items": [{"id": "1", "text": "milk"}]}
+    guest = device("guest-a")
+    assert [api.post("/route", json=trip, headers=guest).status_code for _ in range(2)] == [200, 200]
+    blocked = api.post("/route", json=trip, headers=guest)
+    assert blocked.status_code == 402
+    assert blocked.json()["detail"]["code"] == "sign_in_required"
+    assert blocked.json()["detail"]["message"] == "Create a free account to keep planning trips."
+    # A missing store isn't counted; accounts aren't held to it.
+    assert api.post("/route", json={**trip, "store_id": 999}, headers=device("guest-b")).status_code == 404
+    headers, _, _ = account(engine, "guest-a")
+    assert all(api.post("/route", json=trip, headers=headers).status_code == 200 for _ in range(3))
 
 
 def test_free_plan_gets_one_follow_up_per_search(api, apple, engine):

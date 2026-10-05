@@ -4,7 +4,9 @@ Aisle+ comes from a verified App Store subscription that belongs to an account: 
 one it was bought for, or one it was restored to. Signed out, nobody has Aisle+, and
 deleting the account ends it. Free shoppers get a few photo searches, follow-ups and
 AI-answered searches a day, counted per account when signed in (so reinstalling
-doesn't reset them; see auth.accounts for deleting) and otherwise per network. Aisle+
+doesn't reset them; see auth.accounts for deleting) and otherwise per network. Guests
+(signed out) also get a few store searches and trip routes a day, counted per device and
+per network; past them, the app asks them to make a free account. Aisle+
 is unlimited within fair use: daily ceilings no real shopper reaches, counted apart
 from the free tier. A use is counted before the AI runs, in one atomic step, and
 handed back if nothing came of it. Everyone's AI use together has a daily budget in
@@ -33,6 +35,9 @@ FOLLOW_UP = "follow_up"
 SEARCH = "search"
 # A text search answered with the AI's help (its guess, its "where to find it" answer).
 AI_SEARCH = "ai_search"
+# A guest's store search and trip route, counted per device and per network.
+GUEST_SEARCH = "guest_search"
+GUEST_ROUTE = "guest_route"
 PLUS_PRODUCTS = {"app.shopaisle.plus.yearly", "app.shopaisle.plus.monthly"}
 
 # What each limited feature is called, singular and plural, for "You've used today's…".
@@ -51,6 +56,8 @@ def upgrade_message(feature: str, limit: int) -> str:
     return f"You've used today's {used}. Aisle+ has unlimited."
 
 FAIR_USE = "That's a lot for one day, even with Aisle+. It resets tomorrow."
+GUEST_SEARCHES_USED = "Create a free account to keep searching."
+GUEST_ROUTES_USED = "Create a free account to keep planning trips."
 AI_PAUSED = "Aisle's AI is taking a break for today. Try again tomorrow."
 
 
@@ -99,7 +106,7 @@ def limit_for(feature: str, *, plus: bool = False, signed_in: bool = True) -> in
     if feature == AI_SEARCH:
         return s.aisle_free_ai_searches if signed_in else s.aisle_signed_out_ai_searches
     if feature == SEARCH:
-        return s.aisle_free_searches
+        return s.aisle_free_searches if signed_in else s.aisle_guest_searches
     return s.aisle_free_photo_searches if feature == PHOTO_SEARCH else s.aisle_free_follow_ups
 
 
@@ -119,6 +126,12 @@ def plus_required(feature: str, message: str, limit: int | None = None) -> HTTPE
     if limit is not None:
         detail["limit"] = limit
     return HTTPException(status_code=402, detail=detail)
+
+
+def sign_in_required(feature: str, message: str, limit: int) -> HTTPException:
+    """402 with what the app needs to ask a guest to make a free account, and say why."""
+    return HTTPException(status_code=402, detail={
+        "code": "sign_in_required", "feature": feature, "message": message, "limit": limit})
 
 
 @dataclass
@@ -158,11 +171,67 @@ def reserve_allowance(db: Session, caller: Caller, feature: str) -> Allowance:
     return Allowance(db, caller.subject, counter, day)
 
 
-def search_allowance(db: Session, caller: Caller) -> Allowance | None:
-    """Counts one search for a signed-in free account, raising 402 once today's are used.
-    None for Aisle+ (unlimited) and signed out (limited by rate and AI answers instead).
-    No AI budget check: a search still works on Aisle's own data when the AI is paused."""
-    if caller.user is None or is_plus(db, caller):
+@dataclass
+class GuestAllowance:
+    """One use by a guest, counted for the device and for the network. Refund it like an
+    Allowance when nothing came of it."""
+    parts: list[Allowance]
+
+    def refund(self) -> None:
+        for part in self.parts:
+            part.refund()
+
+
+def _guest_subjects(caller: Caller) -> list[str]:
+    """The device (when the app said which), then the network. The device id is whatever
+    the client says, so the network's higher cap is what holds against made-up ones."""
+    network = f"ip:{caller.ip or 'unknown'}"
+    return [f"device:{caller.device_id}", network] if caller.device_id else [network]
+
+
+def guest_allowance(db: Session, caller: Caller, feature: str, per_device: int, per_network: int,
+                    message: str) -> GuestAllowance:
+    """Counts one use by a guest, raising 402 `sign_in_required` once the device or the
+    network is out for today. A refused use isn't counted anywhere."""
+    day, counted = today(), GuestAllowance([])
+    for subject in _guest_subjects(caller):
+        limit = per_network if subject.startswith("ip:") else per_device
+        count = bump(db, subject, feature, day)
+        counted.parts.append(Allowance(db, subject, feature, day))
+        if count > limit:
+            counted.refund()
+            raise sign_in_required(feature.removeprefix("guest_"), message, per_device)
+    return counted
+
+
+def guest_used_today(db: Session, caller: Caller, feature: str) -> int:
+    """A guest's uses today: the device's, or the network's when the app sent no device id."""
+    counter = db.scalar(select(UsageCounter).where(
+        UsageCounter.subject == _guest_subjects(caller)[0], UsageCounter.feature == feature,
+        UsageCounter.day == today()))
+    return counter.count if counter else 0
+
+
+def search_usage(db: Session, caller: Caller) -> tuple[int, int]:
+    """(used, limit) for today's searches: a free account's, or a guest's."""
+    if caller.user is None:
+        return guest_used_today(db, caller, GUEST_SEARCH), limit_for(SEARCH, signed_in=False)
+    return used_today(db, caller, SEARCH), limit_for(SEARCH)
+
+
+def search_allowance(db: Session, caller: Caller, at_store: bool = True) -> Allowance | GuestAllowance | None:
+    """Counts one search, raising 402 once today's are used: `plus_required` for a free
+    account, `sign_in_required` for a guest. None for Aisle+ (unlimited), and for a guest's
+    search without a store (the intro's practice question: a general answer, held to the
+    rate limit and AI answers instead). No AI budget check: a search still works on
+    Aisle's own data when the AI is paused."""
+    if caller.user is None:
+        if not at_store:
+            return None
+        s = get_settings()
+        return guest_allowance(db, caller, GUEST_SEARCH, s.aisle_guest_searches, s.aisle_guest_searches_per_ip,
+                               GUEST_SEARCHES_USED)
+    if is_plus(db, caller):
         return None
     day, limit = today(), limit_for(SEARCH)
     if bump(db, caller.subject, SEARCH, day) > limit:
@@ -190,6 +259,16 @@ def ai_search_allowance(db: Session, caller: Caller) -> Allowance | None:
         return reserve_allowance(db, caller, AI_SEARCH)
     except HTTPException:
         return None
+
+
+def guest_route_allowance(db: Session, caller: Caller) -> GuestAllowance | None:
+    """Counts one trip route for a guest (402 `sign_in_required` past today's). None for
+    accounts, whose routes are held to the hourly rate limit and AI answers."""
+    if caller.user is not None:
+        return None
+    s = get_settings()
+    return guest_allowance(db, caller, GUEST_ROUTE, s.aisle_guest_routes, s.aisle_guest_routes_per_ip,
+                           GUEST_ROUTES_USED)
 
 
 def require_signed_in(caller: Caller, what: str) -> None:

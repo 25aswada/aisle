@@ -29,6 +29,11 @@ enum Legal {
         defaults.set(Date().timeIntervalSince1970, forKey: acceptedAtKey)
     }
 
+    /// Agreed to these versions already, e.g. as a guest who now makes an account.
+    static func hasAccepted(defaults: UserDefaults = .standard) -> Bool {
+        defaults.string(forKey: acceptedVersionKey) == version
+    }
+
     struct Section: Identifiable {
         let title: String
         let body: String
@@ -59,7 +64,7 @@ enum Legal {
         Aisle helps you find items in stores. Locations come from store data where we have it, from other shoppers' confirmations, from typical layouts for each kind of store, and from AI estimates. Store locations come from OpenStreetMap. Stores change their shelves often, so any answer can be wrong. Aisle shows how sure it is with each answer; treat "Likely here" and "Best guess" answers as starting points. Aisle isn't affiliated with or endorsed by the stores it covers, and store names and logos belong to their owners.
         """),
         Section(title: "3. Your account", body: """
-        You need a free account to use Aisle. Give accurate information and keep access to your email, phone or Apple or Google account secure. You're responsible for activity on your account. You can delete your account at any time from the You tab.
+        You can use Aisle as a guest, without an account. Some features, like photo search, follow-up questions, shared lists and Aisle+, need a free account. If you make one, give accurate information and keep access to your email, phone or Apple or Google account secure. You're responsible for activity on your account. You can delete your account at any time from the You tab.
         """),
         Section(title: "4. Aisle+", body: """
         Aisle+ is an optional, auto-renewing subscription sold through Apple's App Store. Prices are shown before you buy. Payment is charged to your Apple ID at confirmation of purchase, and the subscription renews automatically unless you turn off auto-renew at least 24 hours before the end of the current period. If a free trial is offered, you'll be charged when it ends unless you cancel before then. You can manage or cancel your subscription in your iPhone's Settings. Refunds are handled by Apple under its policies. The free plan has daily limits on some features, which we may change with notice.
@@ -91,7 +96,7 @@ enum Legal {
         • Your account: your first name, and your email, phone number, or Apple or Google sign-in ID.
         • If you share a list: its name, its items, and the first names of the people on it. If you report a shared list, your report and a copy of the list, so we can review it.
         • If you subscribe: a confirmation from Apple that your Aisle+ subscription is active. We never see your card details.
-        • To prevent abuse, how many requests your account and your network (IP address) made recently, and the email or phone number each sign-in code was sent to.
+        • To prevent abuse, how many requests your account, your phone's random ID and your network (IP address) made recently, and the email or phone number each sign-in code was sent to.
         • If usage sharing is on: anonymous counts like "a search happened" or "a trip finished". Never what you searched for. You can turn this off in the You tab.
         """),
         Section(title: "Location", body: """

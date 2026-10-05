@@ -9,6 +9,7 @@ struct AisleApp: App {
     @State private var accounts: AccountStore
     @State private var plus: PlusStore
     @AppStorage(OnboardingFlow.completedKey) private var onboardingComplete = false
+    @AppStorage(GuestMode.key) private var isGuest = false
     @AppStorage(AppearancePreference.defaultsKey) private var appearance = AppearancePreference.system
     @Environment(\.scenePhase) private var scenePhase
     private let api: AisleAPI
@@ -50,11 +51,12 @@ struct AisleApp: App {
     var body: some Scene {
         WindowGroup {
             Group {
-                // Aisle needs an account: the tabs open only once someone is signed in.
-                if onboardingComplete && accounts.isSignedIn {
+                // The tabs open once someone is signed in or chose to look around as a guest.
+                if onboardingComplete && (accounts.isSignedIn || isGuest) {
                     RootView(api: api, location: location, analytics: analytics, recents: recentSearches)
                 } else {
-                    // Signed out after the intro (or after "Sign out"): straight to sign-in.
+                    // Signed out after the intro (or after "Sign out"): straight to sign-in,
+                    // which offers guest again.
                     OnboardingFlow(api: api, location: location, auth: auth, signInOnly: onboardingComplete) {
                         withAnimation(.easeInOut(duration: 0.3)) { onboardingComplete = true }
                     }
@@ -68,6 +70,7 @@ struct AisleApp: App {
                 .environment(shoppingList)
                 .environment(recentSearches)
                 .environment(\.offlineMaps, offlineMaps)
+                .environment(\.analytics, analytics)
                 .preferredColorScheme(appearance.colorScheme)
                 .task {
                     await accounts.refresh()
@@ -80,8 +83,10 @@ struct AisleApp: App {
                     }
                 }
                 .onChange(of: accounts.account?.id, initial: true) { _, id in
-                    // The phone's lists, history and stats belong to one account.
+                    // The phone's lists, history and stats belong to one account. A guest's
+                    // carry into the account they make; signing out later goes to sign-in.
                     guard let id else { return }
+                    isGuest = false
                     LocalAccountData.adopt(accountID: id, .init(
                         lists: shoppingList, recents: recentSearches, storeSelection: storeSelection, offlineMaps: offlineMaps
                     ))
