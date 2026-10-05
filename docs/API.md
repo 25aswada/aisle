@@ -1,8 +1,9 @@
 # API
 
-Local origin: `http://127.0.0.1:8000`. JSON in and out. The app requires an account, but
-the API stays usable without one where it can: store lookups, `/search` and `/route` are
-public (with smaller AI limits signed out). These need a session (401 without one): `/me`
+Local origin: `http://127.0.0.1:8000`. JSON in and out. The app can be used as a guest,
+and the API stays usable without an account where it can: store lookups, `/search` and
+`/route` are public (with a guest's daily allowance and smaller AI limits signed out; see
+[Guests](#guests)). These need a session (401 without one): `/me`
 and `/me/*`, `/auth/signout`, follow-ups (`/chat`), photo search (`/identify`), list
 scanning (`/lists/scan`), reports (`/feedback`) and shared lists (`/lists`, `/lists/*`).
 `/docs` on the running service shows the live OpenAPI schema. This document and
@@ -393,7 +394,7 @@ checking the App Store's signature.
   the refund doesn't.
 
 Free limits, per UTC day, counted per account when signed in and otherwise per IP:
-3 photo searches (`/identify`, `/lists/scan`, and `/chat` messages with a photo), 5
+5 searches (`/search`, signed in; guests have their own allowance, below), 3 photo searches (`/identify`, `/lists/scan`, and `/chat` messages with a photo), 5
 follow-ups (other `/chat` messages), and 20 AI answers (`/search` and `/route` with the
 AI's help; 5 signed out). A request only counts when the AI added something. Past the
 AI-answer limit, `/search` and `/route` still work, from Aisle's own data and wording
@@ -416,6 +417,25 @@ UTC day, and search falls back to Aisle's own answers.
 In `/chat`, only the newest message's photo reaches the AI (the app sends no others);
 the model sees the first two messages and the latest nine, each cut to 2,000 characters.
 
+### Guests
+
+Signed out, `/search` at a store gets 3 a day per device (`X-Aisle-Device`) and 9 per IP
+(`AISLE_GUEST_SEARCHES`, `AISLE_GUEST_SEARCHES_PER_IP`; the IP cap is higher for shared
+Wi-Fi, and is all that applies without a device header). `/route` gets 10 per device and
+30 per IP (`AISLE_GUEST_ROUTES`, `AISLE_GUEST_ROUTES_PER_IP`). A search without `store_id`
+(the app's intro) isn't counted, and neither is one for a store that doesn't exist. Past
+either allowance, the server answers **402** with `code: "sign_in_required"`, which the app
+answers by offering a free account rather than Aisle+:
+
+```json
+{"detail": {"code": "sign_in_required", "feature": "search", "limit": 3,
+            "message": "Create a free account to keep searching."}}
+```
+
+(`feature: "route"` says "Create a free account to keep planning trips.") Signed out,
+`GET /plus/status` reports the device's guest searches as `search`, e.g.
+`{"used": 1, "limit": 3}`. Guests' AI answers are the signed-out 5 per IP above.
+
 ## Analytics and errors (Milestone 7)
 
 ### POST /events
@@ -432,7 +452,8 @@ Basic, anonymous product analytics. Status 202.
 - 1–50 events per batch. `occurred_at` is optional and clamped to the server clock.
 - `name` must be one of: `app_opened`, `store_selected`, `search_submitted`, `search_failed`,
   `recent_search_tapped`, `feedback_sent`, `list_items_added`, `shopping_started`,
-  `shopping_item_found`, `shopping_item_skipped`, `shopping_finished`, `follow_up_sent`.
+  `shopping_item_found`, `shopping_item_skipped`, `shopping_finished`, `follow_up_sent`,
+  `guest_started`, `sign_up_prompt_shown`, `sign_up_prompt_converted`.
 - `properties`: at most 12 scalar values (string ≤ 80 chars, number, bool, null). The app
   never sends queries or item text. Users can turn analytics off in the You tab.
 

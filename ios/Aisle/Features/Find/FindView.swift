@@ -11,6 +11,8 @@ struct FindView: View {
     @Environment(StoreSelection.self) private var storeSelection
     @Environment(HealthMonitor.self) private var health
     @Environment(PlusStore.self) private var plus
+    @Environment(AccountStore.self) private var accounts
+    @Environment(\.requireAccount) private var requireAccount
     @State private var isPickingStore = false
     /// Opens the picker already asking for location ("Find stores near me").
     @State private var pickerStartsWithLocation = false
@@ -75,9 +77,10 @@ struct FindView: View {
                                 onCamera: openCamera, onRemovePhoto: { model.photo = nil }
                             )
                             if model.phase == .idle {
-                                FreeSearchesNote {
-                                    model.upgradePrompt = "Search as much as you like with Aisle+."
-                                }
+                                FreeSearchesNote(
+                                    onUpgrade: { model.upgradePrompt = "Search as much as you like with Aisle+." },
+                                    onSignUp: { requireAccount(.searches) }
+                                )
                             }
                         }
                         if let store = storeSelection.current {
@@ -139,6 +142,16 @@ struct FindView: View {
             .onChange(of: model.phase) { _, phase in
                 recordSearch(phase)
                 if case .loaded = phase { Task { await plus.refreshUsage() } }
+                nudgeGuest(phase)
+            }
+            .onChange(of: model.signUpPrompt) { _, reason in
+                // Out of guest searches: offer an account, then run the search again.
+                guard let reason else { return }
+                model.signUpPrompt = nil
+                GuestNudge.markShown()
+                requireAccount(reason) {
+                    if let store = storeSelection.current { runSearch(store: store) }
+                }
             }
             .task { await plus.refreshUsage() }
             .onChange(of: model.feedback) { _, feedback in recordContribution(feedback) }
@@ -229,17 +242,35 @@ extension FindView {
         storeSelection.current != nil && model.currentResult != nil
     }
 
+    /// Follow-ups need an account; a guest's question stays in the field while they make one.
     private func sendFollowUp(store: Store) {
-        Task { await model.sendFollowUp(storeID: store.id, retailer: store.retailerDisplayName) }
+        requireAccount(.followUp) {
+            Task { await model.sendFollowUp(storeID: store.id, retailer: store.retailerDisplayName) }
+        }
     }
 
+    /// Photo search needs an account; once a guest has one, the camera opens.
     private func openCamera() {
         searchFocused = false
         followUpFocused = false
-        // The overlay slides its own card up, so skip the cover's full-screen slide.
-        var instant = Transaction()
-        instant.disablesAnimations = true
-        withTransaction(instant) { isTakingPhoto = true }
+        requireAccount(.photoSearch) {
+            // The overlay slides its own card up, so skip the cover's full-screen slide.
+            var instant = Transaction()
+            instant.disablesAnimations = true
+            withTransaction(instant) { isTakingPhoto = true }
+        }
+    }
+
+    /// A gentle "make a free account" after a guest's first few answers, once a day.
+    private func nudgeGuest(_ phase: FindModel.Phase) {
+        guard case .loaded = phase, !accounts.isSignedIn, GuestNudge.recordSearch() else { return }
+        Task {
+            // Let the answer land first, and never over a sheet the shopper just opened.
+            try? await Task.sleep(for: .seconds(1.5))
+            guard model.currentResult != nil, !isPickingStore, !isShowingHistory, !isShowingStoreDetail,
+                  !isTakingPhoto, !isCorrecting, model.upgradePrompt == nil else { return }
+            requireAccount(.searches)
+        }
     }
 
     /// Back to an empty search at the top.
@@ -393,13 +424,14 @@ extension FindView {
         Color.clear.frame(height: 1).id(Self.conversationEnd)
     }
 
-    /// "Was it there?" for the newest result; only one is on screen at a time.
+    /// "Was it there?" for the newest result; only one is on screen at a time. Reports need
+    /// an account, so each counts once.
     private func feedbackBar(store: Store) -> some View {
         FeedbackBar(
             state: model.feedback,
-            onFound: { Task { await model.confirmFound(storeID: store.id) } },
-            onNotHere: { Task { await model.reportNotHere(storeID: store.id) } },
-            onCorrect: { isCorrecting = true }
+            onFound: { requireAccount(.feedback) { Task { await model.confirmFound(storeID: store.id) } } },
+            onNotHere: { requireAccount(.feedback) { Task { await model.reportNotHere(storeID: store.id) } } },
+            onCorrect: { requireAccount(.feedback) { isCorrecting = true } }
         )
         .sheet(isPresented: $isCorrecting) {
             if let result = model.latestResult {
@@ -771,18 +803,22 @@ private struct CurrentStoreCard: View {
     }
 }
 
-/// "3 of 5 free searches left today · Go unlimited", for free shoppers.
+/// "3 of 5 free searches left today · Go unlimited", for free shoppers. Guests see their
+/// own allowance and "Get more", which offers a free account.
 private struct FreeSearchesNote: View {
     let onUpgrade: () -> Void
+    let onSignUp: () -> Void
     @Environment(PlusStore.self) private var plus
+    @Environment(AccountStore.self) private var accounts
 
     var body: some View {
         if !plus.isPlus, let usage = plus.serverStatus?.search, usage.limit > 0 {
+            let kind = accounts.isSignedIn ? "free" : "guest"
             HStack(spacing: 6) {
-                Text(usage.left == 0 ? "No free searches left today" : "\(usage.left) of \(usage.limit) free searches left today")
+                Text(usage.left == 0 ? "No \(kind) searches left today" : "\(usage.left) of \(usage.limit) \(kind) searches left today")
                     .foregroundStyle(Theme.secondaryInk)
                 Text("·").foregroundStyle(Theme.secondaryInk)
-                Button("Go unlimited", action: onUpgrade)
+                Button(accounts.isSignedIn ? "Go unlimited" : "Get more", action: accounts.isSignedIn ? onUpgrade : onSignUp)
                     .fontWeight(.semibold)
                     .foregroundStyle(Theme.accentInk)
             }

@@ -34,7 +34,8 @@ def search_item(
     device_id: DeviceID = None,
 ):
     rate_limit(db, caller.subject, "search", get_settings().aisle_searches_per_hour)
-    counted = search_allowance(db, caller)  # 402 once a free account's searches are used.
+    # 402 once a free account's (or a guest's) searches for today are used.
+    counted = search_allowance(db, caller, at_store=body.store_id is not None)
     allowance = ai_search_allowance(db, caller) if model or explainer else None
     if allowance is None:
         # Out of AI answers for today (or no AI configured): Aisle's own data and wording.

@@ -14,6 +14,12 @@ enum AnalyticsEventName: String, Codable, CaseIterable {
     case shoppingItemSkipped = "shopping_item_skipped"
     case shoppingFinished = "shopping_finished"
     case followUpSent = "follow_up_sent"
+    /// "Continue as guest" in onboarding.
+    case guestStarted = "guest_started"
+    /// A guest was asked to make an account; `reason` says why (`SignUpReason`).
+    case signUpPromptShown = "sign_up_prompt_shown"
+    /// …and made one (or signed in) from that prompt.
+    case signUpPromptConverted = "sign_up_prompt_converted"
 }
 
 /// Property values are small scalars. Never put item text or queries in analytics.

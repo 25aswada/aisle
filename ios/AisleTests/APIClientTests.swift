@@ -57,6 +57,16 @@ final class APIClientTests: XCTestCase {
         }
     }
 
+    func testAGuestOutOfSearchesIsAskedToSignUpNotToUpgrade() async {
+        StubURLProtocol.respond(status: 402, json: #"{"detail":{"code":"sign_in_required","feature":"search","limit":3,"message":"Create a free account to keep searching."}}"#)
+        do {
+            _ = try await client.searchItem(query: "milk", storeID: "1")
+            XCTFail("Expected an error")
+        } catch {
+            XCTAssertEqual(error as? APIError, .signInRequired(feature: "search", message: "Create a free account to keep searching."))
+        }
+    }
+
     func testNotFoundAndValidationErrorsKeepTheirStatus() async {
         StubURLProtocol.respond(status: 404, json: #"{"detail":"Store not found"}"#)
         do {

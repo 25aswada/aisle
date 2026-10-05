@@ -10,6 +10,9 @@ enum APIError: Error, Equatable, LocalizedError {
     case timeout
     /// A free-tier limit or an Aisle+ feature (HTTP 402). `message` says why, for the upgrade sheet.
     case plusRequired(feature: String, message: String)
+    /// A guest is out of today's searches or routes (HTTP 402 `sign_in_required`): the app
+    /// offers a free account instead of Aisle+.
+    case signInRequired(feature: String, message: String)
     /// The server said no and why (a 4xx with a message), e.g. a fair-use or rate limit.
     case refused(status: Int, message: String)
 
@@ -24,6 +27,7 @@ enum APIError: Error, Equatable, LocalizedError {
         case .offline: return "You're offline. Check your connection and try again."
         case .timeout: return "The request took too long. Try again."
         case .plusRequired(_, let message): return message
+        case .signInRequired(_, let message): return message
         case .refused(_, let message): return message
         }
     }
@@ -39,6 +43,7 @@ enum APIError: Error, Equatable, LocalizedError {
         case .offline: return "offline"
         case .timeout: return "timeout"
         case .plusRequired: return "plus_required"
+        case .signInRequired: return "sign_in_required"
         case .refused(let status, _): return "http_\(status)"
         }
     }
@@ -313,16 +318,24 @@ extension APIClient {
         try await get("plus/status")
     }
 
-    /// The 402 body: {"detail": {"code": "plus_required", "feature": "...", "message": "..."}}.
+    /// The 402 body: {"detail": {"code": "plus_required", "feature": "...", "message": "..."}},
+    /// or `sign_in_required` when a guest is out of today's searches.
     static func plusRequired(from data: Data) -> APIError {
         struct Body: Decodable {
             struct Detail: Decodable {
+                let code: String?
                 let feature: String?
                 let message: String?
             }
             let detail: Detail
         }
         let detail = (try? JSONDecoder().decode(Body.self, from: data))?.detail
+        if detail?.code == "sign_in_required" {
+            return .signInRequired(
+                feature: detail?.feature ?? "search",
+                message: detail?.message ?? "Create a free account to keep searching."
+            )
+        }
         return .plusRequired(
             feature: detail?.feature ?? "plus",
             message: detail?.message ?? "That's part of Aisle+."

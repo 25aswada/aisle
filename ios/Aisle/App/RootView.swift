@@ -43,6 +43,8 @@ struct RootView: View {
             if list.pendingJoinCode != nil { tab = .list }
         }
         .environment(\.openTab) { tab = $0 }
+        // A guest tapping something that needs an account is asked to make one, from here.
+        .signUpPrompts()
         .tint(Theme.ink)
         .font(.aisleBody)
     }

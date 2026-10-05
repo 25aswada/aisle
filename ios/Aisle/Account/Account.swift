@@ -19,7 +19,7 @@ enum CodeChannel: Equatable {
     case phone, email
 }
 
-/// The signed-in shopper, as the server knows them. Required to use the app.
+/// The signed-in shopper, as the server knows them. Guests have none (see `GuestMode`).
 struct Account: Codable, Equatable {
     var id: String
     /// Stamped on this account's Aisle+ purchases (StoreKit's appAccountToken), so the
