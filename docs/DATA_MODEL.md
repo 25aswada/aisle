@@ -68,6 +68,11 @@ Names come from a fixed list; properties are small scalars with no user text.
 Deleting a user deletes its identities and revokes its sessions. Searches, reports and
 analytics stay anonymous and are not linked to users.
 
+- `apple_revocations(id, refresh_token null, authorization_code null, attempts,
+  next_attempt_at, created_at)`: a deleted account's Apple sign-in that couldn't be
+  revoked at the time. Not linked to any user; cleanup retries it and deletes the row on
+  success, or gives up within two weeks.
+
 ## Aisle+
 
 - `plus_entitlements(id, original_transaction_id unique, product_id, environment,

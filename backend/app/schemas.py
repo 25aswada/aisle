@@ -407,6 +407,17 @@ class GoogleSignIn(BaseModel):
     nonce: str = Field(min_length=8, max_length=200)
 
 
+class AccountDeletion(BaseModel):
+    # A fresh Sign in with Apple code from the app, traded for a token to revoke. Accounts
+    # without Apple, and older apps, send no body.
+    authorization_code: str | None = Field(default=None, max_length=2000)
+
+
+class AppleNotification(BaseModel):
+    # Sign in with Apple's server-to-server notification: a JWT Apple signed.
+    payload: str = Field(min_length=20, max_length=8000)
+
+
 class CodeSent(BaseModel):
     # Where the code went, masked a little for display ("+1 •••• 0123").
     sent_to: str

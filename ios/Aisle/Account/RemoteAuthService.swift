@@ -69,6 +69,15 @@ final class RemoteAuthService: AuthService {
     func deleteAccount(token: String) async throws {
         try await api.deleteMe(token: token)
     }
+
+    func appleDeletionCode() async throws -> String? {
+        // Only the code is needed, so Apple asks for nothing new.
+        try await apple.signIn(hashedNonce: Nonce.sha256(Nonce.make()), scopes: []).authorizationCode
+    }
+
+    func deleteAccount(token: String, appleAuthorizationCode: String?) async throws {
+        try await api.deleteMe(token: token, appleAuthorizationCode: appleAuthorizationCode)
+    }
 }
 
 /// A one-time random string tying a sign-in to this request, so a stolen token can't be replayed.
@@ -106,9 +115,9 @@ final class AppleSignIn: NSObject, ASAuthorizationControllerDelegate, ASAuthoriz
 
     private var continuation: CheckedContinuation<Credential, Error>?
 
-    func signIn(hashedNonce: String) async throws -> Credential {
+    func signIn(hashedNonce: String, scopes: [ASAuthorization.Scope] = [.fullName, .email]) async throws -> Credential {
         let request = ASAuthorizationAppleIDProvider().createRequest()
-        request.requestedScopes = [.fullName, .email]
+        request.requestedScopes = scopes
         request.nonce = hashedNonce
         let controller = ASAuthorizationController(authorizationRequests: [request])
         controller.delegate = self

@@ -193,6 +193,16 @@ def revoke(db: Session, session: AuthSession) -> None:
     db.commit()
 
 
+def unlink_identity(db: Session, identity: UserIdentity) -> None:
+    """Removes one way into an account (Apple says that Apple ID no longer uses Aisle) and
+    ends the account's sessions, so its phones sign in again."""
+    user = identity.user
+    db.execute(update(AuthSession).where(AuthSession.user_id == user.id)
+               .values(revoked_at=datetime.now(timezone.utc)))
+    user.identities.remove(identity)
+    db.commit()
+
+
 def delete_user(db: Session, user: User) -> None:
     """Deletes the account, its identities and sessions, its link to Aisle+, and the
     emailed codes for its addresses. Today's limit counts move to a hash of each way it

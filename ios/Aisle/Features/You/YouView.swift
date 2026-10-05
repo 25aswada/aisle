@@ -119,7 +119,7 @@ struct YouView: View {
                     Task { await deleteAccount() }
                 }
             } message: {
-                Text(plus.isPlus ? Self.deleteMessage + " " + Self.subscriptionNote : Self.deleteMessage)
+                Text(deleteDialogMessage)
             }
             .manageSubscriptionsSheet(isPresented: $managingSubscription)
             .alert("Couldn't delete your account", isPresented: Binding(
@@ -312,6 +312,14 @@ struct YouView: View {
 
     static let deleteMessage = "This permanently deletes your Aisle account, your lists, history and stats, and ends Aisle+ on this account. Aisle starts over as if newly installed."
     static let subscriptionNote = "Apple bills Aisle+, and deleting your account doesn't cancel it. Cancel it first so you're not charged again."
+    static let appleNote = "Apple will ask you to confirm, so your Apple sign-in ends too."
+
+    private var deleteDialogMessage: String {
+        var parts = [Self.deleteMessage]
+        if accounts.account?.providers.contains(.apple) == true { parts.append(Self.appleNote) }
+        if plus.isPlus { parts.append(Self.subscriptionNote) }
+        return parts.joined(separator: " ")
+    }
 
     private func deleteAccount() async {
         do {
