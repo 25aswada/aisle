@@ -180,20 +180,19 @@ def identify(api, who):
 
 
 def test_free_photo_searches_stop_at_the_daily_limit(api):
-    for _ in range(3):
-        assert identify(api, "phone-a").json() == {"item": "milk"}
+    assert identify(api, "phone-a").json() == {"item": "milk"}
     blocked = identify(api, "phone-a")
     assert blocked.status_code == 402
     assert blocked.json()["detail"]["code"] == "plus_required"
     assert blocked.json()["detail"]["feature"] == "photo_search"
-    assert "3 free photo searches" in blocked.json()["detail"]["message"]
+    assert blocked.json()["detail"]["message"] == "You've used today's free photo search. Aisle+ has unlimited."
     # Another account has its own allowance; list scans share the same one.
     assert identify(api, "phone-b").status_code == 200
     assert api.post("/lists/scan", json={"image": PHOTO}, headers=shopper(api, "phone-a")).status_code == 402
 
     status = api.get("/plus/status", headers=shopper(api, "phone-a")).json()
     assert status["is_plus"] is False
-    assert status["photo_search"] == {"used": 3, "limit": 3}
+    assert status["photo_search"] == {"used": 1, "limit": 1}
 
 
 def test_limits_reset_each_day(api, engine):
@@ -235,14 +234,14 @@ def sync(api, headers, *transactions, claim=False):
 def test_a_verified_subscription_lifts_the_limits(api, apple, engine):
     headers, token, _ = account(engine)
     for _ in range(3):
-        api.post("/identify", json={"image": PHOTO}, headers=headers)
+        api.post("/identify", json={"image": PHOTO}, headers=headers)  # One allowed, then 402s.
     synced = sync(api, headers, apple.sign(appAccountToken=token.upper()))
     assert synced.status_code == 200
     assert synced.json()["is_plus"] is True
     for _ in range(3):
         assert api.post("/identify", json={"image": PHOTO}, headers=headers).status_code == 200
     # Aisle+ use isn't counted against the free tier.
-    assert api.get("/plus/status", headers=headers).json()["photo_search"]["used"] == 3
+    assert api.get("/plus/status", headers=headers).json()["photo_search"]["used"] == 1
 
 
 def test_aisle_plus_needs_an_account(api, apple):
@@ -387,14 +386,13 @@ def signed_in_as(engine, provider, subject, email=None):
 
 def test_deleting_the_account_and_signing_up_again_doesnt_reset_the_free_tier(api, engine):
     headers = signed_in_as(engine, "apple", "apple-sub-1", "sam@example.com")
-    for _ in range(3):
-        assert api.post("/identify", json={"image": PHOTO}, headers=headers).status_code == 200
+    assert api.post("/identify", json={"image": PHOTO}, headers=headers).status_code == 200
     assert api.delete("/me", headers=headers).status_code == 204
     # Same Apple ID, or any other way the account signed in (here its email), picks up
     # where it left off.
     for provider, subject in (("apple", "apple-sub-1"), ("email", "sam@example.com")):
         again = signed_in_as(engine, provider, subject, "sam@example.com" if provider == "email" else None)
-        assert api.get("/plus/status", headers=again).json()["photo_search"]["used"] == 3
+        assert api.get("/plus/status", headers=again).json()["photo_search"]["used"] == 1
         assert api.post("/identify", json={"image": PHOTO}, headers=again).status_code == 402
         api.delete("/me", headers=again)
     # A different person starts fresh.
@@ -414,7 +412,8 @@ class RecordingAI(FakeAI):
         return super().chat(system, messages)
 
 
-def test_photos_earlier_in_a_follow_up_go_nowhere(api, engine):
+def test_photos_earlier_in_a_follow_up_go_nowhere(api, engine, monkeypatch):
+    monkeypatch.setattr(get_settings(), "aisle_free_follow_ups_per_search", 10)
     ai = RecordingAI()
     app.dependency_overrides[get_explainer] = lambda: ai
     headers, _, _ = account(engine)
@@ -431,7 +430,8 @@ def test_photos_earlier_in_a_follow_up_go_nowhere(api, engine):
     assert status["photo_search"]["used"] == 0 and status["follow_up"]["used"] == 1
 
 
-def test_long_conversations_are_trimmed_before_the_ai(api, engine):
+def test_long_conversations_are_trimmed_before_the_ai(api, engine, monkeypatch):
+    monkeypatch.setattr(get_settings(), "aisle_free_follow_ups_per_search", 100)
     ai = RecordingAI()
     app.dependency_overrides[get_explainer] = lambda: ai
     headers, _, _ = account(engine)
@@ -445,6 +445,43 @@ def test_long_conversations_are_trimmed_before_the_ai(api, engine):
 
 def search(api, headers=None):
     return api.post("/search", json={"query": "milk", "store_id": 1}, headers=headers or {})
+
+
+def test_free_searches_stop_at_the_daily_limit_and_aisle_plus_lifts_it(api, apple, engine):
+    headers, token, _ = account(engine)
+    assert [search(api, headers).status_code for _ in range(5)] == [200] * 5
+    blocked = search(api, headers)
+    assert blocked.status_code == 402
+    assert blocked.json()["detail"]["feature"] == "search"
+    assert blocked.json()["detail"]["message"] == "You've used today's 5 free searches. Aisle+ has unlimited."
+    assert api.get("/plus/status", headers=headers).json()["search"] == {"used": 5, "limit": 5}
+    # A store that doesn't exist doesn't use one up.
+    other, _, _ = account(engine, "phone-b")
+    assert api.post("/search", json={"query": "milk", "store_id": 999}, headers=other).status_code == 404
+    assert api.get("/plus/status", headers=other).json()["search"]["used"] == 0
+    # Aisle+ searches aren't limited (or counted against the free tier).
+    sync(api, headers, apple.sign(appAccountToken=token))
+    assert search(api, headers).status_code == 200
+    assert api.get("/plus/status", headers=headers).json()["search"]["used"] == 5
+
+
+def test_signed_out_searches_arent_held_to_the_free_daily_limit(api):
+    assert all(search(api).status_code == 200 for _ in range(6))
+
+
+def test_free_plan_gets_one_follow_up_per_search(api, apple, engine):
+    headers, token, _ = account(engine)
+    first = [{"role": "user", "content": "milk"}, {"role": "assistant", "content": "Dairy."},
+             {"role": "user", "content": "and eggs?"}]
+    assert api.post("/chat", json={"store_id": 1, "messages": first}, headers=headers).status_code == 200
+    second = first + [{"role": "assistant", "content": "By the milk."}, {"role": "user", "content": "butter?"}]
+    blocked = api.post("/chat", json={"store_id": 1, "messages": second}, headers=headers)
+    assert blocked.status_code == 402
+    assert blocked.json()["detail"]["message"] == "The free plan includes 1 follow-up per search. Aisle+ has unlimited."
+    # A new search gets its own follow-up; Aisle+ has no per-search limit.
+    assert api.post("/chat", json={"store_id": 1, "messages": first}, headers=headers).status_code == 200
+    sync(api, headers, apple.sign(appAccountToken=token))
+    assert api.post("/chat", json={"store_id": 1, "messages": second}, headers=headers).status_code == 200
 
 
 def test_free_ai_answers_have_a_daily_limit_then_search_keeps_working(api, engine, monkeypatch):

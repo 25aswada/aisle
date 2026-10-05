@@ -285,6 +285,8 @@ struct PlusServerStatus: Decodable, Equatable {
     }
 
     let isPlus: Bool
+    /// Searches today, for a signed-in free account. Optional so older servers still decode.
+    let search: Usage?
     let photoSearch: Usage
     let followUp: Usage
     /// Searches answered with the AI's help. Optional so older servers still decode.
@@ -292,6 +294,7 @@ struct PlusServerStatus: Decodable, Equatable {
 
     enum CodingKeys: String, CodingKey {
         case isPlus = "is_plus"
+        case search
         case photoSearch = "photo_search"
         case followUp = "follow_up"
         case aiSearch = "ai_search"

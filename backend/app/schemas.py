@@ -471,6 +471,7 @@ class PlusStatus(BaseModel):
     expires_at: datetime | None = None
     product_id: str | None = None
     # Today's use of the free tier's limited features (not counted for Aisle+).
+    search: UsageOut
     photo_search: UsageOut
     follow_up: UsageOut
     # Searches answered with the AI's help; past the limit, searches use Aisle's own answers.

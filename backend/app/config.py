@@ -72,8 +72,13 @@ class Settings(BaseSettings):
     aisle_new_store_maps_per_day: int = 3000
 
     # Aisle+. The free tier's daily limits (per account, or per network when signed out).
-    aisle_free_photo_searches: int = 3
+    # Searches a day for a signed-in free account; past it, search needs Aisle+.
+    # (Signed out, searches are limited by the hourly rate limit and AI answers below.)
+    aisle_free_searches: int = 5
+    aisle_free_photo_searches: int = 1
     aisle_free_follow_ups: int = 5
+    # Follow-up questions about one search, on the free plan.
+    aisle_free_follow_ups_per_search: int = 1
     # Searches answered with the AI's help. Past the limit, searches still work with
     # Aisle's own answers and wording.
     aisle_free_ai_searches: int = 20

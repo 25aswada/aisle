@@ -10,6 +10,7 @@ struct FindView: View {
 
     @Environment(StoreSelection.self) private var storeSelection
     @Environment(HealthMonitor.self) private var health
+    @Environment(PlusStore.self) private var plus
     @State private var isPickingStore = false
     /// Opens the picker already asking for location ("Find stores near me").
     @State private var pickerStartsWithLocation = false
@@ -73,6 +74,11 @@ struct FindView: View {
                                 onSubmit: submitSearch, onClear: { model.clear() },
                                 onCamera: openCamera, onRemovePhoto: { model.photo = nil }
                             )
+                            if model.phase == .idle {
+                                FreeSearchesNote {
+                                    model.upgradePrompt = "Search as much as you like with Aisle+."
+                                }
+                            }
                         }
                         if let store = storeSelection.current {
                             resultSection(store: store)
@@ -130,7 +136,11 @@ struct FindView: View {
             .navigationTitle("Find")
             .toolbar(.hidden, for: .navigationBar)
             .onChange(of: storeSelection.current?.id) { model.clear() }
-            .onChange(of: model.phase) { _, phase in recordSearch(phase) }
+            .onChange(of: model.phase) { _, phase in
+                recordSearch(phase)
+                if case .loaded = phase { Task { await plus.refreshUsage() } }
+            }
+            .task { await plus.refreshUsage() }
             .onChange(of: model.feedback) { _, feedback in recordContribution(feedback) }
             .sheet(isPresented: $isShowingStoreDetail) {
                 if let store = storeSelection.current {
@@ -503,8 +513,9 @@ struct PhotoComposer: View {
     /// "3 of 5 free photo searches left today", for free shoppers.
     private var allowance: String? {
         guard !plus.isPlus, let usage = plus.serverStatus?.photoSearch, usage.limit > 0 else { return nil }
-        return usage.left == 0
-            ? "No free photo searches left today"
+        if usage.left == 0 { return usage.limit == 1 ? "Today's free photo search is used" : "No free photo searches left today" }
+        return usage.limit == 1
+            ? "1 free photo search left today"
             : "\(usage.left) of \(usage.limit) free photo searches left today"
     }
 
@@ -757,6 +768,29 @@ private struct CurrentStoreCard: View {
         .buttonStyle(.plain)
         .accessibilityIdentifier("currentStoreButton")
         .accessibilityHint("Opens the store picker")
+    }
+}
+
+/// "3 of 5 free searches left today · Go unlimited", for free shoppers.
+private struct FreeSearchesNote: View {
+    let onUpgrade: () -> Void
+    @Environment(PlusStore.self) private var plus
+
+    var body: some View {
+        if !plus.isPlus, let usage = plus.serverStatus?.search, usage.limit > 0 {
+            HStack(spacing: 6) {
+                Text(usage.left == 0 ? "No free searches left today" : "\(usage.left) of \(usage.limit) free searches left today")
+                    .foregroundStyle(Theme.secondaryInk)
+                Text("·").foregroundStyle(Theme.secondaryInk)
+                Button("Go unlimited", action: onUpgrade)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(Theme.accentInk)
+            }
+            .font(Theme.font(13, relativeTo: .footnote))
+            .padding(.leading, 6)
+            .accessibilityElement(children: .combine)
+            .accessibilityIdentifier("freeSearchesNote")
+        }
     }
 }
 

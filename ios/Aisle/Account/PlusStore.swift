@@ -252,9 +252,10 @@ final class PlusStore {
 
     /// The free plan's daily limits, from the server when it has answered, otherwise the
     /// server's defaults (backend/app/config.py).
-    var freeSearchesPerDay: Int { serverStatus?.aiSearch?.limit ?? 20 }
+    var freeSearchesPerDay: Int { serverStatus?.search?.limit ?? 5 }
     var freePhotoSearchesPerDay: Int { serverStatus?.photoSearch.limit ?? MemberActivity.freePhotosPerDay }
-    var freeFollowUpsPerDay: Int { serverStatus?.followUp.limit ?? 5 }
+    /// Follow-up questions per search on the free plan (backend: aisle_free_follow_ups_per_search).
+    let freeFollowUpsPerSearch = 1
 
     /// Picks up today's free use after a photo search or follow-up.
     func refreshUsage() async {

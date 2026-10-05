@@ -149,13 +149,17 @@ struct CancelPlusFlow: View {
     /// Concrete, from their own use where we have it.
     private var changes: some View {
         VStack(alignment: .leading, spacing: 0) {
+            change("magnifyingglass", "Searches go back to \(MemberActivity.freeSearchesPerDay) a day", nil)
+            RowDivider()
             change(
                 "camera",
-                "Photo searches go back to \(MemberActivity.freePhotosPerDay) a day",
+                MemberActivity.freePhotosPerDay == 1
+                    ? "Photo searches go back to 1 a day"
+                    : "Photo searches go back to \(MemberActivity.freePhotosPerDay) a day",
                 extraPhotoSearches > 0 ? "You used \(extraPhotoSearches) more than that in the last 2 weeks." : nil
             )
             RowDivider()
-            change("bubble.left", "Follow-ups go back to \(MemberActivity.freeFollowUpsPerDay) a day", nil)
+            change("bubble.left", "Follow-ups go back to \(MemberActivity.freeFollowUpsPerSearch) per search", nil)
             RowDivider()
             change(
                 "person.2",

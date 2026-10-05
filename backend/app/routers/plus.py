@@ -13,7 +13,7 @@ from ..config import get_settings
 from ..database import get_db
 from ..models import PlusEntitlement, User
 from ..plus.access import (
-    AI_SEARCH, FOLLOW_UP, PHOTO_SEARCH, PLUS_PRODUCTS, Caller, active_entitlement, limit_for, used_today,
+    AI_SEARCH, FOLLOW_UP, PHOTO_SEARCH, PLUS_PRODUCTS, SEARCH, Caller, active_entitlement, limit_for, used_today,
 )
 from ..plus.appstore import InvalidTransaction, VerifiedTransaction, verify_notification, verify_transaction
 from ..schemas import AppStoreNotification, PlusStatus, PlusSync, UsageOut
@@ -30,6 +30,7 @@ def status_for(db: Session, caller: Caller) -> PlusStatus:
         is_plus=entitlement is not None,
         expires_at=entitlement.expires_at if entitlement else None,
         product_id=entitlement.product_id if entitlement else None,
+        search=UsageOut(used=used_today(db, caller, SEARCH), limit=limit_for(SEARCH)),
         photo_search=UsageOut(used=used_today(db, caller, PHOTO_SEARCH), limit=limit_for(PHOTO_SEARCH)),
         follow_up=UsageOut(used=used_today(db, caller, FOLLOW_UP), limit=limit_for(FOLLOW_UP)),
         ai_search=UsageOut(used=used_today(db, caller, AI_SEARCH),

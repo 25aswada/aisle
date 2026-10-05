@@ -781,7 +781,7 @@ struct PaywallView: View {
             ("Find items in any store", .included),
             ("Unlimited search", .text("\(plus.freeSearchesPerDay)/day")),
             ("Unlimited photo search", .text("\(plus.freePhotoSearchesPerDay)/day")),
-            ("Unlimited follow-ups", .text("\(plus.freeFollowUpsPerDay)/day")),
+            ("Unlimited follow-ups", .text("\(plus.freeFollowUpsPerSearch)/search")),
             ("Unlimited lists", .text("1")),
             ("Shared family lists", .notIncluded),
             ("Multi-store trips", .notIncluded),

@@ -14,7 +14,10 @@ from ..schemas import (
 )
 from ..config import get_settings
 from ..limits import rate_limit
-from ..plus.access import FOLLOW_UP, PHOTO_SEARCH, ai_search_allowance, require_signed_in, reserve_allowance
+from ..plus.access import (
+    FOLLOW_UP, PHOTO_SEARCH, ai_search_allowance, require_follow_up_allowed, require_signed_in, reserve_allowance,
+    search_allowance,
+)
 from ..search import StoreNotFound, search
 from .auth import CallerDep
 
@@ -31,6 +34,7 @@ def search_item(
     device_id: DeviceID = None,
 ):
     rate_limit(db, caller.subject, "search", get_settings().aisle_searches_per_hour)
+    counted = search_allowance(db, caller)  # 402 once a free account's searches are used.
     allowance = ai_search_allowance(db, caller) if model or explainer else None
     if allowance is None:
         # Out of AI answers for today (or no AI configured): Aisle's own data and wording.
@@ -38,8 +42,9 @@ def search_item(
     try:
         result = search(db, body.query, body.store_id, model, device_id, explainer)
     except StoreNotFound:
-        if allowance:
-            allowance.refund()
+        for used in (allowance, counted):
+            if used:
+                used.refund()
         raise HTTPException(status_code=404, detail="Store not found")
     if allowance and result.explanation is None and result.source != "model":
         allowance.refund()  # The AI added nothing to this answer.
@@ -85,6 +90,7 @@ def follow_up(
     if store is None:
         raise HTTPException(status_code=404, detail="Store not found")
     rate_limit(db, caller.subject, "follow_up", get_settings().aisle_follow_ups_per_hour)
+    require_follow_up_allowed(db, caller, [m.model_dump(exclude_none=True) for m in body.messages])
     messages = conversation_for_model([m.model_dump(exclude_none=True) for m in body.messages])
     feature = PHOTO_SEARCH if messages[-1].get("image") else FOLLOW_UP
     allowance = reserve_allowance(db, caller, feature)
