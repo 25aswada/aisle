@@ -5,3 +5,6 @@ __pycache__/
 # Website build output and local previews
 website/public/
 .sitepreview/
+
+# Claude Code sub-agent worktrees
+.claude/worktrees/
