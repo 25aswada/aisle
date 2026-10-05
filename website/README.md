@@ -7,5 +7,6 @@ The public website: home, Privacy Policy, Terms of Service and Support.
 - `site.css` and `demo.js` are copied to `public/assets/`. Item pictures come from the app's
   ItemIcons, the logo from AisleLogo.
 - Preview: `python3 website/build.py && python3 -m http.server -d website/public 8000`
-- Publishing: `.github/workflows/website.yml` builds and deploys to GitHub Pages on every push
-  to `main` that touches these files. The custom domain is set by `public/CNAME`.
+- Publishing: Vercel builds and deploys on every push to `main`, using `vercel.json` at the repo
+  root (`python3 website/build.py`, output `website/public`). The domain is set in the Vercel
+  project; DNS stays at GoDaddy.
