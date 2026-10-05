@@ -49,13 +49,15 @@ targets:
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         GENERATE_INFOPLIST_FILE: NO
-    entitlements:
-      path: Aisle/Aisle.entitlements
-      properties:
-        com.apple.developer.applesignin: [Default]
-        # Invite links (https://shopaisle.app/join/CODE) open the app; the site serves
-        # /.well-known/apple-app-site-association (website/build.py).
-        com.apple.developer.associated-domains: ["applinks:shopaisle.app"]
+        # Sign in with Apple, and invite links (https://shopaisle.app/join/CODE) that open the
+        # app; the site serves /.well-known/apple-app-site-association (website/build.py).
+        CODE_SIGN_ENTITLEMENTS: Aisle/Aisle.entitlements
+      configs:
+        # Debug builds also ask for invite links in developer mode, so a phone with
+        # Settings > Developer > Associated Domains Development on reads shopaisle.app's
+        # file directly instead of Apple's cache.
+        Debug:
+          CODE_SIGN_ENTITLEMENTS: Aisle/AisleDebug.entitlements
     info:
       path: Aisle/Info.plist
       properties:

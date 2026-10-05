@@ -179,6 +179,7 @@
 		AEA7188DFFF4134CEB8270FC /* DecodingTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DecodingTests.swift; sourceTree = "<group>"; };
 		AF3EB0DBCA680EB6C9E92331 /* TokenStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TokenStore.swift; sourceTree = "<group>"; };
 		B1AF370357E4185B64BD766E /* ItemIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ItemIcon.swift; sourceTree = "<group>"; };
+		B1BB8161328FAFB8D4573070 /* AisleDebug.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = AisleDebug.entitlements; sourceTree = "<group>"; };
 		B32D78E8C418750BEB4D5633 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		B4675725F0CCE03110D782AB /* Route.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Route.swift; sourceTree = "<group>"; };
 		B503C058E388DA73173ED85C /* LegalText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LegalText.swift; sourceTree = "<group>"; };
@@ -247,6 +248,7 @@
 			children = (
 				CA697C063F5ED62EF84BDB3C /* Aisle.entitlements */,
 				02E7A088040A8D4C88097DFB /* Aisle.storekit */,
+				B1BB8161328FAFB8D4573070 /* AisleDebug.entitlements */,
 				8072BF40B6C9F9F2B7B7E9AD /* Assets.xcassets */,
 				B32D78E8C418750BEB4D5633 /* Info.plist */,
 				FC94A83254DE48CCF567602C /* PrivacyInfo.xcprivacy */,
@@ -943,7 +945,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				CODE_SIGN_ENTITLEMENTS = Aisle/Aisle.entitlements;
+				CODE_SIGN_ENTITLEMENTS = Aisle/AisleDebug.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_TEAM = 983N58VUTZ;
