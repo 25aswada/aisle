@@ -147,7 +147,9 @@ final class PlusStore {
     func purchase(_ plan: Plan) async throws -> PurchaseResult {
         guard let product = products[plan] else { throw PlusError.unavailable }
         guard let accountToken else { throw PlusError.signedOut }
-        switch try await product.purchase(options: [.appAccountToken(accountToken)]) {
+        let result = try await product.purchase(options: [.appAccountToken(accountToken)])
+        await PurchaseAnalytics.record(result)
+        switch result {
         case .success(let verification):
             guard case .verified(let transaction) = verification else { throw PlusError.unverified }
             await transaction.finish()
@@ -165,6 +167,7 @@ final class PlusStore {
     /// Also takes over a subscription Apple is still billing for a deleted account.
     func restore() async throws {
         try await AppStore.sync()
+        await PurchaseAnalytics.syncRestored()
         await refreshEntitlement(claim: true)
     }
 

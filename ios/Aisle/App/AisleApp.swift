@@ -40,6 +40,7 @@ struct AisleApp: App {
         _shoppingList = State(initialValue: ShoppingListStore(service: RemoteSharedLists(client: api)))
         _recentSearches = State(initialValue: RecentSearches())
         _accounts = State(initialValue: AccountStore(auth: auth))
+        PurchaseAnalytics.start(apiKey: AppConfig.current.revenueCatAPIKey)
         let plus = PlusStore()
         plus.client = api
         _plus = State(initialValue: plus)
@@ -88,6 +89,7 @@ struct AisleApp: App {
                 .onChange(of: accounts.account?.plusToken, initial: true) { _, token in
                     // Aisle+ belongs to the signed-in account; signed out, there's none.
                     plus.accountToken = token
+                    Task { await PurchaseAnalytics.identify(token) }
                 }
                 .onOpenURL { url in
                     // aisle://join/K7Q2MX from a shared-list invite.
