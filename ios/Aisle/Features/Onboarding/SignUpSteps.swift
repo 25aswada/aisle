@@ -273,6 +273,13 @@ struct CodeStep: View {
                 }
                 .font(.aisleSubheadline)
                 .padding(.top, 8)
+
+                if model.channel != .phone {
+                    Text("Check your Spam, Promotions or Updates folder too.")
+                        .font(.aisleFootnote)
+                        .foregroundStyle(Theme.secondaryInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
         } footer: {
             Button(action: verify) {
