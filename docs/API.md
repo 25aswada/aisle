@@ -322,14 +322,15 @@ is the account's Aisle+ token (see Aisle+ below).
 | `POST /auth/phone/verify` | `{"phone", "code"}` | 400 wrong code, expired code, or too many tries (429) |
 | `POST /auth/email/start` | `{"email"}` | Same response shape; the email shows in full |
 | `POST /auth/email/verify` | `{"email", "code"}` | Codes last 10 minutes and 5 tries, and work once |
-| `POST /auth/apple` | `{"identity_token", "nonce", "first_name"?}` | Token checked against Apple's keys, audience `APPLE_BUNDLE_ID`; `nonce` is the raw value whose SHA-256 the app sent Apple. Each nonce signs in once (a replay is 401) |
+| `POST /auth/apple` | `{"identity_token", "nonce", "first_name"?, "authorization_code"?}` | Token checked against Apple's keys, audience `APPLE_BUNDLE_ID`; `nonce` is the raw value whose SHA-256 the app sent Apple. Each nonce signs in once (a replay is 401) |
 | `POST /auth/google` | `{"id_token", "nonce"}` | Token checked against Google's keys, audience `GOOGLE_IOS_CLIENT_ID`. Each nonce signs in once |
 | `GET /me` | | 401 when the session ended |
 | `PATCH /me` | `{"first_name"?, "wants_tips"?}` | |
 | `POST /me/phone/start` | `{"phone"}` | Adds a phone number to the signed-in account: texts a code (same limits and response as `/auth/phone/start`). 400 if it's already on this account |
 | `POST /me/phone/verify` | `{"phone", "code"}` | Returns the updated user. 409 if the number belongs to another account (said only once the code checks out) |
-| `DELETE /me` | | Deletes the account, its sign-ins, its link to Aisle+ and its per-account usage counts; 204. Today's limit counts also stay with a hash of each way it signed in, so a new account made with any of them picks them up |
+| `DELETE /me` | `{"authorization_code"?}` (optional) | Deletes the account, its sign-ins, its link to Aisle+ and its per-account usage counts; 204. Today's limit counts also stay with a hash of each way it signed in, so a new account made with any of them picks them up. With Sign in with Apple, the app sends a fresh Apple `authorization_code`: it's traded for a refresh token and revoked (falling back to the token kept at sign-in). No body works too (older apps, other sign-ins). Deletion never waits on Apple; see below |
 | `POST /auth/signout` | | Revokes this session; 204 |
+| `POST /auth/apple/notifications` | `{"payload"}` | Sign in with Apple server-to-server notifications, a JWT checked against Apple's keys (issuer `https://appleid.apple.com`, audience `APPLE_BUNDLE_ID`); 400 if it doesn't check out. `consent-revoked` unlinks that Apple ID and ends the account's sessions; `account-delete` does the same, and deletes the account if Apple was its only sign-in. Other events and replays (same `jti`) are ignored. Returns `{"ok": true}` |
 
 - Signing in with a new method whose verified email matches an existing account adds it
   to that account.
@@ -449,6 +450,13 @@ Basic, anonymous product analytics. Status 202.
   Caribbean and Bermuda, and premium 900/976 numbers, need their own entry such as
   `1876`), per-target, device, IP and global hourly/daily caps. `/auth/apple` and `/auth/google` require `nonce`;
   `/auth/apple` also takes Apple's `authorization_code` so account deletion can revoke it.
+- Revoking Sign in with Apple on deletion needs the Sign in with Apple key
+  (`APPLE_TEAM_ID`, `APPLE_SIGNIN_KEY_ID`, `APPLE_SIGNIN_PRIVATE_KEY`; see
+  `backend/README.md`). When Apple can't be reached, or the key isn't set (an error log in
+  production), the refresh token, or the code if that's all there is, goes to
+  `apple_revocations`, and cleanup retries it with backoff (1 hour, doubling, at most a
+  day). It gives up with an error log after 8 tries or 14 days, or as soon as a kept code
+  is older than Apple's 5 minutes.
 - The client IP is the last `X-Forwarded-For` entry (the one Heroku's router adds).
 - Request bodies over 8 MB get 413. On Heroku, plain HTTP gets a 308 to HTTPS and
   `/docs` is off.

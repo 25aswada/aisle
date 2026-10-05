@@ -1,9 +1,12 @@
-"""Accounts: SMS and email codes, Apple and Google tokens, sessions, profile and deletion.
+"""Accounts: SMS and email codes, Apple and Google tokens, sessions, profile and deletion,
+revoking Sign in with Apple, and Apple's notifications.
 
 Twilio, Resend, Apple and Google are replaced with fakes; the token checks run for real
 against RSA keys made here.
 """
 import hashlib
+import json
+import logging
 import time
 from datetime import datetime, timedelta, timezone
 
@@ -23,8 +26,8 @@ from backend.app.auth.identity import InvalidToken, JWKSIdentityVerifier, Provid
 from backend.app.database import get_db
 from backend.app.main import app
 from backend.app.config import get_settings
-from backend.app.models import AuthSession, CodeRequest
-from backend.app.routers.auth import get_email_sender, get_identity_verifier, get_phone_verifier
+from backend.app.models import AppleRevocation, AuthSession, CodeRequest
+from backend.app.routers.auth import get_apple_tokens, get_email_sender, get_identity_verifier, get_phone_verifier
 
 NONCE = "raw-nonce-1234"
 
@@ -84,6 +87,8 @@ def api(engine, fakes):
     app.dependency_overrides[get_phone_verifier] = lambda: phones
     app.dependency_overrides[get_email_sender] = lambda: emails
     app.dependency_overrides[get_identity_verifier] = lambda: identities
+    # No Sign in with Apple key unless a test installs fake Apple tokens.
+    app.dependency_overrides[get_apple_tokens] = lambda: None
     with TestClient(app) as client:
         client.app_engine = engine
         yield client
@@ -507,3 +512,234 @@ def test_resend_request():
     # The wordmark rides along as an inline image the HTML points at.
     assert '"content_id":"aisle-wordmark"' in body.replace(" ", "")
     assert "cid:aisle-wordmark" in body
+
+
+# MARK: - Revoking Sign in with Apple
+
+class FakeAppleTokens:
+    def __init__(self, revokes=True):
+        self.traded = []
+        self.revoked = []
+        self.revokes = revokes
+
+    def refresh_token(self, code):
+        self.traded.append(code)
+        return None if code.startswith("bad") else f"refresh-for-{code}"
+
+    def revoke(self, token):
+        self.revoked.append(token)
+        return self.revokes
+
+
+@pytest.fixture
+def apple_tokens(api):
+    fake = FakeAppleTokens()
+    app.dependency_overrides[get_apple_tokens] = lambda: fake
+    return fake
+
+
+def apple_sign_in(api, nonce=NONCE, code=None):
+    body = {"identity_token": "x" * 40, "nonce": nonce}
+    if code:
+        body["authorization_code"] = code
+    return api.post("/auth/apple", json=body).json()
+
+
+def delete_account(api, token, code=None):
+    body = {"authorization_code": code} if code else None
+    return api.request("DELETE", "/me", json=body, headers=bearer(token))
+
+
+def pending_revocations(engine):
+    with Session(engine) as db:
+        return [(r.refresh_token, r.authorization_code) for r in db.query(AppleRevocation).order_by(AppleRevocation.id)]
+
+
+def test_deleting_an_apple_account_revokes_it_with_a_fresh_code(api, engine, apple_tokens):
+    token = apple_sign_in(api, code="sign-in-code")["token"]
+    assert delete_account(api, token, code="fresh-code").status_code == 204
+    assert api.get("/me", headers=bearer(token)).status_code == 401
+    # The fresh code's token is revoked; one revocation ends Aisle's Apple sign-in.
+    assert apple_tokens.traded == ["sign-in-code", "fresh-code"]
+    assert apple_tokens.revoked == ["refresh-for-fresh-code"]
+    assert pending_revocations(engine) == []
+
+
+def test_older_apps_delete_without_a_code(api, engine, apple_tokens):
+    token = apple_sign_in(api, code="sign-in-code")["token"]
+    assert api.delete("/me", headers=bearer(token)).status_code == 204
+    assert apple_tokens.revoked == ["refresh-for-sign-in-code"]
+    # A code Apple refuses falls back to the token kept at sign-in too.
+    token = apple_sign_in(api, nonce=NONCE + "-2", code="sign-in-code-2")["token"]
+    assert delete_account(api, token, code="bad-code").status_code == 204
+    assert apple_tokens.revoked[-1] == "refresh-for-sign-in-code-2"
+    # Accounts without Apple don't touch Apple at all.
+    assert delete_account(api, phone_sign_in(api).json()["token"]).status_code == 204
+    assert len(apple_tokens.revoked) == 2 and pending_revocations(engine) == []
+
+
+def test_without_the_apple_key_deletion_works_and_is_kept_to_revoke(api, engine, monkeypatch, caplog):
+    monkeypatch.setenv("DYNO", "web.1")  # Production, where this must reach Sentry.
+    token = apple_sign_in(api)["token"]
+    with caplog.at_level(logging.WARNING):
+        assert delete_account(api, token, code="fresh-code").status_code == 204
+    assert api.get("/me", headers=bearer(token)).status_code == 401
+    assert any(r.levelno == logging.ERROR and "Sign in with Apple key" in r.message for r in caplog.records)
+    assert pending_revocations(engine) == [(None, "fresh-code")]
+
+
+def test_when_apple_cant_revoke_it_waits_for_cleanup(api, engine, apple_tokens):
+    apple_tokens.revokes = False
+    token = apple_sign_in(api, code="sign-in-code")["token"]
+    assert delete_account(api, token, code="fresh-code").status_code == 204
+    assert api.get("/me", headers=bearer(token)).status_code == 401
+    assert apple_tokens.revoked == ["refresh-for-fresh-code", "refresh-for-sign-in-code"]
+    # Tokens only, never a client secret.
+    assert pending_revocations(engine) == [("refresh-for-fresh-code", None), ("refresh-for-sign-in-code", None)]
+
+
+def test_cleanup_retries_revocations_with_backoff(engine):
+    from backend.app.auth.apple_revocation import retry_pending
+
+    now = datetime.now(timezone.utc)
+    failing, working = FakeAppleTokens(revokes=False), FakeAppleTokens()
+    with Session(engine) as db:
+        db.add(AppleRevocation(refresh_token="token-1", created_at=now, next_attempt_at=now))
+        db.commit()
+        # Without the key nothing is tried, and the row waits.
+        assert retry_pending(db, None, now) == {"revoked": 0, "waiting": 1, "gave_up": 0}
+        assert retry_pending(db, failing, now) == {"revoked": 0, "waiting": 1, "gave_up": 0}
+        pending = db.query(AppleRevocation).one()
+        assert pending.attempts == 1
+        # Not due again for an hour, then twice as long after each failure.
+        assert retry_pending(db, failing, now + timedelta(minutes=30))["waiting"] == 0
+        assert retry_pending(db, failing, now + timedelta(hours=1)) == {"revoked": 0, "waiting": 1, "gave_up": 0}
+        db.refresh(pending)
+        assert pending.attempts == 2
+        assert retry_pending(db, working, now + timedelta(hours=2))["waiting"] == 0
+        assert retry_pending(db, working, now + timedelta(hours=4)) == {"revoked": 1, "waiting": 0, "gave_up": 0}
+        assert working.revoked == ["token-1"] and db.query(AppleRevocation).count() == 0
+
+        # A code (kept when the key wasn't set) is traded while it still works.
+        db.add(AppleRevocation(authorization_code="fresh-code", created_at=now, next_attempt_at=now))
+        db.commit()
+        assert retry_pending(db, working, now + timedelta(minutes=2))["revoked"] == 1
+        assert working.revoked[-1] == "refresh-for-fresh-code"
+
+
+def test_cleanup_gives_up_on_revocations(engine, caplog):
+    from backend.app.auth.apple_revocation import MAX_ATTEMPTS, retry_pending
+
+    now = datetime.now(timezone.utc)
+    with Session(engine) as db:
+        db.add_all([
+            AppleRevocation(refresh_token="tried-a-lot", attempts=MAX_ATTEMPTS - 1, created_at=now, next_attempt_at=now),
+            AppleRevocation(refresh_token="never-had-a-key", created_at=now - timedelta(days=15), next_attempt_at=now),
+            AppleRevocation(authorization_code="expired-code", created_at=now - timedelta(minutes=10),
+                            next_attempt_at=now),
+        ])
+        db.commit()
+        with caplog.at_level(logging.ERROR):
+            assert retry_pending(db, None, now) == {"revoked": 0, "waiting": 1, "gave_up": 2}
+            assert retry_pending(db, FakeAppleTokens(revokes=False), now) == {"revoked": 0, "waiting": 0, "gave_up": 1}
+        assert db.query(AppleRevocation).count() == 0
+        assert sum(r.levelno == logging.ERROR for r in caplog.records) == 3
+
+
+def test_apple_token_requests():
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import ec
+
+    from backend.app.auth.apple_tokens import AppleTokenService
+
+    seen = []
+
+    def handler(request):
+        seen.append(request)
+        form = dict(httpx.QueryParams(request.content.decode()))
+        if form.get("token") == "unknown":
+            return httpx.Response(400, json={"error": "invalid_request"})
+        return httpx.Response(200, json={"refresh_token": "r-1"} if request.url.path == "/auth/token" else {})
+
+    key = ec.generate_private_key(ec.SECP256R1()).private_bytes(
+        serialization.Encoding.PEM, serialization.PrivateFormat.PKCS8, serialization.NoEncryption()).decode()
+    service = AppleTokenService("app.shopaisle.aisle", "983N58VUTZ", "KEY123", key,
+                                client=httpx.Client(transport=httpx.MockTransport(handler)))
+    assert service.refresh_token("code-1") == "r-1"
+    assert service.revoke("r-1") is True
+    assert service.revoke("unknown") is False
+    form = dict(httpx.QueryParams(seen[1].content.decode()))
+    assert seen[1].url == "https://appleid.apple.com/auth/revoke"
+    assert (form["client_id"], form["token"], form["token_type_hint"]) == ("app.shopaisle.aisle", "r-1", "refresh_token")
+    secret = jwt.decode(form["client_secret"], options={"verify_signature": False})
+    assert (secret["iss"], secret["sub"], secret["aud"]) == ("983N58VUTZ", "app.shopaisle.aisle",
+                                                             "https://appleid.apple.com")
+
+
+# MARK: - Sign in with Apple notifications
+
+def apple_event(key, kind, sub="apple-sub-1", jti=None, **claims):
+    now = int(time.time())
+    events = json.dumps({"type": kind, "sub": sub, "event_time": now * 1000})
+    payload = {"iss": "https://appleid.apple.com", "aud": "app.shopaisle.aisle", "iat": now,
+               "jti": jti or f"{kind}-{sub}", "events": events, **claims}
+    return {"payload": jwt.encode(payload, key, algorithm="RS256")}
+
+
+@pytest.fixture
+def notices(api, signing_key):
+    """Accounts are made with the fake Apple identity; notifications are checked for real."""
+    real = JWKSIdentityVerifier("app.shopaisle.aisle", None)
+
+    def post(body):
+        fake = app.dependency_overrides[get_identity_verifier]
+        app.dependency_overrides[get_identity_verifier] = lambda: real
+        try:
+            return api.post("/auth/apple/notifications", json=body)
+        finally:
+            app.dependency_overrides[get_identity_verifier] = fake
+
+    return post
+
+
+def test_apple_notifications_must_be_signed_by_apple(api, notices, signing_key):
+    token = apple_sign_in(api)["token"]
+    other = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    for bad in [
+        apple_event(other, "account-delete"),
+        apple_event(signing_key, "account-delete", aud="com.someone.else"),
+        apple_event(signing_key, "account-delete", iss="https://evil.example"),
+        apple_event(signing_key, "account-delete", events="not json"),
+        apple_event(signing_key, "account-delete", exp=int(time.time()) - 10),
+    ]:
+        assert notices(bad).status_code == 400
+    assert api.get("/me", headers=bearer(token)).status_code == 200
+
+
+def test_consent_revoked_unlinks_apple_and_signs_out(api, notices, signing_key):
+    token = apple_sign_in(api)["token"]
+    api.post("/me/phone/verify", json={"phone": "2155550123", "code": "123456"}, headers=bearer(token))
+    assert notices(apple_event(signing_key, "consent-revoked")).json() == {"ok": True}
+    assert api.get("/me", headers=bearer(token)).status_code == 401
+    by_phone = phone_sign_in(api).json()
+    assert by_phone["is_new"] is False and by_phone["user"]["providers"] == ["phone"]
+    # Replays, other events and unknown Apple IDs change nothing.
+    assert notices(apple_event(signing_key, "consent-revoked")).status_code == 200
+    assert notices(apple_event(signing_key, "email-disabled")).status_code == 200
+    assert notices(apple_event(signing_key, "account-delete", sub="someone-else")).status_code == 200
+    assert api.get("/me", headers=bearer(by_phone["token"])).status_code == 200
+
+
+def test_a_deleted_apple_id_deletes_an_apple_only_account(api, notices, signing_key):
+    token = apple_sign_in(api)["token"]
+    assert notices(apple_event(signing_key, "account-delete")).status_code == 200
+    assert api.get("/me", headers=bearer(token)).status_code == 401
+    assert apple_sign_in(api, nonce=NONCE + "-2")["is_new"] is True
+
+
+def test_a_deleted_apple_id_keeps_an_account_with_another_way_in(api, notices, signing_key):
+    token = apple_sign_in(api)["token"]
+    api.post("/me/phone/verify", json={"phone": "2155550123", "code": "123456"}, headers=bearer(token))
+    assert notices(apple_event(signing_key, "account-delete")).status_code == 200
+    assert api.get("/me", headers=bearer(token)).status_code == 401
+    assert phone_sign_in(api).json()["user"]["providers"] == ["phone"]

@@ -71,6 +71,7 @@
 		92EC0E9101DF99A6BCD7CF92 /* TokenStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = AF3EB0DBCA680EB6C9E92331 /* TokenStore.swift */; };
 		95FDA765A4F8B9EAC45914B1 /* PurchaseAnalytics.swift in Sources */ = {isa = PBXBuildFile; fileRef = 502A95FCD0310CD05E3EEB93 /* PurchaseAnalytics.swift */; };
 		97794A08EF311AE5CCB6C4C1 /* LocationProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = ADDA028F2F6A589486F37BCD /* LocationProvider.swift */; };
+		982BBBE9A646C332D10A14A8 /* AppleAccountDeletionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D412FBC67A52F36995A4737 /* AppleAccountDeletionTests.swift */; };
 		9995CC947BCA38F3B1208522 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = FC94A83254DE48CCF567602C /* PrivacyInfo.xcprivacy */; };
 		9D2E919CE99A27853EB7AADD /* Chat.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB9E64F0AE164ADA01052D9F /* Chat.swift */; };
 		A7B8720D41ED741D3BB76D31 /* ShoppingListStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F551FDCD24FEF4163ED9E8A /* ShoppingListStore.swift */; };
@@ -136,6 +137,7 @@
 		327AC850D80060DC07A58341 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		34D1C3CDD2308D8D6023AE61 /* OfflineMapsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OfflineMapsTests.swift; sourceTree = "<group>"; };
 		36B2A92A25A230FC90B64D44 /* AcknowledgementsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AcknowledgementsView.swift; sourceTree = "<group>"; };
+		3D412FBC67A52F36995A4737 /* AppleAccountDeletionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppleAccountDeletionTests.swift; sourceTree = "<group>"; };
 		3DEE7D5DBFF5496EA378A386 /* StorePickerView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StorePickerView.swift; sourceTree = "<group>"; };
 		3F1FAAA21BC068E13516AE78 /* RemoteAuthService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemoteAuthService.swift; sourceTree = "<group>"; };
 		3F873B2DA2F116E6B4541BEC /* AppConfigTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppConfigTests.swift; sourceTree = "<group>"; };
@@ -379,6 +381,7 @@
 			children = (
 				213EE7135209C2740A08F7EC /* APIClientTests.swift */,
 				3F873B2DA2F116E6B4541BEC /* AppConfigTests.swift */,
+				3D412FBC67A52F36995A4737 /* AppleAccountDeletionTests.swift */,
 				AEA7188DFFF4134CEB8270FC /* DecodingTests.swift */,
 				8C1FC1D0092199083C278E19 /* FeedbackTests.swift */,
 				E2710CE8DFA4696F6750EE7A /* ItemSearchTests.swift */,
@@ -749,6 +752,7 @@
 			files = (
 				A90CB1913D811862FED3E5AA /* APIClientTests.swift in Sources */,
 				27BB0EB839677D1F5B115094 /* AppConfigTests.swift in Sources */,
+				982BBBE9A646C332D10A14A8 /* AppleAccountDeletionTests.swift in Sources */,
 				D8011A3B26DC8779B4AF4494 /* DecodingTests.swift in Sources */,
 				FDD5013560706C1ABEF85881 /* FeedbackTests.swift in Sources */,
 				80E939493C56D0825C7991C0 /* ItemSearchTests.swift in Sources */,

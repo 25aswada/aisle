@@ -97,6 +97,19 @@ protocol AuthService: AnyObject {
     func addPhone(token: String, phone: String, code: String) async throws -> Account
     func signOut(token: String) async
     func deleteAccount(token: String) async throws
+    /// Before deleting an account with Sign in with Apple: Apple's sheet again, for a fresh
+    /// one-time code the server uses to revoke the Apple sign-in, as Apple requires. Throws
+    /// `CancellationError` if the shopper backs out.
+    func appleDeletionCode() async throws -> String?
+    func deleteAccount(token: String, appleAuthorizationCode: String?) async throws
+}
+
+extension AuthService {
+    func appleDeletionCode() async throws -> String? { nil }
+
+    func deleteAccount(token: String, appleAuthorizationCode: String?) async throws {
+        try await deleteAccount(token: token)
+    }
 }
 
 /// The signed-in account. The account is cached in `UserDefaults` for display; the
@@ -151,12 +164,27 @@ final class AccountStore {
 
     /// Deletes the account on the server, then erases what the phone kept for it
     /// (`eraseLocalData`) and signs out here. Nothing is erased if the server refuses.
+    /// With Sign in with Apple, the shopper confirms with Apple first so the server can
+    /// revoke it; backing out of Apple's sheet deletes nothing.
     func deleteAccount(eraseLocalData: () -> Void = {}) async throws {
         guard let token = tokens.token, let auth else { return }
-        try await auth.deleteAccount(token: token)
+        var appleCode: String?
+        if account?.providers.contains(.apple) == true {
+            do {
+                appleCode = try await auth.appleDeletionCode()
+            } catch is CancellationError {
+                throw AuthError.server(Self.appleConfirmationNeeded)
+            } catch {
+                // Apple's sheet couldn't open (e.g. no Apple ID on this phone). Deleting still
+                // works; the server revokes with the token it kept from sign-in.
+            }
+        }
+        try await auth.deleteAccount(token: token, appleAuthorizationCode: appleCode)
         eraseLocalData()
         endSession()
     }
+
+    static let appleConfirmationNeeded = "To delete your account, confirm with Apple. Nothing was deleted."
 
     /// Changes the account here at once, then saves it to the server, e.g. a new first
     /// name or the email-tips preference.

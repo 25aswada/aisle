@@ -52,6 +52,34 @@ package is `app`, not `backend.app` (`alembic/env.py` handles both). Seed a new
 database once with `heroku run python -m app.seed -a aisle-api`. Secrets are set with
 `heroku config:set`, never committed.
 
+### Sign in with Apple key (required for account deletion)
+
+App Review requires deleting an account to revoke its Sign in with Apple, and the server
+can only do that with a Sign in with Apple key. Until it's set, deletion still works but
+logs an error for each Apple account, and the revocation can't happen.
+
+1. In the Apple Developer portal: Certificates, Identifiers & Profiles → Keys → **+**.
+   Name it (e.g. "Aisle Sign in with Apple"), tick **Sign in with Apple**, click
+   Configure and choose the primary App ID `app.shopaisle.aisle`. Save, Continue, Register.
+2. Download the `.p8` file (Apple allows this only once) and note the **Key ID** shown
+   with it. The Team ID is `983N58VUTZ`.
+3. Set the three config vars (the private key is the file's whole contents, line breaks
+   included):
+
+   ```bash
+   heroku config:set -a aisle-api APPLE_TEAM_ID=983N58VUTZ APPLE_SIGNIN_KEY_ID=<Key ID> \
+     APPLE_SIGNIN_PRIVATE_KEY="$(cat AuthKey_<Key ID>.p8)"
+   ```
+
+4. Notifications: Certificates, Identifiers & Profiles → Identifiers → the App ID
+   `app.shopaisle.aisle` → Sign in with Apple → Edit → **Server-to-Server Notification
+   Endpoint**: `https://aisle-api-db30672cd6aa.herokuapp.com/auth/apple/notifications`.
+   Apple then tells the server when someone stops using their Apple ID with Aisle or
+   deletes their Apple ID.
+
+Deletions made before the key was set can't be revoked afterwards: Apple's one-time codes
+last five minutes, and cleanup logs an error when it gives up on one.
+
 ## API
 
 Interactive API documentation: <http://127.0.0.1:8000/docs>.

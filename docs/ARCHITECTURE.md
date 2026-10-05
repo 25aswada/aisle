@@ -126,7 +126,11 @@ list scanning, reports and shared lists need a session on the server; store look
 the client, so browser CORS is unused.
 
 Deleting an account (`DELETE /me`) removes it, its sign-ins, its Aisle+ link and its usage
-counts on the server; on the phone, `LocalAccountData` erases lists, history, stats, the
+counts on the server. With Sign in with Apple, the app shows Apple's sheet first for a
+fresh code, and the server revokes the Apple sign-in, as App Review requires
+(`backend/app/auth/apple_revocation.py`); backing out deletes nothing, and what Apple
+can't revoke right then is retried by cleanup. Apple's server-to-server notifications
+(`POST /auth/apple/notifications`) unlink an Apple ID that stops using Aisle. On the phone, `LocalAccountData` erases lists, history, stats, the
 chosen store and saved maps, and onboarding starts over. When a different account signs
 in on the same phone, the previous account's local data is erased too.
 

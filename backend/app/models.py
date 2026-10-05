@@ -365,3 +365,18 @@ class SharedListItem(Base):
     position: Mapped[float] = mapped_column(default=0)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     shared_list: Mapped[SharedList] = relationship(back_populates="items")
+
+
+class AppleRevocation(Base):
+    """A deleted account's Apple sign-in that couldn't be revoked when it was deleted (Apple
+    unreachable, or no Sign in with Apple key yet). Cleanup retries it with backoff and
+    deletes the row once Apple confirms, or gives up (see auth.apple_revocation). Holds
+    Apple's refresh token, or the one-time code to get one; never a client secret."""
+    __tablename__ = "apple_revocations"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    refresh_token: Mapped[str | None] = mapped_column(String(500))
+    authorization_code: Mapped[str | None] = mapped_column(String(2000))
+    attempts: Mapped[int] = mapped_column(default=0)
+    next_attempt_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

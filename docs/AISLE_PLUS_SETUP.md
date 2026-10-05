@@ -61,7 +61,9 @@ uses `ios/Aisle/Aisle.storekit`, and the server accepts those purchases only wit
   the .p8 once, then set `APPLE_TEAM_ID=983N58VUTZ`, `APPLE_SIGNIN_KEY_ID` (the key's ID)
   and `APPLE_SIGNIN_PRIVATE_KEY` (the file's contents) on Heroku. Apple requires apps to
   revoke a user's Apple sign-in when they delete their account; without the key the server
-  can't.
+  can't. Also set the App ID's Sign in with Apple Server-to-Server Notification Endpoint
+  to `https://aisle-api-db30672cd6aa.herokuapp.com/auth/apple/notifications`. Step by step
+  in `backend/README.md`.
 
 ## 6. RevenueCat (purchase analytics)
 

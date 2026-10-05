@@ -9,6 +9,9 @@ On Heroku the web app also runs it every few hours (see main.py).
 - Used Apple and Google sign-in nonces (hashed): after 2 days; the tokens expire within the hour.
 - Usage counters: daily ones after 8 days, hourly fair-use ones after 2 days.
 - App usage events: after 180 days. Searches: after 365 days.
+
+Each run also retries revoking deleted accounts' Apple sign-ins that couldn't be revoked
+at the time (auth.apple_revocation); those rows go once Apple confirms, or within two weeks.
 """
 from __future__ import annotations
 
@@ -20,6 +23,9 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import delete, not_
 from sqlalchemy.orm import Session
 
+from .auth.apple_revocation import retry_pending as retry_apple_revocations
+from .auth.apple_tokens import from_settings as apple_tokens_from_settings
+from .config import get_settings
 from .database import get_engine
 from .limits import day_window, hour_window
 from .models import AnalyticsEvent, CodeRequest, EmailCode, SearchEvent, UsageCounter, UsedSignInNonce
@@ -57,7 +63,8 @@ def run_forever() -> None:
         try:
             with Session(get_engine()) as db:
                 deleted = clean_up(db)
-            log.info("Cleaned up old data: %s", deleted)
+                revocations = retry_apple_revocations(db, apple_tokens_from_settings(get_settings()))
+            log.info("Cleaned up old data: %s; Apple revocations: %s", deleted, revocations)
         except Exception:
             log.exception("Cleanup failed; trying again later")
         time.sleep(EVERY.total_seconds())
@@ -70,3 +77,4 @@ def start_in_background() -> None:
 if __name__ == "__main__":
     with Session(get_engine()) as session:
         print(clean_up(session))
+        print(retry_apple_revocations(session, apple_tokens_from_settings(get_settings())))
