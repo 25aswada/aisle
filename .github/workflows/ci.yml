@@ -44,3 +44,10 @@ jobs:
           python -m pip install pytest
           cd backend
           python -m pytest
+
+      - name: Audit dependencies
+        if: steps.backend.outputs.present == 'true'
+        run: |
+          set -euo pipefail
+          python -m pip install pip-audit
+          python -m pip_audit -r backend/requirements.txt

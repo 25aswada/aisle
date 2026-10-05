@@ -162,13 +162,28 @@ def test_budget_spent_at_the_limit(engine, monkeypatch):
         assert not budget.budget_spent(db)
     metered(engine, lambda: model.chat(EXPLAIN_SYSTEM_PROMPT, [{"role": "user", "content": "milk?"}]))
     with Session(engine) as db:
-        assert not budget.budget_spent(db)
+        # $0.014: the free share (70%) is spent, and the rest is kept for Aisle+.
+        assert budget.budget_spent(db)
+        assert not budget.budget_spent(db, plus=True)
     metered(engine, lambda: model.chat(EXPLAIN_SYSTEM_PROMPT, [{"role": "user", "content": "eggs?"}]))
     with Session(engine) as db:
-        assert budget.budget_spent(db)
+        assert budget.budget_spent(db, plus=True)
     monkeypatch.setattr(get_settings(), "aisle_ai_budget_usd_per_day", 0.0)
     with Session(engine) as db:
-        assert budget.budget_spent(db)  # 0 turns the AI off.
+        assert budget.budget_spent(db) and budget.budget_spent(db, plus=True)  # 0 turns the AI off.
+
+
+def test_spend_passing_half_and_90_percent_is_logged_once_a_day(engine, monkeypatch, caplog):
+    monkeypatch.setattr(get_settings(), "aisle_ai_budget_usd_per_day", 10.0)
+    caplog.set_level(logging.INFO, logger="backend.app.ai.budget")
+    # $4 per million input tokens: $4, $2, $1, $3 and $1, so $11 in all.
+    for tokens in (1_000_000, 500_000, 250_000, 750_000, 250_000):
+        metered(engine, lambda: budget.charge("claude-opus-5-5", tokens, 0))
+    alerts = [(r.levelno, r.getMessage()) for r in caplog.records if "passed" in r.getMessage()]
+    assert alerts == [
+        (logging.WARNING, "Today's AI spend passed 50% of the $10.00 daily budget"),
+        (logging.ERROR, "Today's AI spend passed 90% of the $10.00 daily budget"),
+    ]
 
 
 # MARK: - Output caps

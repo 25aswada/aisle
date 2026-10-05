@@ -10,7 +10,8 @@ per network; past them, the app asks them to make a free account. Aisle+
 is unlimited within fair use: daily ceilings no real shopper reaches, counted apart
 from the free tier. A use is counted before the AI runs, in one atomic step, and
 handed back if nothing came of it. Everyone's AI use together has a daily budget in
-dollars too (see ai.budget): each use starts the meter that charges its AI calls to it.
+dollars too (see ai.budget), with a share of it kept for Aisle+: each use starts the
+meter that charges its AI calls to it.
 """
 from __future__ import annotations
 
@@ -153,8 +154,8 @@ class Allowance:
 
 def reserve_allowance(db: Session, caller: Caller, feature: str) -> Allowance:
     """Counts one use now. Raises 402 when a free shopper is out for today, 429 past
-    Aisle+'s fair use, and 503 once everyone's AI budget for the day is spent. The
-    request's AI calls are charged to that budget from here on."""
+    Aisle+'s fair use, and 503 once the day's AI budget is spent (for everyone but Aisle+,
+    its free share). The request's AI calls are charged to that budget from here on."""
     plus = is_plus(db, caller)
     counter, day = (f"plus:{feature}" if plus else feature), today()
     limit = limit_for(feature, plus=plus, signed_in=caller.user is not None)
@@ -163,9 +164,10 @@ def reserve_allowance(db: Session, caller: Caller, feature: str) -> Allowance:
         if plus:
             raise HTTPException(status_code=429, detail=FAIR_USE)
         raise plus_required(feature, upgrade_message(feature, limit), limit)
-    if budget_spent(db):
+    if budget_spent(db, plus=plus):
         bump(db, caller.subject, counter, day, -1)
-        log.warning("Today's AI budget for everyone is spent; AI features are paused")
+        log.warning("Today's AI budget for %s is spent; their AI features are paused",
+                    "Aisle+" if plus else "everyone but Aisle+")
         raise HTTPException(status_code=503, detail=AI_PAUSED)
     start_metering(db)
     return Allowance(db, caller.subject, counter, day)

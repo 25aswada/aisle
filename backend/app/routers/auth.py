@@ -26,7 +26,7 @@ from ..auth.codes import (
 )
 from ..auth.identity import IdentityVerifier, InvalidToken, JWKSIdentityVerifier
 from ..limits import client_ip, rate_limit
-from ..plus.access import Caller
+from ..plus.access import Caller, require_signed_in
 from ..config import get_settings
 from ..database import get_db
 from ..models import AuthSession, User, UserIdentity
@@ -102,6 +102,14 @@ def get_caller(
 
 
 CallerDep = Annotated[Caller, Depends(get_caller)]
+
+
+def signed_in_for(what: str):
+    """A route dependency: 401 "Sign in to use <what>." when signed out. Dependencies run
+    before the body is checked, so a photo sent without an account is never decoded."""
+    def check(caller: CallerDep) -> None:
+        require_signed_in(caller, what)
+    return Depends(check)
 
 
 def user_out(user: User) -> UserOut:

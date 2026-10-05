@@ -3,7 +3,10 @@
 Every provider call is priced from the tokens it used (the provider's own count when
 the response has one, an estimate otherwise) and added to today's spend, kept in
 usage_counters in millionths of a dollar. Once the day's spend reaches
-AISLE_AI_BUDGET_USD_PER_DAY, AI features pause until tomorrow (see plus.access).
+AISLE_AI_BUDGET_FREE_SHARE of AISLE_AI_BUDGET_USD_PER_DAY, AI features pause until
+tomorrow for everyone but Aisle+ subscribers, and at the whole budget for them too (see
+plus.access). Spend passing half the budget logs a warning, and passing 90% an error (so
+Sentry alerts), once a day each.
 
 Calls are charged to the request that made them: reserving an allowance starts the
 meter for the request. A call made with no meter running (evaluate.py, unit tests)
@@ -64,6 +67,9 @@ UNKNOWN_PRICE = (15.0, 75.0)
 CHARS_PER_TOKEN = 4
 IMAGE_TOKENS = 2000
 
+# Shares of the day's budget whose passing is logged, and at what level.
+SPEND_ALERTS = ((0.5, logging.WARNING), (0.9, logging.ERROR))
+
 # Where this request's AI calls are charged: the database the request uses.
 _meter: ContextVar[Engine | None] = ContextVar("ai_meter", default=None)
 
@@ -105,10 +111,21 @@ def charge(model: str | None, input_tokens: int, output_tokens: int) -> float:
     if engine is not None and cost > 0:
         try:
             with Session(engine) as db:
-                bump(db, EVERYONE, AI_SPEND, day_window(), math.ceil(cost * MICRO))
+                added = math.ceil(cost * MICRO)
+                alert_on_passing(bump(db, EVERYONE, AI_SPEND, day_window(), added) - added, added)
         except Exception:  # Bookkeeping never breaks an answer.
             log.warning("Couldn't record AI spend", exc_info=True)
     return cost
+
+
+def alert_on_passing(before: int, added: int) -> None:
+    """Logs each alert share of the budget that today's spend (in millionths) just passed.
+    Spend is counted atomically, so only one call a day passes each, on any worker."""
+    budget = get_settings().aisle_ai_budget_usd_per_day * MICRO
+    for share, level in SPEND_ALERTS:
+        if before < budget * share <= before + added:
+            log.log(level, "Today's AI spend passed %d%% of the $%.2f daily budget",
+                    round(share * 100), budget / MICRO)
 
 
 def spent_today(db: Session) -> float:
@@ -118,6 +135,9 @@ def spent_today(db: Session) -> float:
     return (counter.count if counter else 0) / MICRO
 
 
-def budget_spent(db: Session) -> bool:
-    """Whether today's AI budget is used up. A budget of 0 turns the AI off."""
-    return spent_today(db) >= get_settings().aisle_ai_budget_usd_per_day
+def budget_spent(db: Session, plus: bool = False) -> bool:
+    """Whether today's AI budget is used up: the free share of it, or for Aisle+ all of it.
+    A budget of 0 turns the AI off."""
+    s = get_settings()
+    share = 1.0 if plus else min(max(s.aisle_ai_budget_free_share, 0.0), 1.0)
+    return spent_today(db) >= s.aisle_ai_budget_usd_per_day * share

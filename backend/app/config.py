@@ -67,6 +67,9 @@ class Settings(BaseSettings):
     aisle_follow_ups_per_hour: int = 40
     aisle_routes_per_hour: int = 60
     aisle_writes_per_hour: int = 120
+    # Store searches and nearby lookups together. The app's store picker searches as you
+    # type (after a pause), so even a busy hour of picking stores is a few dozen.
+    aisle_store_lookups_per_hour: int = 600
     # Sends of shared-list changes. The app batches edits made within a moment of each
     # other, so even a busy trip of checking things off stays well under this.
     aisle_list_changes_per_hour: int = 600
@@ -106,6 +109,10 @@ class Settings(BaseSettings):
     # from the tokens it used (see ai.budget). Past it, AI features pause until tomorrow
     # (searches fall back to Aisle's own answers): a backstop on the AI bill.
     aisle_ai_budget_usd_per_day: float = 25.0
+    # The share of that budget everyone but Aisle+ subscribers can use. Past it, their AI
+    # pauses for the day; the rest is kept for subscribers, so heavy free or signed-out use
+    # can't take the AI away from people paying for it.
+    aisle_ai_budget_free_share: float = 0.7
     # Accept purchases from Xcode's local StoreKit testing. Ignored on Heroku.
     aisle_plus_allow_xcode: bool = False
 

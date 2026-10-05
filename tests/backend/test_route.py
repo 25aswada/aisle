@@ -122,6 +122,35 @@ def test_route_caps_model_calls(seeded_client):
     assert CountingModel.calls == 5
 
 
+def test_route_ai_stops_in_time_for_herokus_limit(seeded_client, monkeypatch):
+    """AI calls only start when they'd finish within the route's 20 seconds; the rest of
+    the list is placed without the AI, and the trip still counts as one AI answer."""
+    from backend.app import routing
+    from backend.app.ai.providers import get_location_model
+    from backend.app.config import get_settings
+
+    clock = [1000.0]
+    monkeypatch.setattr(routing, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(get_settings(), "aisle_ai_timeout_seconds", 8.0)
+
+    class SlowModel:
+        name = "slow"
+        calls = 0
+
+        def locate(self, intent, retailer_name, layout):
+            SlowModel.calls += 1
+            clock[0] += 8  # Each call takes its whole timeout.
+            return None
+
+    app.dependency_overrides[get_location_model] = lambda: SlowModel()
+    data = _route(seeded_client, "Target", [f"mystery thing {n}" for n in range(5)])
+    # Calls start at 0 and 8 seconds; one at 16 could run past 20.
+    assert SlowModel.calls == 2
+    assert len(data["unplaced"]) + sum(len(s["items"]) for s in data["stops"]) == 5
+    status = seeded_client.get("/plus/status").json()
+    assert status["ai_search"]["used"] == 1
+
+
 @pytest.mark.parametrize("body, status", [
     ({"store_id": 99999, "items": [{"id": "a", "text": "milk"}]}, 404),
     ({"store_id": 1, "items": []}, 422),

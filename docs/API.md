@@ -45,8 +45,11 @@ and sends it back as an integer `store_id`.
   with status 200.
 - `GET /stores/search?q=&lat=&lon=&limit=` → bare JSON array of stores whose name,
   retailer name or address contain every word of `q` (case-insensitive), so
-  `giant eagle strongsville` works. With `lat` and `lon`, nearest first with
-  `distance_miles`; otherwise by name. `limit` 1–100, default 50. Whitespace-only `q` → `[]`.
+  `giant eagle strongsville` works. Only the first 6 words are matched. With `lat` and
+  `lon`, nearest first with `distance_miles`; otherwise by name. `limit` 1–100, default 50.
+  Whitespace-only `q` → `[]`.
+- `/stores/nearby` and `/stores/search` together are limited to 600 an hour per account
+  (per IP signed out; `AISLE_STORE_LOOKUPS_PER_HOUR`), then 429.
 - `GET /stores/{store_id}` → one store, or 404 `{"detail":"Store not found"}`.
 
 ## Item search
@@ -133,8 +136,8 @@ ending with the shopper's new message:
 
 1–40 messages, each up to 4000 characters; the last must be `user`. A `user` message may
 also carry `"image"`, a base64 JPEG or PNG (about 1024 px; at most 4 MB of base64), and
-then its text may be empty. The app sends only the newest photo. Unknown `store_id` →
-404. Invalid body or image → 422.
+then its text may be empty. At most 2 messages may carry a photo; the app sends only the
+newest one. Unknown `store_id` → 404. Invalid body or image, or more photos → 422.
 
 An `assistant` message carries the `signature` it came with (`explanation_signature`
 from `POST /search`, or `reply_signature` from an earlier `/chat`), sent back unchanged
@@ -309,8 +312,10 @@ store → 404.
 ```
 
 Each item is resolved like `POST /search` (same source priority; at most 5 AI calls
-per route). Items in the same zone share a stop. Stops run from the store's entrance to
-its checkout: nearest neighbor, then 2-opt, using Manhattan distance on zone `x`/`y`
+per route, each started only if it would finish, at its timeout, within 20 seconds of
+planning starting; later items are placed without the AI). Items in the same zone share
+a stop. Stops run from the store's entrance to its checkout: nearest neighbor, then
+2-opt, using Manhattan distance on zone `x`/`y`
 (normalized floor-plan units: x 0..1 left to right, y 0..1 front to back). Coordinates
 are approximate template positions. Zones without coordinates come last. `unplaced`
 reasons: `unknown` (no department) or `not_carried` (the store format usually doesn't
@@ -459,7 +464,10 @@ with a message. Everyone's AI use together is capped by cost: `AISLE_AI_BUDGET_U
 ($25). Every provider call is priced from the tokens it reports (or an estimate, with
 photos weighted), using the price table in `backend/app/ai/budget.py`; every call also has
 an output cap. Past the budget, photo search and follow-ups answer **503** until the next
-UTC day, and search falls back to Aisle's own answers.
+UTC day, and search falls back to Aisle's own answers. Everyone but Aisle+ subscribers
+(free accounts and guests) stops at `AISLE_AI_BUDGET_FREE_SHARE` (0.7) of the budget, so
+the rest is kept for Aisle+. Spend passing 50% of the budget logs a warning, and 90% an
+error (reported to Sentry), once a day each.
 
 In `/chat`, only the newest message's photo reaches the AI (the app sends no others);
 the model sees the first two messages and the latest nine, each cut to 2,000 characters.
@@ -507,12 +515,14 @@ Basic, anonymous product analytics. Status 202.
 ### Access and limits
 
 - `/chat`, `/identify`, `/lists/scan` and `/feedback` need a signed-in account (401
-  otherwise). Free accounts get a few a day (402 `plus_required`); a use that returns
-  nothing isn't counted.
+  otherwise). The photo routes check before the body: without an `Authorization: Bearer`
+  header, before reading it; with a session that isn't real, before decoding any photo.
+  Free accounts get a few a day (402 `plus_required`); a use that returns nothing isn't
+  counted.
 - Fair-use limits per account (per IP when signed out) return 429: searches, photos,
-  follow-ups, routes, and writes (`/feedback`, `/events`, `/lists/parse`). Each network can
-  also only set up so many never-used stores' maps a day; past the total for everyone,
-  only networks that already set up 5 today are refused.
+  follow-ups, routes, store lookups, and writes (`/feedback`, `/events`, `/lists/parse`).
+  Each network can also only set up so many never-used stores' maps a day; past the total
+  for everyone, only networks that already set up 5 today are refused.
 - Sign-in codes: SMS only to `AISLE_SMS_COUNTRY_CODES` (US/Canada; `+1` numbers in the
   Caribbean and Bermuda, and premium 900/976 numbers, need their own entry such as
   `1876`), per-target, device, IP and global hourly/daily caps. `/auth/apple` and `/auth/google` require `nonce`;
@@ -525,8 +535,12 @@ Basic, anonymous product analytics. Status 202.
   day). It gives up with an error log after 8 tries or 14 days, or as soon as a kept code
   is older than Apple's 5 minutes.
 - The client IP is the last `X-Forwarded-For` entry (the one Heroku's router adds).
-- Request bodies over 8 MB get 413. On Heroku, plain HTTP gets a 308 to HTTPS and
-  `/docs` is off.
+- Request bodies over 256 KB get 413, except signed-in requests to the photo routes
+  (`/chat`, `/identify`, `/lists/scan`), which may be up to about 8 MB (two photos of at
+  most 4 MB of base64). On Heroku, plain HTTP gets a 308 to HTTPS and `/docs` is off.
+- Every response has `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`,
+  `Content-Security-Policy: frame-ancestors 'none'` and `X-Frame-Options: DENY`; on
+  Heroku also `Strict-Transport-Security: max-age=31536000; includeSubDomains`.
 - `POST /plus/notifications`: App Store Server Notifications V2 (signed by Apple).
 - `GET /privacy`, `/terms`, `/support`: public HTML pages for the App Store listing.
 
