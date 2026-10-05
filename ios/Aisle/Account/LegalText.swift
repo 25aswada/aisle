@@ -65,7 +65,7 @@ enum Legal {
         Aisle+ is an optional, auto-renewing subscription sold through Apple's App Store. Prices are shown before you buy. Payment is charged to your Apple ID at confirmation of purchase, and the subscription renews automatically unless you turn off auto-renew at least 24 hours before the end of the current period. If a free trial is offered, you'll be charged when it ends unless you cancel before then. You can manage or cancel your subscription in your iPhone's Settings. Refunds are handled by Apple under its policies. The free plan has daily limits on some features, which we may change with notice.
         """),
         Section(title: "5. Things you share", body: """
-        When you tell Aisle an item was found, wasn't there, or was somewhere else, you let us use that information to improve answers for everyone, including showing it to other shoppers in an anonymous form. Items on shared lists are visible to everyone on that list. Don't submit anything unlawful, misleading or harmful, and don't share other people's private information.
+        When you tell Aisle an item was found, wasn't there, or was somewhere else, you let us use that information to improve answers for everyone, including showing it to other shoppers in an anonymous form. Items on shared lists are visible to everyone on that list. Don't submit anything unlawful, misleading or harmful, and don't share other people's private information. If something on a shared list is abusive, report it from the list's Sharing screen: reports go to Aisle and we review them. A list's owner can also remove people from it.
         """),
         Section(title: "6. Fair use", body: """
         Don't misuse Aisle: no attempts to break, overload or reverse-engineer the service, scrape it, create accounts in bulk, get around the free plan's limits, or use it to harass others. Aisle limits how often features can be used, to keep the service running for everyone. We may suspend or close accounts that misuse it.
@@ -89,7 +89,7 @@ enum Legal {
         • What you search for, the store you searched in, and the answer Aisle gave, linked to a random ID for your phone and, while you're signed in, to your account. Signing out or deleting your account gives your phone a new ID, so later searches aren't linked to the old account.
         • Feedback you give, like "Found it", "Not here" or a corrected spot, linked to your account so repeat reports count once.
         • Your account: your first name, and your email, phone number, or Apple or Google sign-in ID.
-        • If you share a list: its name, its items, and the first names of the people on it.
+        • If you share a list: its name, its items, and the first names of the people on it. If you report a shared list, your report and a copy of the list, so we can review it.
         • If you subscribe: a confirmation from Apple that your Aisle+ subscription is active. We never see your card details.
         • To prevent abuse, how many requests your account and your network (IP address) made recently, and the email or phone number each sign-in code was sent to.
         • If usage sharing is on: anonymous counts like "a search happened" or "a trip finished". Never what you searched for. You can turn this off in the You tab.
@@ -104,7 +104,7 @@ enum Legal {
         Your lists (unless shared), recent searches and their answers, saved offline maps, and your Aisle+ activity charts live on your phone. Deleting the app removes them. Our servers only count today's uses of the free plan's limited features.
         """),
         Section(title: "Who helps us run Aisle", body: """
-        We use a few service providers, only for running Aisle: a cloud host for our servers and database; Anthropic and/or OpenAI to understand searches and photos; Twilio to text sign-in codes; Resend to email sign-in codes; Apple for purchases and Sign in with Apple; Google for Google sign-in; logo.dev for store logos; Sentry for error reports, which never include your searches, photos or contact details; and OpenStreetMap for store locations. They may only use your information to provide their service to us.
+        We use a few service providers, only for running Aisle: a cloud host for our servers and database; Anthropic and/or OpenAI to understand searches and photos; Twilio to text sign-in codes; Resend to email sign-in codes, and reports of shared lists to us; Apple for purchases and Sign in with Apple; Google for Google sign-in; logo.dev for store logos; Sentry for error reports, which never include your searches, photos or contact details; and OpenStreetMap for store locations. They may only use your information to provide their service to us.
         """),
         Section(title: "What we never do", body: """
         We don't sell your personal information, share it for advertising, or show ads. We don't use your data to train third-party AI models.

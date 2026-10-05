@@ -92,9 +92,10 @@ struct AisleApp: App {
                     Task { await PurchaseAnalytics.identify(token) }
                 }
                 .onOpenURL { url in
-                    // aisle://join/K7Q2MX from a shared-list invite.
-                    if url.scheme == "aisle", url.host == "join", url.pathComponents.count > 1 {
-                        shoppingList.pendingJoinCode = url.lastPathComponent
+                    // A shared-list invite: https://shopaisle.app/join/K7Q2MXRT (a universal
+                    // link), or aisle://join/K7Q2MX from older invites.
+                    if let code = InviteLink.code(from: url) {
+                        shoppingList.pendingJoinCode = code
                     }
                 }
                 .task {

@@ -353,11 +353,13 @@ class SharedListMember(Base):
 
 
 class SharedListItem(Base):
-    """One line on a shared list. The id comes from the phone that added it."""
+    """One line on a shared list. The id comes from the phone that added it, so it's only
+    unique within its list."""
     __tablename__ = "shared_list_items"
 
+    list_id: Mapped[str] = mapped_column(ForeignKey("shared_lists.id", ondelete="CASCADE"), primary_key=True,
+                                         index=True)
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    list_id: Mapped[str] = mapped_column(ForeignKey("shared_lists.id", ondelete="CASCADE"), index=True)
     text: Mapped[str] = mapped_column(String(200))
     quantity: Mapped[str | None] = mapped_column(String(40))
     category_name: Mapped[str | None] = mapped_column(String(80))
@@ -365,3 +367,34 @@ class SharedListItem(Base):
     position: Mapped[float] = mapped_column(default=0)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     shared_list: Mapped[SharedList] = relationship(back_populates="items")
+
+
+class SharedListBan(Base):
+    """Someone the owner took off a list. They can't join it again, even with a new code."""
+    __tablename__ = "shared_list_bans"
+    __table_args__ = (UniqueConstraint("list_id", "user_id", name="uq_shared_list_ban"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    list_id: Mapped[str] = mapped_column(ForeignKey("shared_lists.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class ContentReport(Base):
+    """A shopper's report of a shared list (spam, harassment and so on), for Aisle to review.
+
+    Keeps a copy of the list as it was reported, so a report still makes sense after the
+    list changes or is deleted, or the reporter deletes their account."""
+    __tablename__ = "content_reports"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    reporter_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    list_id: Mapped[str | None] = mapped_column(ForeignKey("shared_lists.id", ondelete="SET NULL"), index=True)
+    reason: Mapped[str] = mapped_column(String(20))  # spam, harassment, inappropriate, other
+    note: Mapped[str | None] = mapped_column(String(500))
+    # {"name": ..., "items": [...], "owner_id": ...} at the moment of the report.
+    snapshot: Mapped[dict] = mapped_column(JSON, default=dict)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    # When it went to support by email (unset when email isn't configured or it failed).
+    emailed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

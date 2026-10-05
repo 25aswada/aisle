@@ -249,6 +249,16 @@ private final class FakeSharedLists: SharedListService {
 
     func memberships() async throws -> [String] { Array(server.keys) }
 
+    func removeMember(serverID: String, memberID: Int) async throws -> SharedListPayload { server[serverID]! }
+
+    func newInviteCode(serverID: String) async throws -> SharedListPayload { server[serverID]! }
+
+    private(set) var reports: [(serverID: String, reason: SharedListReportReason, note: String?, leave: Bool)] = []
+
+    func report(serverID: String, reason: SharedListReportReason, note: String?, leave: Bool) async throws {
+        reports.append((serverID, reason, note, leave))
+    }
+
     /// Someone else on the list adds an item.
     func someoneAdds(_ text: String, to id: String) {
         let current = server[id]!
@@ -377,6 +387,47 @@ final class MultipleListsTests: XCTestCase {
         try await store.stopSharingCurrent()
         XCTAssertEqual(service.deleted, ["srv-9"])
         XCTAssertEqual(store.lists.count, 1)
+    }
+
+    func testOnlyTheOwnerRenamesASharedList() async throws {
+        let service = FakeSharedLists()
+        let store = ShoppingListStore(defaults: .fresh("AisleTests.RenameShared"), service: service)
+        try await store.join(code: "K7Q2MX")
+        XCTAssertFalse(store.current.canRename)
+        store.renameCurrent(to: "Mine now")
+        XCTAssertEqual(store.current.name, "Family")
+    }
+
+    func testReportingCanAlsoLeaveTheList() async throws {
+        let service = FakeSharedLists()
+        let store = ShoppingListStore(defaults: .fresh("AisleTests.Report"), service: service)
+        try await store.join(code: "K7Q2MX")
+        try await store.report(store.current.id, reason: .spam, note: "  not my family  ", alsoLeave: true)
+        XCTAssertEqual(service.reports.map(\.reason), [.spam])
+        XCTAssertEqual(service.reports.first?.note, "not my family")
+        XCTAssertEqual(service.reports.first?.leave, true)
+        XCTAssertEqual(store.lists.count, 1, "the reported list left this phone")
+    }
+
+    func testBigEditsAreSentInBatches() async throws {
+        let service = FakeSharedLists()
+        let store = ShoppingListStore(defaults: .fresh("AisleTests.Batches"), service: service)
+        try await store.shareCurrent()
+        store.add((0..<150).map { ParsedListItem(text: "item \($0)", quantity: nil, category: nil) })
+        await store.refreshShared()
+        XCTAssertEqual(service.sent.first?.count, ShoppingListStore.changesPerSend)
+        try await Task.sleep(for: .milliseconds(900))
+        XCTAssertEqual(service.sent.map(\.count), [100, 50])
+        XCTAssertTrue(store.current.pending.isEmpty)
+    }
+
+    func testInviteLinks() {
+        XCTAssertEqual(InviteLink.url(for: "K7Q2MXRT").absoluteString, "https://shopaisle.app/join/K7Q2MXRT")
+        XCTAssertEqual(InviteLink.code(from: URL(string: "https://shopaisle.app/join/K7Q2MXRT")!), "K7Q2MXRT")
+        XCTAssertEqual(InviteLink.code(from: URL(string: "https://shopaisle.app/join/K7Q2MXRT/")!), "K7Q2MXRT")
+        XCTAssertEqual(InviteLink.code(from: URL(string: "aisle://join/K7Q2MX")!), "K7Q2MX", "older invites still work")
+        XCTAssertNil(InviteLink.code(from: URL(string: "https://shopaisle.app/privacy/")!))
+        XCTAssertNil(InviteLink.code(from: URL(string: "https://example.com/join/K7Q2MXRT")!))
     }
 }
 

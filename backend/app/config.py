@@ -61,6 +61,9 @@ class Settings(BaseSettings):
     aisle_follow_ups_per_hour: int = 40
     aisle_routes_per_hour: int = 60
     aisle_writes_per_hour: int = 120
+    # Sends of shared-list changes. The app batches edits made within a moment of each
+    # other, so even a busy trip of checking things off stays well under this.
+    aisle_list_changes_per_hour: int = 600
     # Sign-ins and sign-in code checks, per network per hour.
     aisle_sign_ins_per_hour: int = 60
     # Accounts one network can create in a day, so limits per account mean limits per person.

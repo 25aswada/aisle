@@ -14,13 +14,16 @@ import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import delete, select, update
+from sqlalchemy import delete, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
 from ..limits import bump, day_window, hour_window, request_ip
-from ..models import AuthSession, EmailCode, PlusEntitlement, UsageCounter, UsedSignInNonce, User, UserIdentity
+from ..models import (
+    AuthSession, EmailCode, PlusEntitlement, SharedList, SharedListMember, UsageCounter, UsedSignInNonce, User,
+    UserIdentity,
+)
 
 # A session nobody has used for this long is over; the app asks to sign in again.
 SESSION_IDLE_LIMIT = timedelta(days=90)
@@ -200,7 +203,8 @@ def delete_user(db: Session, user: User) -> None:
     them; nothing else carries over (SQLite can reuse the id). Sign-in code records only
     hold hashes and go after two days. Searches and reports stay anonymous. Apple keeps
     billing a subscription until it's canceled in Settings; "Restore purchases" can move
-    it to a new account."""
+    it to a new account. Shared lists it owns go to whoever has been on them longest."""
+    _hand_off_shared_lists(db, user)
     db.execute(update(AuthSession).where(AuthSession.user_id == user.id)
                .values(revoked_at=datetime.now(timezone.utc)))
     db.execute(delete(PlusEntitlement).where(PlusEntitlement.user_id == user.id))
@@ -212,3 +216,22 @@ def delete_user(db: Session, user: User) -> None:
         db.execute(delete(EmailCode).where(EmailCode.email.in_(emails)))
     db.delete(user)
     db.commit()
+
+
+def _hand_off_shared_lists(db: Session, user: User) -> None:
+    """Lists the account owns pass to their longest-standing other member, so deleting
+    an account doesn't take a family's list away; a list with nobody else on it goes."""
+    now = datetime.now(timezone.utc)
+    lists = db.scalars(select(SharedList).where(or_(
+        SharedList.owner_id == user.id, SharedList.members.any(SharedListMember.user_id == user.id)))).all()
+    for shared in lists:
+        others = sorted((m for m in shared.members if m.user_id != user.id), key=lambda m: (m.joined_at, m.id))
+        if shared.owner_id == user.id and not others:
+            db.delete(shared)
+            continue
+        if shared.owner_id == user.id:
+            shared.owner_id = others[0].user_id
+        shared.members = others
+        shared.version += 1
+        shared.updated_at = now
+    db.flush()

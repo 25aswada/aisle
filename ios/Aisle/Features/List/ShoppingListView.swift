@@ -218,7 +218,9 @@ struct ShoppingListView: View {
                     Button("Join a shared list…", systemImage: "person.crop.circle.badge.plus") {
                         sheet = .join("")
                     }
-                    Button("Rename list…", systemImage: "pencil") { sheet = .rename }
+                    if list.current.canRename {
+                        Button("Rename list…", systemImage: "pencil") { sheet = .rename }
+                    }
                     Button("Past trips", systemImage: "clock.arrow.circlepath") { sheet = .pastTrips }
                     Divider()
                     Button("Clear checked items", systemImage: "checkmark.circle") { list.clearCompleted() }

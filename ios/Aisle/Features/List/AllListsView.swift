@@ -43,9 +43,11 @@ struct AllListsSheet: View {
                         }
                         .buttonStyle(PressableCardStyle())
                         .contextMenu {
-                            Button("Rename…", systemImage: "pencil") {
-                                newName = item.name
-                                renaming = item
+                            if item.canRename {
+                                Button("Rename…", systemImage: "pencil") {
+                                    newName = item.name
+                                    renaming = item
+                                }
                             }
                             Button(deleteAction(for: item), systemImage: "xmark.bin", role: .destructive) {
                                 deleting = item
