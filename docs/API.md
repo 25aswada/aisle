@@ -1,15 +1,20 @@
 # API
 
-Local origin: `http://127.0.0.1:8000`. JSON in and out. Accounts are optional: only `/me` and
-`/auth/signout` need a session (see Accounts below); everything else is public.
+Local origin: `http://127.0.0.1:8000`. JSON in and out. The app requires an account, but
+the API stays usable without one where it can: store lookups, `/search` and `/route` are
+public (with smaller AI limits signed out). These need a session (401 without one): `/me`
+and `/me/*`, `/auth/signout`, follow-ups (`/chat`), photo search (`/identify`), list
+scanning (`/lists/scan`), reports (`/feedback`) and shared lists (`/lists`, `/lists/*`).
 `/docs` on the running service shows the live OpenAPI schema. This document and
 `ios/Aisle/Networking/APIClient.swift` must change together.
 
 ## Device header
 
-The app sends `X-Aisle-Device: <random install id>` on every request. It is
-anonymous (no account, not a hardware id). The server stores it on search events
-and observations so repeat reports from one install count once. It is optional.
+The app sends `X-Aisle-Device: <random install id>` on every request. It's random, not a
+hardware id. The server stores it on search events and observations so repeat reports from
+one install count once, and on sessions, so while a session lasts it can be tied to the
+account. The app makes a new one whenever it signs out or deletes the account, so later
+requests from that phone aren't linked to the old account. It is optional.
 
 ## Identifiers
 
@@ -301,13 +306,15 @@ Sign in with Apple or Google. Every sign-in returns:
 
 ```json
 {"token": "…", "is_new": true,
- "user": {"id": 7, "first_name": "", "email": null, "phone": "+12155550123",
-          "wants_tips": false, "providers": ["phone"]}}
+ "user": {"id": 7, "plus_token": "6f9619ff-8b86-d011-b42d-00c04fc964ff", "first_name": "",
+          "email": null, "phone": "+12155550123", "wants_tips": false, "providers": ["phone"]}}
 ```
 
 Send the token as `Authorization: Bearer <token>`. It ends after 90 days unused; signing
 out or deleting the account revokes it. Only a SHA-256 of it is stored. `is_new` means this
-sign-in created the account, so the app asks for a first name (`PATCH /me`).
+sign-in created the account, so the app asks for a first name (`PATCH /me`); after Sign in
+with Apple the name is optional, since the shopper may have chosen to hide it. `plus_token`
+is the account's Aisle+ token (see Aisle+ below).
 
 | Route | Body | Notes |
 | --- | --- | --- |
@@ -319,7 +326,9 @@ sign-in created the account, so the app asks for a first name (`PATCH /me`).
 | `POST /auth/google` | `{"id_token", "nonce"}` | Token checked against Google's keys, audience `GOOGLE_IOS_CLIENT_ID`. Each nonce signs in once |
 | `GET /me` | | 401 when the session ended |
 | `PATCH /me` | `{"first_name"?, "wants_tips"?}` | |
-| `DELETE /me` | | Deletes the account and its sign-ins; 204. Today's limit counts stay with a hash of each way it signed in, so a new account made with any of them picks them up |
+| `POST /me/phone/start` | `{"phone"}` | Adds a phone number to the signed-in account: texts a code (same limits and response as `/auth/phone/start`). 400 if it's already on this account |
+| `POST /me/phone/verify` | `{"phone", "code"}` | Returns the updated user. 409 if the number belongs to another account (said only once the code checks out) |
+| `DELETE /me` | | Deletes the account, its sign-ins, its link to Aisle+ and its per-account usage counts; 204. Today's limit counts also stay with a hash of each way it signed in, so a new account made with any of them picks them up |
 | `POST /auth/signout` | | Revokes this session; 204 |
 
 - Signing in with a new method whose verified email matches an existing account adds it
@@ -367,8 +376,14 @@ checking the App Store's signature.
   pinned Apple Root CA - G3, the leaf and intermediate carry Apple's marker extensions,
   the ES256 signature verifies, and it's for `APPLE_BUNDLE_ID` and an Aisle+ product
   (`app.shopaisle.plus.yearly`, `.monthly`). Xcode's local StoreKit test purchases count
-  only with `AISLE_PLUS_ALLOW_XCODE=true`. It applies to the sending device and, with a
-  session, the account. All rejected → 400. Returns the status below.
+  only with `AISLE_PLUS_ALLOW_XCODE=true` (never on Heroku). All rejected → 400. Returns
+  the status below.
+- Aisle+ belongs to an account, never to a device or Apple ID on its own. The app buys
+  with the account's `plus_token` as StoreKit's `appAccountToken`, and `/plus/sync` only
+  attaches a transaction to the signed-in account whose token it carries. With
+  `{"claim": true}` (the app's Restore), it can also take over one bought for no account or
+  for an account that's since been deleted (Apple keeps billing until it's cancelled);
+  one that belongs to another live account never moves. Signed out, `is_plus` is false.
 - `GET /plus/status` →
   `{"is_plus": false, "expires_at": null, "product_id": null,
     "photo_search": {"used": 2, "limit": 3}, "follow_up": {"used": 0, "limit": 5},
@@ -392,9 +407,11 @@ server answers **402**:
 
 Aisle+ is unlimited within fair use: 50 photo searches, 100 follow-ups and 300 AI
 answers a day (`AISLE_PLUS_*`), counted apart from the free tier; past them, **429**
-with a message. Everyone's AI requests together are capped at `AISLE_AI_REQUESTS_PER_DAY`
-(30,000): past it, photo search and follow-ups answer **503** until the next UTC day, and
-search falls back to Aisle's own answers.
+with a message. Everyone's AI use together is capped by cost: `AISLE_AI_BUDGET_USD_PER_DAY`
+($25). Every provider call is priced from the tokens it reports (or an estimate, with
+photos weighted), using the price table in `backend/app/ai/budget.py`; every call also has
+an output cap. Past the budget, photo search and follow-ups answer **503** until the next
+UTC day, and search falls back to Aisle's own answers.
 
 In `/chat`, only the newest message's photo reaches the AI (the app sends no others);
 the model sees the first two messages and the latest nine, each cut to 2,000 characters.

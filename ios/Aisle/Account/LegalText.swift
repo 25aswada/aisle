@@ -104,7 +104,7 @@ enum Legal {
         Your lists (unless shared), recent searches and their answers, saved offline maps, and your Aisle+ activity charts live on your phone. Deleting the app removes them. Our servers only count today's uses of the free plan's limited features.
         """),
         Section(title: "Who helps us run Aisle", body: """
-        We use a few service providers, only for running Aisle: a cloud host for our servers and database; Anthropic and/or OpenAI to understand searches and photos; Twilio to text sign-in codes; Resend to email sign-in codes; Apple for purchases and Sign in with Apple; Google for Google sign-in; logo.dev for store logos; and OpenStreetMap for store locations. They may only use your information to provide their service to us.
+        We use a few service providers, only for running Aisle: a cloud host for our servers and database; Anthropic and/or OpenAI to understand searches and photos; Twilio to text sign-in codes; Resend to email sign-in codes; Apple for purchases and Sign in with Apple; Google for Google sign-in; logo.dev for store logos; Sentry for error reports, which never include your searches, photos or contact details; and OpenStreetMap for store locations. They may only use your information to provide their service to us.
         """),
         Section(title: "What we never do", body: """
         We don't sell your personal information, share it for advertising, or show ads. We don't use your data to train third-party AI models.

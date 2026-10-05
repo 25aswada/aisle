@@ -115,18 +115,36 @@ Pytest discovery is the default: files named `test_*.py` or `*_test.py` under `b
 
 ## Access
 
-Accounts are optional (`backend/app/auth/`, `routers/auth.py`): SMS codes through Twilio
-Verify, email codes sent with Resend, and Sign in with Apple and Google, whose ID tokens
-are checked against the providers' published keys. Sessions are random bearer tokens
-stored only as SHA-256 hashes; the app keeps its token in the Keychain. Only `/me` and
-`/auth/signout` need one; every other route is public, and the app still sends an
-anonymous install id in `X-Aisle-Device`. The SwiftUI app is the client, so browser CORS is unused.
+The app requires an account (`backend/app/auth/`, `routers/auth.py`): onboarding ends at
+sign-up and the tabs open only when signed in. Sign-in is by SMS code through Twilio
+Verify, email code sent with Resend, or Sign in with Apple and Google, whose ID tokens are
+checked against the providers' published keys. Sessions are random bearer tokens stored
+only as SHA-256 hashes; the app keeps its token in the Keychain. Follow-ups, photo search,
+list scanning, reports and shared lists need a session on the server; store lookups,
+`/search` and `/route` stay public. The app also sends a random install id in
+`X-Aisle-Device`, and makes a new one on sign-out and account deletion. The SwiftUI app is
+the client, so browser CORS is unused.
+
+Deleting an account (`DELETE /me`) removes it, its sign-ins, its Aisle+ link and its usage
+counts on the server; on the phone, `LocalAccountData` erases lists, history, stats, the
+chosen store and saved maps, and onboarding starts over. When a different account signs
+in on the same phone, the previous account's local data is erased too.
+
+## Operations
+
+- Logs go to stdout at `AISLE_LOG_LEVEL` (INFO), as `LEVEL logger: message`, with no
+  personal data; each AI call logs its model, tokens and cost.
+- Errors go to Sentry when `SENTRY_DSN` is set, scrubbed of bodies, query strings, cookies,
+  IPs and most headers (`backend/app/monitoring.py`).
+- AI spend is capped per day in dollars (`AISLE_AI_BUDGET_USD_PER_DAY`, `backend/app/ai/budget.py`).
 
 ## Aisle+
 
-The subscription is bought with StoreKit 2 (`ios/Aisle/Account/PlusStore.swift`). The app
-sends each current transaction's signed JWS to `POST /plus/sync`; the server checks it
-against the pinned Apple root (`backend/app/plus/appstore.py`) and only then lifts limits
+The subscription is bought with StoreKit 2 (`ios/Aisle/Account/PlusStore.swift`), stamped
+with the account's `plus_token` as its `appAccountToken`, so it belongs to that Aisle
+account rather than the Apple ID. The app sends each current transaction's signed JWS to
+`POST /plus/sync`; the server checks it against the pinned Apple root
+(`backend/app/plus/appstore.py`) and the token, and only then lifts limits
 (`backend/app/plus/access.py`). What it covers, and where it's enforced:
 
 | Feature | Free | Aisle+ | Enforced |
