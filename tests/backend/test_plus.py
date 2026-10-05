@@ -17,6 +17,7 @@ from cryptography.x509.oid import NameOID
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
+from backend.app.ai import budget
 from backend.app.ai.providers import get_explainer, get_location_model
 from backend.app.config import get_settings
 from backend.app.database import get_db
@@ -483,10 +484,22 @@ def test_aisle_plus_has_a_fair_use_ceiling(api, apple, engine, monkeypatch):
     assert api.get("/plus/status", headers=headers).json()["photo_search"]["used"] == 0
 
 
+class PricedAI(RecordingAI):
+    """Each answer costs $1 of the day's AI budget, as a provider call would."""
+
+    def explain(self, facts):
+        budget.charge("claude-opus-5-5", 250_000, 0)
+        return super().explain(facts)
+
+    def chat(self, system, messages):
+        budget.charge("claude-opus-5-5", 250_000, 0)
+        return super().chat(system, messages)
+
+
 def test_everyones_ai_has_a_daily_budget(api, engine, monkeypatch):
-    app.dependency_overrides[get_explainer] = lambda: RecordingAI("By the eggs.")
+    app.dependency_overrides[get_explainer] = lambda: PricedAI("By the eggs.")
     app.dependency_overrides[get_location_model] = lambda: None
-    monkeypatch.setattr(get_settings(), "aisle_ai_requests_per_day", 2)
+    monkeypatch.setattr(get_settings(), "aisle_ai_budget_usd_per_day", 2.0)
     first, _, _ = account(engine, "phone-a")
     second, _, _ = account(engine, "phone-b")
     assert api.post("/identify", json={"image": PHOTO}, headers=first).status_code == 200
@@ -497,3 +510,15 @@ def test_everyones_ai_has_a_daily_budget(api, engine, monkeypatch):
     assert search(api, second).json()["explanation"] is None
     # The refused tries didn't use up the shopper's own allowance.
     assert api.get("/plus/status", headers=second).json()["photo_search"]["used"] == 0
+    with Session(engine) as db:
+        assert budget.spent_today(db) == 2.0
+
+
+def test_every_ai_call_in_a_follow_up_is_charged(api, engine):
+    app.dependency_overrides[get_explainer] = lambda: PricedAI()
+    headers, _, _ = account(engine)
+    convo = [{"role": "user", "content": "where's the milk?"}]
+    assert api.post("/chat", json={"store_id": 1, "messages": convo}, headers=headers).status_code == 200
+    # The reply (written on another thread) and the check for a new item to find.
+    with Session(engine) as db:
+        assert budget.spent_today(db) == 2.0

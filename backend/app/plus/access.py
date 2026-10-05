@@ -7,7 +7,8 @@ AI-answered searches a day, counted per account when signed in (so reinstalling
 doesn't reset them; see auth.accounts for deleting) and otherwise per network. Aisle+
 is unlimited within fair use: daily ceilings no real shopper reaches, counted apart
 from the free tier. A use is counted before the AI runs, in one atomic step, and
-handed back if nothing came of it. Everyone's AI use together has a daily budget too.
+handed back if nothing came of it. Everyone's AI use together has a daily budget in
+dollars too (see ai.budget): each use starts the meter that charges its AI calls to it.
 """
 from __future__ import annotations
 
@@ -19,6 +20,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..ai.budget import budget_spent, start_metering
 from ..config import get_settings
 from ..limits import bump, day_window
 from ..models import PlusEntitlement, UsageCounter, User
@@ -38,9 +40,6 @@ UPGRADE_MESSAGES = {
 }
 FAIR_USE = "That's a lot for one day, even with Aisle+. It resets tomorrow."
 AI_PAUSED = "Aisle's AI is taking a break for today. Try again tomorrow."
-# Everyone's AI use today, for the daily budget.
-EVERYONE = "everyone"
-AI_REQUESTS = "ai_requests"
 
 
 @dataclass(frozen=True)
@@ -111,7 +110,8 @@ def plus_required(feature: str, message: str, limit: int | None = None) -> HTTPE
 @dataclass
 class Allowance:
     """One use of a limited feature, already counted. Refund it when the feature gave
-    nothing back, so failures don't use up the day's tries."""
+    nothing back, so failures don't use up the day's tries. What the AI cost stays
+    spent: the budget counts money, not uses."""
     db: Session
     subject: str
     counter: str  # The feature, or "plus:<feature>" for Aisle+'s fair-use count.
@@ -121,13 +121,13 @@ class Allowance:
     def refund(self) -> None:
         if self.counted:
             bump(self.db, self.subject, self.counter, self.day, -1)
-            bump(self.db, EVERYONE, AI_REQUESTS, self.day, -1)
             self.counted = False
 
 
 def reserve_allowance(db: Session, caller: Caller, feature: str) -> Allowance:
     """Counts one use now. Raises 402 when a free shopper is out for today, 429 past
-    Aisle+'s fair use, and 503 once everyone's AI budget for the day is spent."""
+    Aisle+'s fair use, and 503 once everyone's AI budget for the day is spent. The
+    request's AI calls are charged to that budget from here on."""
     plus = is_plus(db, caller)
     counter, day = (f"plus:{feature}" if plus else feature), today()
     limit = limit_for(feature, plus=plus, signed_in=caller.user is not None)
@@ -136,11 +136,11 @@ def reserve_allowance(db: Session, caller: Caller, feature: str) -> Allowance:
         if plus:
             raise HTTPException(status_code=429, detail=FAIR_USE)
         raise plus_required(feature, UPGRADE_MESSAGES[feature].format(limit=limit), limit)
-    if bump(db, EVERYONE, AI_REQUESTS, day) > get_settings().aisle_ai_requests_per_day:
-        bump(db, EVERYONE, AI_REQUESTS, day, -1)
+    if budget_spent(db):
         bump(db, caller.subject, counter, day, -1)
         log.warning("Today's AI budget for everyone is spent; AI features are paused")
         raise HTTPException(status_code=503, detail=AI_PAUSED)
+    start_metering(db)
     return Allowance(db, caller.subject, counter, day)
 
 

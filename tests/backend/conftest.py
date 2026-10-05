@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 import sys
 
@@ -5,6 +6,8 @@ import sys
 # changing files outside backend ownership. Avoid tests/backend shadowing it.
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
+# Tests never send error reports, even with a DSN in backend/.env.
+os.environ["SENTRY_DSN"] = ""
 
 import pytest
 from alembic import command

@@ -1,4 +1,5 @@
 from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException
@@ -88,7 +89,8 @@ def follow_up(
     feature = PHOTO_SEARCH if messages[-1].get("image") else FOLLOW_UP
     allowance = reserve_allowance(db, caller, feature)
     place = f"{store.name} ({store.retailer_name}), {store.address}"
-    reply = _follow_up_pool.submit(chat_safely, explainer, follow_up_system_prompt(place), messages)
+    # In this request's context, so the reply's AI call is charged to today's budget too.
+    reply = _follow_up_pool.submit(copy_context().run, chat_safely, explainer, follow_up_system_prompt(place), messages)
     item = wanted_item_safely(explainer, messages)
     # The reply already answers in context, so the search skips writing its own.
     result = search(db, item, store.id, model, device_id, explainer=None) if item else None

@@ -14,6 +14,7 @@ from .config import get_settings
 from .database import get_db
 from .legal import privacy_page, support_page, terms_page
 from .middleware import RequestGuard
+from .monitoring import configure_logging, init_sentry
 from .models import Retailer, Store
 from .routers import analytics as analytics_routes
 from .routers import auth as auth_routes
@@ -26,6 +27,9 @@ from .routers import search as search_routes
 from .schemas import NearbyResponse, NearbyStoreResponse, StoreResponse
 
 _on_heroku = get_settings().on_heroku
+# Before the app exists, so Sentry hooks into FastAPI as it's built.
+configure_logging(get_settings())
+init_sentry(get_settings())
 
 
 @asynccontextmanager
