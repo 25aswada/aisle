@@ -165,11 +165,12 @@ final class AccountStore {
     /// Deletes the account on the server, then erases what the phone kept for it
     /// (`eraseLocalData`) and signs out here. Nothing is erased if the server refuses.
     /// With Sign in with Apple, the shopper confirms with Apple first so the server can
-    /// revoke it; backing out of Apple's sheet deletes nothing.
-    func deleteAccount(eraseLocalData: () -> Void = {}) async throws {
+    /// revoke it; backing out of Apple's sheet deletes nothing. `confirmWithApple: false` skips
+    /// the sheet (the shopper chose "Delete anyway"); the server revokes with what it kept.
+    func deleteAccount(confirmWithApple: Bool = true, eraseLocalData: () -> Void = {}) async throws {
         guard let token = tokens.token, let auth else { return }
         var appleCode: String?
-        if account?.providers.contains(.apple) == true {
+        if confirmWithApple, account?.providers.contains(.apple) == true {
             do {
                 appleCode = try await auth.appleDeletionCode()
             } catch is CancellationError {

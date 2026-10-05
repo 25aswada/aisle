@@ -68,6 +68,16 @@ final class AppleAccountDeletionTests: XCTestCase {
         XCTAssertTrue(store.isSignedIn)
     }
 
+    func testDeleteAnywaySkipsApple() async throws {
+        let auth = AppleDeletionAuth()
+        auth.appleResult = .failure(CancellationError())
+        let store = store(auth, providers: [.apple], "Anyway")
+        try await store.deleteAccount(confirmWithApple: false)
+        XCTAssertEqual(auth.deleted.count, 1)
+        XCTAssertNil(auth.deleted[0].1)
+        XCTAssertFalse(store.isSignedIn)
+    }
+
     func testOtherAccountsDeleteWithoutApple() async throws {
         let auth = AppleDeletionAuth()
         auth.appleResult = .failure(AuthError.network)

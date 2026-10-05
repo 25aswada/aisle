@@ -34,6 +34,7 @@ struct YouView: View {
     @State private var confirmDelete = false
     @State private var managingSubscription = false
     @State private var deleteError: String?
+    @State private var appleNotConfirmed = false
     @State private var scrolledUnderStatusBar: CGFloat = 0
 
     var body: some View {
@@ -128,6 +129,13 @@ struct YouView: View {
                 Button("OK", role: .cancel) {}
             } message: {
                 Text(deleteError ?? "")
+            }
+            .alert("Confirm with Apple", isPresented: $appleNotConfirmed) {
+                Button("Try again") { Task { await deleteAccount() } }
+                Button("Delete anyway", role: .destructive) { Task { await deleteAccount(confirmWithApple: false) } }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text(Self.appleNotConfirmedMessage)
             }
             .confirmationDialog("Sign out of Aisle?", isPresented: $confirmSignOut, titleVisibility: .visible) {
                 Button("Sign out", role: .destructive) { accounts.signOut() }
@@ -313,6 +321,7 @@ struct YouView: View {
     static let deleteMessage = "This permanently deletes your Aisle account, your lists, history and stats, and ends Aisle+ on this account. Aisle starts over as if newly installed."
     static let subscriptionNote = "Apple bills Aisle+, and deleting your account doesn't cancel it. Cancel it first so you're not charged again."
     static let appleNote = "Apple will ask you to confirm, so your Apple sign-in ends too."
+    static let appleNotConfirmedMessage = "Apple's confirmation didn't finish, so nothing was deleted. Try again, or delete without it. Aisle still ends your Apple sign-in where it can, and you can also remove Aisle in Settings › Apple ID › Sign in with Apple."
 
     private var deleteDialogMessage: String {
         var parts = [Self.deleteMessage]
@@ -321,13 +330,17 @@ struct YouView: View {
         return parts.joined(separator: " ")
     }
 
-    private func deleteAccount() async {
+    private func deleteAccount(confirmWithApple: Bool = true) async {
         do {
-            try await accounts.deleteAccount {
+            try await accounts.deleteAccount(confirmWithApple: confirmWithApple) {
                 LocalAccountData.eraseForDeletedAccount(.init(
                     lists: lists, recents: recents, storeSelection: storeSelection, offlineMaps: offlineMaps
                 ))
             }
+        } catch AuthError.server(AccountStore.appleConfirmationNeeded) {
+            // Apple's sheet was dismissed, or can't finish on this phone (no Apple ID signed in
+            // reports the same way). Let them try again or go ahead without it.
+            appleNotConfirmed = true
         } catch {
             deleteError = (error as? LocalizedError)?.errorDescription ?? "Couldn't delete your account. Try again."
         }
