@@ -50,7 +50,7 @@ enum Legal {
     static let summary: [(symbol: String, text: String)] = [
         ("location.slash", "Your location is only used to find stores near you. We don't keep it."),
         ("hand.raised", "We never sell your data or show ads."),
-        ("sparkle.magnifyingglass", "Your searches and photos go to an AI provider (Anthropic or OpenAI) to find answers. They can't train on them."),
+        ("sparkle.magnifyingglass", "Your searches, photos and follow-up questions go to an AI provider (Anthropic or OpenAI) to find answers. They can't train on them."),
         ("questionmark.circle", "Aisle's answers are best guesses. Always check the shelf."),
         ("creditcard", "Aisle+ is billed by Apple. Cancel anytime in Settings."),
         ("trash", "Delete your account anytime from the You tab."),
@@ -97,25 +97,25 @@ enum Legal {
         • If you share a list: its name, its items, and the first names of the people on it. If you report a shared list, your report and a copy of the list, so we can review it.
         • If you subscribe: a confirmation from Apple that your Aisle+ subscription is active. We never see your card details.
         • To prevent abuse, how many requests your account, your phone's random ID and your network (IP address) made recently, and the email or phone number each sign-in code was sent to.
-        • If usage sharing is on: anonymous counts like "a search happened" or "a trip finished". Never what you searched for. You can turn this off in the You tab.
+        • If usage sharing is on: counts like "a search happened" or "a trip finished", with your phone's random ID, so while you're signed in they can be linked to your account. Never what you searched for. You can turn this off in the You tab.
         """),
         Section(title: "Location", body: """
         When you ask for stores near you, your phone sends its location, rounded to about a city block, to find them. We use it for that request only. It isn't saved to your account or our database, though our host's short-lived request logs can include it. Aisle doesn't track where you go.
         """),
         Section(title: "Photos", body: """
-        When you search with a photo, it's sent to our AI provider to work out what the item is. We don't keep the photo after answering. A few small thumbnails of your recent photo searches are kept on your phone only, for the Aisle+ tab.
+        When you search with a photo, or photograph a paper shopping list to add it, the photo is sent to our AI provider to work out the item or read the list. We don't keep the photo after answering. A few small thumbnails of your recent photo searches are kept on your phone only, for the Aisle+ tab.
         """),
         Section(title: "What stays on your phone", body: """
-        Your lists (unless shared), recent searches and their answers, saved offline maps, and your Aisle+ activity charts live on your phone. Deleting the app removes them. Our servers only count today's uses of the free plan's limited features.
+        Your lists (unless shared), recent searches and their answers, saved offline maps, and your Aisle+ activity charts live on your phone. When you plan a trip, the items on it are sent to find their aisles, and items Aisle doesn't recognize may go to our AI provider; they aren't kept. Deleting the app removes them. Our servers only count today's uses of the free plan's limited features.
         """),
         Section(title: "Who helps us run Aisle", body: """
-        We use a few service providers, only for running Aisle: a cloud host for our servers and database; Anthropic and/or OpenAI to understand searches and photos; Twilio to text sign-in codes; Resend to email sign-in codes, and reports of shared lists to us; Apple for purchases and Sign in with Apple; Google for Google sign-in; logo.dev for store logos; Sentry for error reports, which never include your searches, photos or contact details; and OpenStreetMap for store locations. They may only use your information to provide their service to us.
+        We use a few service providers, only for running Aisle: a cloud host for our servers and database; Anthropic and/or OpenAI to understand searches, photos, follow-up questions and items on trips; Twilio to text sign-in codes; Resend to email sign-in codes, and reports of shared lists to us; Apple for purchases and Sign in with Apple; Google for Google sign-in; logo.dev for store logos; Sentry for error reports, which never include your searches, photos or contact details; and OpenStreetMap for store locations. They may only use your information to provide their service to us.
         """),
         Section(title: "What we never do", body: """
         We don't sell your personal information, share it for advertising, or show ads. We don't use your data to train third-party AI models.
         """),
         Section(title: "How long we keep things", body: """
-        Account details are kept until you delete your account. When you do, we delete your name, contact details and sign-in records, end your sign-in with Apple, and unlink your searches and feedback from you. Your phone also gets a new random ID, and everything Aisle kept on it for your account is erased. Searches are deleted after a year and anonymous usage counts after six months. Records of sign-in codes, which keep only a scrambled form of your phone number or email, are deleted after two days, and the counts behind daily limits after about a week. Those counts stay with a scrambled form of how you signed in for that week even if you delete your account, so deleting doesn't reset them. Sign-in codes themselves expire within minutes.
+        Account details are kept until you delete your account. When you do, we delete your name, contact details and sign-in records, end your sign-in with Apple, and unlink your searches and feedback from you. Your phone also gets a new random ID, and everything Aisle kept on it for your account is erased. Searches are deleted after a year and usage counts after six months. Records of sign-in codes, which keep only a scrambled form of your phone number or email, are deleted after two days, and the counts behind daily limits after about a week. Those counts stay with a scrambled form of how you signed in for that week even if you delete your account, so deleting doesn't reset them. Sign-in codes themselves expire within minutes.
         """),
         Section(title: "Your choices and rights", body: """
         You can turn off usage sharing, change your name, or delete your account in the You tab. You can also email us to ask for a copy of your data or for it to be deleted, and we'll respond within 30 days. Depending on where you live, you may have more rights under laws like the CCPA or GDPR; email us and we'll help.
