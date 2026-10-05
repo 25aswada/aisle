@@ -60,6 +60,8 @@ class SearchRequest(BaseModel):
 
 # A photo is base64 JPEG or PNG; the app downsizes to about 1024 px, well under this.
 MAX_PHOTO_BASE64 = 4_000_000
+# Photos in one follow-up's conversation. The app sends one, with the newest message.
+MAX_CHAT_PHOTOS = 2
 
 
 def check_photo(value: str | None) -> str | None:
@@ -94,6 +96,15 @@ class ChatRequest(BaseModel):
     """A follow-up: the whole conversation so far, ending with the shopper's new message."""
     store_id: int
     messages: list[ChatMessageIn] = Field(min_length=1, max_length=40)
+
+    @field_validator("messages", mode="before")
+    @classmethod
+    def few_photos(cls, value):
+        """Counted before any photo is decoded."""
+        photos = sum(1 for m in value if isinstance(m, dict) and m.get("image")) if isinstance(value, list) else 0
+        if photos > MAX_CHAT_PHOTOS:
+            raise ValueError(f"at most {MAX_CHAT_PHOTOS} messages can have photos")
+        return value
 
     @field_validator("messages")
     @classmethod

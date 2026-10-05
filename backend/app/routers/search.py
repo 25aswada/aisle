@@ -19,11 +19,10 @@ from ..schemas import (
 from ..config import get_settings
 from ..limits import rate_limit
 from ..plus.access import (
-    FOLLOW_UP, PHOTO_SEARCH, ai_search_allowance, require_follow_up_allowed, require_signed_in, reserve_allowance,
-    search_allowance,
+    FOLLOW_UP, PHOTO_SEARCH, ai_search_allowance, require_follow_up_allowed, reserve_allowance, search_allowance,
 )
 from ..search import StoreNotFound, search
-from .auth import CallerDep
+from .auth import CallerDep, signed_in_for
 
 router = APIRouter()
 Database = Annotated[Session, Depends(get_db)]
@@ -101,7 +100,7 @@ def aisle_says(store_id: int, reply: str | None, result: SearchResponse | None =
     return ChatResponse(reply=reply, search=result, reply_signature=signature)
 
 
-@router.post("/chat", response_model=ChatResponse)
+@router.post("/chat", response_model=ChatResponse, dependencies=[signed_in_for("follow-ups")])
 def follow_up(
     body: ChatRequest, db: Database, model: Model, explainer: ExplainerDep, moderator: ModeratorDep,
     caller: CallerDep, device_id: DeviceID = None,
@@ -114,7 +113,6 @@ def follow_up(
 
     Needs an account. Free shoppers get a few a day: a follow-up with a photo counts as a
     photo search."""
-    require_signed_in(caller, "follow-ups")
     store = db.get(Store, body.store_id)
     if store is None:
         raise HTTPException(status_code=404, detail="Store not found")
@@ -153,11 +151,10 @@ def follow_up(
     return aisle_says(store.id, text, result)
 
 
-@router.post("/identify", response_model=IdentifyResponse)
+@router.post("/identify", response_model=IdentifyResponse, dependencies=[signed_in_for("photo search")])
 def identify(body: IdentifyRequest, db: Database, explainer: ExplainerDep, caller: CallerDep):
     """What the shopper photographed, as a search phrase the app then searches for.
     Needs an account. A photo search: free shoppers get a few a day."""
-    require_signed_in(caller, "photo search")
     if body.store_id is not None and db.get(Store, body.store_id) is None:
         raise HTTPException(status_code=404, detail="Store not found")
     rate_limit(db, caller.subject, "photo", get_settings().aisle_photos_per_hour)

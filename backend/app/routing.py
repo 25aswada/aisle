@@ -8,28 +8,35 @@ aisles, not diagonally). Coordinates are approximate floor-plan positions.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from time import monotonic
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .ai.intent import parse_intent
 from .ai.providers import LocationModel
+from .config import get_settings
 from .models import Store, StoreZone
 from .resolver import Resolution, resolve
 
 # Cap AI calls per route so one long list can't make the request slow.
 MAX_MODEL_CALLS_PER_ROUTE = 5
+# And their time: an AI call only starts when it would end (at its timeout) within this
+# many seconds of planning starting, well inside Heroku's 30-second limit. Items after
+# that are placed without the AI.
+MAX_MODEL_SECONDS_PER_ROUTE = 20.0
 DEFAULT_ENTRANCE = (0.5, 0.0)
 
 
 class LimitedModel:
-    def __init__(self, model: LocationModel, limit: int):
+    def __init__(self, model: LocationModel, limit: int, seconds: float = MAX_MODEL_SECONDS_PER_ROUTE):
         self.name = model.name
         self._model = model
         self._remaining = limit
+        self._last_start = monotonic() + seconds - get_settings().aisle_ai_timeout_seconds
 
     def locate(self, intent, retailer_name, layout):
-        if self._remaining <= 0:
+        if self._remaining <= 0 or monotonic() > self._last_start:
             return None
         self._remaining -= 1
         return self._model.locate(intent, retailer_name, layout)

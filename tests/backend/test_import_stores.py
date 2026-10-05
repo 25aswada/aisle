@@ -248,6 +248,41 @@ def test_nearby_matches_checking_every_store(engine, db_client, lat, lon, limit)
     assert [s["id"] for s in stores] == expected
 
 
+@pytest.mark.parametrize("lat, lon, limit", [
+    (64.8, -147.7, 100),       # Fairbanks: the nearest 100 are over a thousand miles away
+    (-33.9, 151.2, 20),        # Sydney: every store is thousands of miles away
+])
+def test_nearby_loads_a_bounded_number_of_stores(engine, db_client, monkeypatch, lat, lon, limit):
+    from sqlalchemy import event
+
+    from backend.app import main
+
+    monkeypatch.setattr(main, "NEARBY_CANDIDATES", 150)
+    with Session(engine) as session:
+        _many_stores(session, 2000)
+    queries, loaded = [], []
+
+    def record_query(conn, cursor, statement, parameters, context, executemany):
+        if statement.lstrip().startswith("SELECT") and "FROM stores" in statement:
+            queries.append(statement)
+
+    def record_load(store, context):
+        loaded.append(store.id)
+
+    event.listen(engine, "before_cursor_execute", record_query)
+    event.listen(Store, "load", record_load)
+    try:
+        stores = db_client.get("/stores/nearby", params={"lat": lat, "lon": lon, "limit": limit}).json()["stores"]
+    finally:
+        event.remove(engine, "before_cursor_execute", record_query)
+        event.remove(Store, "load", record_load)
+    assert len(stores) == limit
+    # Only the stores sent back are loaded, and every look at the table has a LIMIT (or
+    # picks those stores by id).
+    assert sorted(loaded) == sorted(s["id"] for s in stores)
+    assert queries and all("LIMIT" in q or ".id IN (" in q for q in queries)
+
+
 def test_nearby_across_the_antimeridian(engine, db_client):
     with Session(engine) as session:
         retailer = Retailer(name="Walmart")

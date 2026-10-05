@@ -621,6 +621,29 @@ def test_everyones_ai_has_a_daily_budget(api, engine, monkeypatch):
         assert budget.spent_today(db) == 2.0
 
 
+def test_part_of_the_ai_budget_is_kept_for_aisle_plus(api, apple, engine, monkeypatch):
+    app.dependency_overrides[get_explainer] = lambda: PricedAI("By the eggs.")
+    app.dependency_overrides[get_location_model] = lambda: None
+    monkeypatch.setattr(get_settings(), "aisle_ai_budget_usd_per_day", 4.0)
+    monkeypatch.setattr(get_settings(), "aisle_ai_budget_free_share", 0.5)
+    free, _, _ = account(engine, "phone-a")
+    subscriber, token, _ = account(engine, "phone-b")
+    assert sync(api, subscriber, apple.sign(appAccountToken=token)).json()["is_plus"] is True
+    assert api.post("/identify", json={"image": PHOTO}, headers=free).status_code == 200
+    assert search(api, free).json()["explanation"] == "By the eggs."
+    # $2 of $4: free shoppers (and guests) are paused, and Aisle+ still gets answers.
+    another_free, _, _ = account(engine, "phone-c")
+    assert api.post("/identify", json={"image": PHOTO}, headers=another_free).status_code == 503
+    assert search(api, free).json()["explanation"] is None
+    assert search(api).json()["explanation"] is None
+    assert api.post("/identify", json={"image": PHOTO}, headers=subscriber).status_code == 200
+    assert search(api, subscriber).json()["explanation"] == "By the eggs."
+    # The whole budget spent: Aisle+ pauses too.
+    assert api.post("/identify", json={"image": PHOTO}, headers=subscriber).status_code == 503
+    with Session(engine) as db:
+        assert budget.spent_today(db) == 4.0
+
+
 def test_every_ai_call_in_a_follow_up_is_charged(api, engine):
     app.dependency_overrides[get_explainer] = lambda: PricedAI()
     headers, _, _ = account(engine)

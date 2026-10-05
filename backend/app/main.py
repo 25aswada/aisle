@@ -6,7 +6,7 @@ import logging
 
 from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse
-from sqlalchemy import and_, func, or_, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.orm import Session
 
 from .ai.signing import check_signing_key
@@ -14,7 +14,8 @@ from .cleanup import start_in_background as start_cleanup
 from .config import get_settings
 from .database import get_db
 from .legal import privacy_page, support_page, terms_page
-from .middleware import RequestGuard
+from .limits import rate_limit
+from .middleware import RequestGuard, SecurityHeaders
 from .monitoring import configure_logging, init_sentry
 from .models import Retailer, Store
 from .routers import analytics as analytics_routes
@@ -25,6 +26,7 @@ from .routers import plus as plus_routes
 from .routers import shared_lists as shared_list_routes
 from .routers import route as route_routes
 from .routers import search as search_routes
+from .routers.auth import CallerDep
 from .schemas import NearbyResponse, NearbyStoreResponse, StoreResponse
 
 _on_heroku = get_settings().on_heroku
@@ -47,6 +49,8 @@ app = FastAPI(
     openapi_url=None if _on_heroku else "/openapi.json", lifespan=lifespan,
 )
 app.add_middleware(RequestGuard, redirect_http=_on_heroku)
+# Added last so it wraps the guard, whose own refusals get the headers too.
+app.add_middleware(SecurityHeaders, hsts=_on_heroku)
 app.include_router(search_routes.router)
 app.include_router(feedback_routes.router)
 app.include_router(list_routes.router)
@@ -69,7 +73,13 @@ Database = Annotated[Session, Depends(get_db)]
 EARTH_RADIUS_MILES = 3958.7613
 # Nearby search looks within growing circles until one holds enough stores.
 NEARBY_RADII_MILES = (10, 40, 160, 640, 2560)
+# Each circle (and past the last, anywhere) ranks at most this many stores, the nearest
+# by flat-map distance, so a lookup reads no more however many stores there are.
+NEARBY_CANDIDATES = 300
 SEARCH_LIMIT = 50
+# Words of a store search that are matched. Each adds a scan of every store's name,
+# retailer and address; real searches ("giant eagle strongsville") use two or three.
+SEARCH_WORDS = 6
 
 
 def haversine_miles(lat: float, lon: float, lat2: float, lon2: float) -> float:
@@ -99,6 +109,31 @@ def within_box(lat: float, lon: float, miles: float):
         else:
             conditions.append(Store.longitude.between(west, east))
     return and_(*conditions)
+
+
+def flat_distance(lat: float, lon: float):
+    """Squared flat-map distance from (lat, lon), as SQL: close enough to pick the nearest
+    few, then report true distances. Longitudes are compared the short way round."""
+    squeeze = cos(radians(lat))
+    across = func.abs(Store.longitude - lon)
+    across = case((across > 180, 360 - across), else_=across)
+    return (Store.latitude - lat) * (Store.latitude - lat) + across * across * squeeze * squeeze
+
+
+def nearest_stores(db: Session, lat: float, lon: float, limit: int,
+                   miles: float | None = None) -> list[tuple[float, Store]]:
+    """The `limit` nearest stores within `miles`, nearest first, or none when there aren't
+    that many; without `miles`, the nearest anywhere. Ranked by their coordinates alone
+    (cheap, unlike loading them all), then loads just those."""
+    query = select(Store.id, Store.latitude, Store.longitude)
+    if miles is not None:
+        query = query.where(within_box(lat, lon, miles))
+    points = db.execute(query.order_by(flat_distance(lat, lon), Store.id).limit(NEARBY_CANDIDATES)).all()
+    ranked = sorted((haversine_miles(lat, lon, p.latitude, p.longitude), p.id) for p in points)
+    nearest = [store_id for distance, store_id in ranked if miles is None or distance <= miles][:limit]
+    if miles is not None and len(nearest) < limit:
+        return []
+    return with_distances(lat, lon, db.scalars(select(Store).where(Store.id.in_(nearest))))
 
 
 def with_distances(lat: float, lon: float, stores) -> list[tuple[float, Store]]:
@@ -138,43 +173,39 @@ def health_head() -> None:
 @app.get("/stores/nearby", response_model=NearbyResponse)
 def nearby(
     db: Database,
+    caller: CallerDep,
     lat: Annotated[float | None, Query(ge=-90, le=90)] = None,
     lon: Annotated[float | None, Query(ge=-180, le=180)] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
 ):
     if lat is None or lon is None:
         return NearbyResponse(stores=[], message="Provide both lat and lon to find nearby stores.")
-    # Only stores inside the circle are certainly nearer than any store outside it.
-    for miles in NEARBY_RADII_MILES:
-        ranked = [
-            pair for pair in with_distances(lat, lon, db.scalars(select(Store).where(within_box(lat, lon, miles))))
-            if pair[0] <= miles
-        ]
-        if len(ranked) >= limit:
+    rate_limit(db, caller.subject, "store_lookup", get_settings().aisle_store_lookups_per_hour)
+    # Only stores inside the circle are certainly nearer than any store outside it. Past
+    # the last (nothing much for thousands of miles), the nearest anywhere.
+    for miles in (*NEARBY_RADII_MILES, None):
+        ranked = nearest_stores(db, lat, lon, limit, miles)
+        if ranked:
             break
-    else:
-        # Nothing much for thousands of miles. Rank every store by its coordinates alone
-        # (cheap, unlike loading them all), then load just the nearest.
-        points = db.execute(select(Store.id, Store.latitude, Store.longitude)).all()
-        nearest = sorted(points, key=lambda p: (haversine_miles(lat, lon, p.latitude, p.longitude), p.id))[:limit]
-        stores = db.scalars(select(Store).where(Store.id.in_([p.id for p in nearest]))).all()
-        ranked = with_distances(lat, lon, stores)
-    return NearbyResponse(stores=[nearby_response(d, s) for d, s in ranked[:limit]])
+    return NearbyResponse(stores=[nearby_response(d, s) for d, s in ranked])
 
 
 @app.get("/stores/search", response_model=list[NearbyStoreResponse] | list[StoreResponse])
 def search(
     db: Database,
+    caller: CallerDep,
     q: Annotated[str, Query(min_length=1, max_length=200)],
     lat: Annotated[float | None, Query(ge=-90, le=90)] = None,
     lon: Annotated[float | None, Query(ge=-180, le=180)] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = SEARCH_LIMIT,
 ):
-    """Stores whose name, retailer or address contain every word of the query, so
-    "giant eagle strongsville" works. With lat and lon, nearest first, with distances."""
-    words = q.lower().split()
+    """Stores whose name, retailer or address contain every word of the query (its first
+    few), so "giant eagle strongsville" works. With lat and lon, nearest first, with
+    distances."""
+    words = q.lower().split()[:SEARCH_WORDS]
     if not words:
         return []
+    rate_limit(db, caller.subject, "store_lookup", get_settings().aisle_store_lookups_per_hour)
     matches = []
     for word in words:
         # Treat SQL LIKE wildcard characters as literal manual-search text.
@@ -188,12 +219,7 @@ def search(
     query = select(Store).join(Store.retailer).where(*matches)
     if lat is None or lon is None:
         return db.scalars(query.order_by(Store.name, Store.id).limit(limit)).all()
-    # Rank in SQL by flat-map distance (close enough to pick the nearest few), then
-    # report true distances.
-    squeeze = cos(radians(lat))
-    flat = (Store.latitude - lat) * (Store.latitude - lat) + \
-        (Store.longitude - lon) * (Store.longitude - lon) * squeeze * squeeze
-    nearest = db.scalars(query.order_by(flat, Store.id).limit(limit)).all()
+    nearest = db.scalars(query.order_by(flat_distance(lat, lon), Store.id).limit(limit)).all()
     return [nearby_response(d, s) for d, s in with_distances(lat, lon, nearest)]
 
 
