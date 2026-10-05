@@ -143,8 +143,7 @@ final class AccountStore {
     /// Signs out here right away, and ends the session on the server in the background.
     func signOut() {
         let token = tokens.token
-        tokens.token = nil
-        account = nil
+        endSession()
         if let token, let auth {
             Task { await auth.signOut(token: token) }
         }
@@ -156,8 +155,7 @@ final class AccountStore {
         guard let token = tokens.token, let auth else { return }
         try await auth.deleteAccount(token: token)
         eraseLocalData()
-        tokens.token = nil
-        account = nil
+        endSession()
     }
 
     /// Changes the account here at once, then saves it to the server, e.g. a new first
@@ -219,8 +217,15 @@ final class AccountStore {
     }
 
     private func signOutLocally() {
+        endSession()
+    }
+
+    /// Forgets the session and starts a new install ID, so later anonymous requests from
+    /// this phone can't be tied back to the account on the server.
+    private func endSession() {
         tokens.token = nil
         account = nil
+        DeviceIdentity.rotate(defaults: defaults)
     }
 
     private func save() {
@@ -297,13 +302,18 @@ final class SignUpModel {
         firstName.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    /// A new account, or one that never got a name, asks for one before finishing.
+    /// A new account, or one that never got a name, asks for one before finishing. An Apple
+    /// account that chose to stay nameless isn't asked again at every sign-in.
     var needsName: Bool {
         guard let session else { return false }
-        return session.isNew || session.account.firstName.isEmpty
+        return session.isNew || (session.account.firstName.isEmpty && !isNameOptional)
     }
 
-    var canFinish: Bool { session != nil && !trimmedName.isEmpty }
+    /// Signed in with Apple: the shopper may have chosen not to share a name, and Apple
+    /// asks apps not to require it again, so the name step can be skipped.
+    var isNameOptional: Bool { method == .apple }
+
+    var canFinish: Bool { session != nil && (!trimmedName.isEmpty || isNameOptional) }
 
     /// A phone or email code just made a brand-new account. Someone who already uses Aisle
     /// another way (say Google) gets a second, empty account this way, so ask first.
@@ -362,11 +372,10 @@ final class SignUpModel {
     func finish() async -> AuthSession? {
         guard var finished = session else { return nil }
         guard needsName else { return finished }
-        guard !trimmedName.isEmpty else { return nil }
+        guard canFinish else { return nil }
+        let name = trimmedName.isEmpty ? nil : String(trimmedName.prefix(40))
         let saved = await run {
-            finished.account = try await auth.updateProfile(
-                token: finished.token, firstName: String(trimmedName.prefix(40)), wantsTips: wantsTips
-            )
+            finished.account = try await auth.updateProfile(token: finished.token, firstName: name, wantsTips: wantsTips)
         }
         return saved ? finished : nil
     }

@@ -27,10 +27,9 @@ struct TripStoresSheet: View {
                     ForEach(Array(stores.enumerated()), id: \.element.id) { index, store in
                         HStack(spacing: 12) {
                             Text("\(index + 1)")
-                                .font(Theme.font(14, .bold, relativeTo: .subheadline))
-                                .foregroundStyle(Theme.onAccent)
+                                .font(Theme.font(17, .bold, relativeTo: .headline))
+                                .foregroundStyle(Theme.accentInk)
                                 .frame(width: 26, height: 26)
-                                .background(Theme.accent, in: Circle())
                                 .accessibilityHidden(true)
                             StoreRow(store: store, isSelected: false)
                         }

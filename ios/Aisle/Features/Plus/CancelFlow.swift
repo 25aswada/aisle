@@ -149,13 +149,17 @@ struct CancelPlusFlow: View {
     /// Concrete, from their own use where we have it.
     private var changes: some View {
         VStack(alignment: .leading, spacing: 0) {
+            change("magnifyingglass", "Searches go back to \(MemberActivity.freeSearchesPerDay) a day", nil)
+            RowDivider()
             change(
                 "camera",
-                "Photo searches go back to \(MemberActivity.freePhotosPerDay) a day",
+                MemberActivity.freePhotosPerDay == 1
+                    ? "Photo searches go back to 1 a day"
+                    : "Photo searches go back to \(MemberActivity.freePhotosPerDay) a day",
                 extraPhotoSearches > 0 ? "You used \(extraPhotoSearches) more than that in the last 2 weeks." : nil
             )
             RowDivider()
-            change("bubble.left", "Follow-ups go back to \(MemberActivity.freeFollowUpsPerDay) a day", nil)
+            change("bubble.left", "Follow-ups go back to \(MemberActivity.freeFollowUpsPerSearch) per search", nil)
             RowDivider()
             change(
                 "person.2",
@@ -172,10 +176,9 @@ struct CancelPlusFlow: View {
     private func change(_ symbol: String, _ title: String, _ detail: String?) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: symbol)
-                .font(.system(size: 15, weight: .semibold))
+                .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(Theme.ink)
                 .frame(width: 34, height: 34)
-                .background(Theme.fill, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).font(Theme.font(15, .semibold, relativeTo: .subheadline)).foregroundStyle(Theme.ink)
                 if let detail {
@@ -235,10 +238,9 @@ struct CancelPlusFlow: View {
         VStack(spacing: 0) {
             Spacer()
             Image(systemName: "checkmark")
-                .font(.system(size: 30, weight: .bold))
-                .foregroundStyle(Theme.onAccent)
+                .font(.system(size: 52, weight: .bold))
+                .foregroundStyle(Theme.accentInk)
                 .frame(width: 84, height: 84)
-                .background(Theme.accent, in: Circle())
                 .shadow(color: Theme.glow.opacity(0.3), radius: 18, y: 10)
                 .accessibilityHidden(true)
             Text("You're all set")

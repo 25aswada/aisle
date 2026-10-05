@@ -31,7 +31,7 @@ struct RootView: View {
                 .tag(Tab.list)
 
             PlusTabView()
-                .tabItem { Label("Aisle+", systemImage: "sparkles") }
+                .tabItem { Label("Aisle+", image: "AislePlusTab") }
                 .tag(Tab.plus)
 
             YouView(api: api, location: location)

@@ -31,7 +31,6 @@ struct YouView: View {
     @State private var isAddingPhone = false
     @Environment(\.openURL) private var openURL
     @State private var confirmSignOut = false
-    @State private var isSigningIn = false
     @State private var confirmDelete = false
     @State private var managingSubscription = false
     @State private var deleteError: String?
@@ -46,9 +45,6 @@ struct YouView: View {
                     if let account = accounts.account {
                         ProfileHeader(account: account)
                             .padding(.top, 26)
-                    } else {
-                        SignedOutCard { isSigningIn = true }
-                            .padding(.top, 22)
                     }
                     if searches > 0 {
                         StatsCard(searches: searches, confirmed: confirmed, stores: ShopperStats.storeCount(storeIDs))
@@ -115,11 +111,6 @@ struct YouView: View {
             .sheet(isPresented: $showHowItWorks) {
                 HowAisleWorksSheet().presentationDetents([.medium, .large])
             }
-            .sheet(isPresented: $isSigningIn) {
-                if let auth = accounts.auth {
-                    AccountSheet(auth: auth)
-                }
-            }
             .confirmationDialog("Delete your account?", isPresented: $confirmDelete, titleVisibility: .visible) {
                 if plus.isPlus {
                     Button("Cancel Aisle+ first") { managingSubscription = true }
@@ -179,9 +170,8 @@ struct YouView: View {
                     if let store = storeSelection.current {
                         RetailerLogo(url: store.retailerLogoURL, size: 44) {
                             Image(systemName: "storefront")
-                                .font(.system(size: 18, weight: .semibold))
+                                .font(.system(size: 22, weight: .semibold))
                                 .frame(width: 44, height: 44)
-                                .background(Theme.fill, in: RoundedRectangle(cornerRadius: 13, style: .continuous))
                         }
                         VStack(alignment: .leading, spacing: 2) {
                             Text(store.name).font(Theme.font(16, .semibold, relativeTo: .body)).lineLimit(1)
@@ -398,10 +388,9 @@ private struct ProfileHeader: View {
                     ))
                     .rotationEffect(.degrees(spin ? 360 : 0))
                 Circle().fill(Theme.background).padding(4)
-                Circle().fill(Theme.accent).padding(9)
                 Text(account.initial)
-                    .font(Theme.font(40, .bold, relativeTo: .largeTitle))
-                    .foregroundStyle(Theme.onAccent)
+                    .font(Theme.font(44, .bold, relativeTo: .largeTitle))
+                    .foregroundStyle(Theme.accentInk)
             }
             .frame(width: 108, height: 108)
             .accessibilityHidden(true)
@@ -448,31 +437,6 @@ private struct ProfileHeader: View {
         guard phone.hasPrefix("+1"), digits.count == 11 else { return phone }
         let d = Array(digits.dropFirst())
         return "(\(String(d[0..<3]))) \(String(d[3..<6]))-\(String(d[6..<10]))"
-    }
-}
-
-private struct SignedOutCard: View {
-    let onCreate: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 10) {
-                AisleMark(size: 22)
-                Text("Make Aisle yours")
-                    .font(Theme.font(20, .bold, relativeTo: .title3))
-            }
-            Text("Aisle needs a free account. Sign in to share lists with family and keep Aisle+ on a new phone.")
-                .font(Theme.font(15, relativeTo: .subheadline))
-                .foregroundStyle(Theme.secondaryInk)
-                .fixedSize(horizontal: false, vertical: true)
-            Button("Create an account or sign in", action: onCreate)
-                .buttonStyle(.aisleAccent)
-                .accessibilityIdentifier("createAccountRowButton")
-        }
-        .foregroundStyle(Theme.ink)
-        .padding(18)
-        .background(Theme.surface.opacity(0.92), in: RoundedRectangle(cornerRadius: 28, style: .continuous))
-        .shadow(color: Theme.ink.opacity(0.06), radius: 16, y: 8)
     }
 }
 

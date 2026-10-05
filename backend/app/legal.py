@@ -14,6 +14,7 @@ CONTACT_EMAIL = "support@shopaisle.app"
 SUMMARY = [
     "Your location is only used to find stores near you. We don't keep it.",
     "We never sell your data or show ads.",
+    "Your searches and photos go to an AI provider (Anthropic or OpenAI) to find answers. They can't train on them.",
     "Aisle's answers are best guesses. Always check the shelf.",
     "Aisle+ is billed by Apple. Cancel anytime in Settings.",
     "Delete your account anytime from the You tab.",
@@ -33,7 +34,7 @@ TERMS = [
 ]
 
 PRIVACY = [
-    ("What we collect", """• What you search for, the store you searched in, and the answer Aisle gave, linked to a random ID for your device.
+    ("What we collect", """• What you search for, the store you searched in, and the answer Aisle gave, linked to a random ID for your phone and, while you're signed in, to your account. Signing out or deleting your account gives your phone a new ID, so later searches aren't linked to the old account.
 • Feedback you give, like "Found it", "Not here" or a corrected spot, linked to your account so repeat reports count once.
 • Your account: your first name, and your email, phone number, or Apple or Google sign-in ID.
 • If you share a list: its name, its items, and the first names of the people on it.
@@ -43,9 +44,9 @@ PRIVACY = [
     ("Location", """When you ask for stores near you, your phone sends its location, rounded to about a city block, to find them. We use it for that request only. It isn't saved to your account or our database, though our host's short-lived request logs can include it. Aisle doesn't track where you go."""),
     ("Photos", """When you search with a photo, it's sent to our AI provider to work out what the item is. We don't keep the photo after answering. A few small thumbnails of your recent photo searches are kept on your phone only, for the Aisle+ tab."""),
     ("What stays on your phone", """Your lists (unless shared), recent searches and their answers, saved offline maps, and your Aisle+ activity charts live on your phone. Deleting the app removes them. Our servers only count today's uses of the free plan's limited features."""),
-    ("Who helps us run Aisle", """We use a few service providers, only for running Aisle: a cloud host for our servers and database; Anthropic and/or OpenAI to understand searches and photos; Twilio to text sign-in codes; Resend to email sign-in codes; Apple for purchases and Sign in with Apple; Google for Google sign-in; logo.dev for store logos; and OpenStreetMap for store locations. They may only use your information to provide their service to us."""),
+    ("Who helps us run Aisle", """We use a few service providers, only for running Aisle: a cloud host for our servers and database; Anthropic and/or OpenAI to understand searches and photos; Twilio to text sign-in codes; Resend to email sign-in codes; Apple for purchases and Sign in with Apple; Google for Google sign-in; logo.dev for store logos; Sentry for error reports, which never include your searches, photos or contact details; and OpenStreetMap for store locations. They may only use your information to provide their service to us."""),
     ("What we never do", """We don't sell your personal information, share it for advertising, or show ads. We don't use your data to train third-party AI models."""),
-    ("How long we keep things", """Account details are kept until you delete your account. When you do, we delete your name, contact details and sign-in records, end your sign-in with Apple, and unlink your searches and feedback from you. Searches are deleted after a year and anonymous usage counts after six months. Records of sign-in codes, which keep only a scrambled form of your phone number or email, are deleted after two days, and the counts behind daily limits after about a week. Those counts stay with a scrambled form of how you signed in for that week even if you delete your account, so deleting doesn't reset them. Sign-in codes themselves expire within minutes."""),
+    ("How long we keep things", """Account details are kept until you delete your account. When you do, we delete your name, contact details and sign-in records, end your sign-in with Apple, and unlink your searches and feedback from you. Your phone also gets a new random ID, and everything Aisle kept on it for your account is erased. Searches are deleted after a year and anonymous usage counts after six months. Records of sign-in codes, which keep only a scrambled form of your phone number or email, are deleted after two days, and the counts behind daily limits after about a week. Those counts stay with a scrambled form of how you signed in for that week even if you delete your account, so deleting doesn't reset them. Sign-in codes themselves expire within minutes."""),
     ("Your choices and rights", """You can turn off usage sharing, change your name, or delete your account in the You tab. You can also email us to ask for a copy of your data or for it to be deleted, and we'll respond within 30 days. Depending on where you live, you may have more rights under laws like the CCPA or GDPR; email us and we'll help."""),
     ("Children", """Aisle isn't meant for children under 13, and we don't knowingly collect their information. If you think a child has given us information, email us and we'll delete it."""),
     ("Changes and contact", f"""If we change this policy in an important way, we'll tell you in the app first. Questions or requests: {CONTACT_EMAIL}."""),

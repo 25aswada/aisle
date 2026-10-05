@@ -138,9 +138,8 @@ private struct PlusMemberView: View {
             Image("AisleLogo")
                 .resizable().renderingMode(.template).scaledToFit()
                 .foregroundStyle(Theme.onAccent)
-                .frame(width: 24, height: 24)
+                .frame(width: 32, height: 32)
                 .frame(width: 40, height: 40)
-                .background(.white.opacity(0.55), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                 .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(planTitle).font(Theme.font(15, .bold, relativeTo: .subheadline))
@@ -533,7 +532,6 @@ private struct FamilyTile: View {
 
     @State private var bob = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    private static let colors: [Color] = [Color(hex: 0xE2CFF9), Color(hex: 0xF9CFE0), Color(hex: 0xFFDDC6)]
     private static let spots: [CGPoint] = [CGPoint(x: 18, y: 36), CGPoint(x: 58, y: 18), CGPoint(x: 98, y: 40)]
 
     var body: some View {
@@ -542,11 +540,9 @@ private struct FamilyTile: View {
             ZStack(alignment: .topLeading) {
                 ForEach(Array(people.prefix(3).enumerated()), id: \.offset) { index, name in
                     Text(String(name.prefix(1)).uppercased())
-                        .font(Theme.font(13, .bold, relativeTo: .footnote))
-                        .foregroundStyle(Theme.onAccent)
+                        .font(Theme.font(24, .bold, relativeTo: .title2))
+                        .foregroundStyle(Theme.accentInk)
                         .frame(width: 36, height: 36)
-                        .background(Self.colors[index], in: Circle())
-                        .overlay(Circle().strokeBorder(Theme.surface, lineWidth: 2.5))
                         .position(Self.spots[index])
                         .offset(y: bob && !reduceMotion ? (index.isMultiple(of: 2) ? -3 : 3) : 0)
                 }
@@ -766,6 +762,7 @@ struct PaywallView: View {
     @Environment(PlusStore.self) private var plus
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var plan: PlusStore.Plan = .yearly
     @State private var trial: String?
     @State private var isBuying = false
@@ -776,15 +773,21 @@ struct PaywallView: View {
     /// Subscriptions use Apple's standard license agreement.
     static let termsURL = URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!
 
-    private static let table: [(String, Bool)] = [
-        ("Find items in any store", true),
-        ("Unlimited lists", false),
-        ("Unlimited photo search", false),
-        ("Unlimited follow-ups", false),
-        ("Shared family lists", false),
-        ("Multi-store trips", false),
-        ("Offline store maps", false),
-    ]
+    /// What each plan gets. Free values are what the free plan allows; Aisle+ is a check.
+    private enum FreeValue { case included, notIncluded, text(String) }
+
+    private var table: [(String, FreeValue)] {
+        [
+            ("Find items in any store", .included),
+            ("Unlimited search", .text("\(plus.freeSearchesPerDay)/day")),
+            ("Unlimited photo search", .text("\(plus.freePhotoSearchesPerDay)/day")),
+            ("Unlimited follow-ups", .text("\(plus.freeFollowUpsPerSearch)/search")),
+            ("Unlimited lists", .text("1")),
+            ("Shared family lists", .notIncluded),
+            ("Multi-store trips", .notIncluded),
+            ("Offline store maps", .notIncluded),
+        ]
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -831,6 +834,7 @@ struct PaywallView: View {
         .task {
             await plus.load()
             trial = await plus.trialLabel(.yearly)
+            await plus.refreshUsage()
         }
         .alert("Couldn't complete the purchase", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
             Button("OK", role: .cancel) {}
@@ -892,8 +896,9 @@ struct PaywallView: View {
                     .foregroundStyle(Theme.onAccent)
                     .frame(maxWidth: .infinity, minHeight: 58)
                     .background {
-                        TimelineView(.animation(minimumInterval: 1 / 20)) { timeline in
-                            FlowingGradient(time: timeline.date.timeIntervalSinceReferenceDate)
+                        // Still under Reduce Motion: the gradient holds its first frame.
+                        TimelineView(.animation(minimumInterval: 1 / 20, paused: reduceMotion)) { timeline in
+                            FlowingGradient(time: reduceMotion ? 0 : timeline.date.timeIntervalSinceReferenceDate)
                         }
                     }
                     .clipShape(Capsule())
@@ -929,7 +934,7 @@ struct PaywallView: View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
                 Text("Features").frame(maxWidth: .infinity, alignment: .leading)
-                Text("Free").frame(width: 52)
+                Text("Free").frame(width: 56)
                 Text("Aisle+").fontWeight(.bold).foregroundStyle(Theme.accentInk).frame(width: 64)
             }
             .font(Theme.font(15, relativeTo: .subheadline))
@@ -937,21 +942,28 @@ struct PaywallView: View {
             .frame(minHeight: 34)
             .accessibilityHidden(true)
 
-            ForEach(Self.table, id: \.0) { feature, free in
+            ForEach(table, id: \.0) { feature, free in
                 HStack(spacing: 0) {
                     Text(feature)
                         .font(Theme.font(16, relativeTo: .body))
                         .foregroundStyle(Theme.ink)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     Group {
-                        if free {
+                        switch free {
+                        case .included:
                             Image(systemName: "checkmark").font(.system(size: 15, weight: .medium))
                                 .foregroundStyle(Theme.secondaryInk)
-                        } else {
+                        case .notIncluded:
                             Capsule().fill(Theme.secondaryInk.opacity(0.6)).frame(width: 14, height: 1.5)
+                        case .text(let value):
+                            Text(value)
+                                .font(Theme.font(13, .semibold, relativeTo: .footnote))
+                                .foregroundStyle(Theme.secondaryInk)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.8)
                         }
                     }
-                    .frame(width: 52)
+                    .frame(width: 56)
                     Image(systemName: "checkmark")
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(Color(hex: 0xDC6F9C))
@@ -959,7 +971,7 @@ struct PaywallView: View {
                 }
                 .frame(minHeight: 44)
                 .accessibilityElement(children: .ignore)
-                .accessibilityLabel("\(feature): \(free ? "free and Aisle+" : "Aisle+ only")")
+                .accessibilityLabel(accessibilityLabel(feature, free))
             }
         }
         .padding(.horizontal, 22)
@@ -967,6 +979,14 @@ struct PaywallView: View {
         .padding(.bottom, 12)
         .background(Theme.surface.opacity(0.92), in: RoundedRectangle(cornerRadius: 28, style: .continuous))
         .shadow(color: Theme.ink.opacity(0.06), radius: 16, y: 8)
+    }
+
+    private func accessibilityLabel(_ feature: String, _ free: FreeValue) -> String {
+        switch free {
+        case .included: return "\(feature): free and Aisle+"
+        case .notIncluded: return "\(feature): Aisle+ only"
+        case .text(let value): return "\(feature): free plan \(value), unlimited with Aisle+"
+        }
     }
 
     private var ctaTitle: String {
@@ -1015,6 +1035,289 @@ struct PaywallView: View {
         } catch {
             errorMessage = "Couldn't reach the App Store. Try again in a moment."
         }
+    }
+}
+
+// MARK: - Offer at the end of sign-up
+
+/// Shown once, right after a new account is made: what Aisle+ adds, an honest trial
+/// timeline, and both plans. "Not now" is always visible and goes straight into the app.
+struct OnboardingPlusOffer: View {
+    let firstName: String?
+    let storeName: String?
+    let onDone: () -> Void
+
+    @Environment(PlusStore.self) private var plus
+    @Environment(\.openURL) private var openURL
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var plan: PlusStore.Plan = .yearly
+    @State private var trialDays: Int?
+    @State private var isBuying = false
+    @State private var welcomed = false
+    @State private var errorMessage: String?
+
+    private static let benefits: [(symbol: String, title: String)] = [
+        ("magnifyingglass", "Unlimited search and follow-ups"),
+        ("person.2", "Shared family lists"),
+        ("map", "Offline store maps"),
+        ("point.topleft.down.to.point.bottomright.curvepath", "Multi-store trips"),
+    ]
+
+    private var hasTrial: Bool { plan == .yearly && trialDays != nil }
+
+    var body: some View {
+        Group {
+            if welcomed {
+                PlusWelcome(onDone: onDone)
+                    .transition(.opacity.combined(with: .scale(scale: 0.96)))
+            } else {
+                offer.transition(.opacity)
+            }
+        }
+        .background(AisleBackground())
+        .environment(\.pressHaptics, true)
+        .sensoryFeedback(.success, trigger: welcomed)
+        .task {
+            await plus.load()
+            trialDays = await plus.trialDays(.yearly)
+            if plus.isPlus { onDone() }
+        }
+        .alert("Couldn't complete the purchase", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "")
+        }
+    }
+
+    private var offer: some View {
+        VStack(spacing: 0) {
+            HStack {
+                PlusWordmark(size: 20)
+                Spacer()
+                Button("Not now", action: onDone)
+                    .font(Theme.font(15, .semibold, relativeTo: .subheadline))
+                    .foregroundStyle(Theme.secondaryInk)
+                    .padding(.horizontal, 12)
+                    .frame(minHeight: 44)
+                    .accessibilityIdentifier("plusOfferNotNow")
+            }
+            .padding(.horizontal, 18)
+            .padding(.top, 8)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    headline
+                    Text(subtitle)
+                        .font(Theme.font(15, relativeTo: .subheadline))
+                        .foregroundStyle(Theme.secondaryInk)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 8)
+
+                    VStack(spacing: 0) {
+                        ForEach(Array(Self.benefits.enumerated()), id: \.offset) { index, benefit in
+                            if index > 0 { Divider().overlay(Theme.hairline) }
+                            HStack(spacing: 14) {
+                                Image(systemName: benefit.symbol)
+                                    .font(.system(size: 19, weight: .regular))
+                                    .foregroundStyle(Color(hex: 0xDC6F9C))
+                                    .frame(width: 26)
+                                Text(benefit.title)
+                                    .font(Theme.font(16, .semibold, relativeTo: .body))
+                                    .foregroundStyle(Theme.ink)
+                                Spacer(minLength: 0)
+                            }
+                            .frame(minHeight: 46)
+                        }
+                    }
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 4)
+                    .background(Theme.surface.opacity(0.92), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+                    .shadow(color: Theme.ink.opacity(0.06), radius: 14, y: 8)
+                    .padding(.top, 16)
+                    .accessibilityElement(children: .combine)
+
+                    if hasTrial, let days = trialDays {
+                        TrialTimeline(days: days, price: plus.price(.yearly))
+                            .padding(.top, 18)
+                            .padding(.horizontal, 4)
+                            .transition(.opacity)
+                    }
+                }
+                .padding(.horizontal, 22)
+                .padding(.top, 10)
+                .padding(.bottom, 12)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+
+            VStack(spacing: 0) {
+                HStack(spacing: 10) {
+                    PlanTile(
+                        title: "Yearly",
+                        badge: "−\(plus.yearlySavingsPercent)%",
+                        price: plus.price(.yearly), unit: "/yr",
+                        note: trialDays.map { "\(plus.yearlyPerMonth)/mo · \($0) days free" } ?? "\(plus.yearlyPerMonth)/mo",
+                        selected: plan == .yearly
+                    ) { select(.yearly) }
+                    PlanTile(
+                        title: "Monthly", badge: nil,
+                        price: plus.price(.monthly), unit: "/mo",
+                        note: trialDays == nil ? "\(plus.monthlyPerYear)/yr" : "No free trial",
+                        selected: plan == .monthly
+                    ) { select(.monthly) }
+                }
+
+                Button { Task { await buy() } } label: {
+                    ZStack {
+                        if isBuying {
+                            ProgressView().tint(Theme.onAccent)
+                        } else {
+                            Text(ctaTitle).font(Theme.font(18, .bold, relativeTo: .headline))
+                        }
+                    }
+                    .foregroundStyle(Theme.onAccent)
+                    .frame(maxWidth: .infinity, minHeight: 58)
+                    .background {
+                        TimelineView(.animation(minimumInterval: 1 / 20, paused: reduceMotion)) { timeline in
+                            FlowingGradient(time: reduceMotion ? 0 : timeline.date.timeIntervalSinceReferenceDate)
+                        }
+                    }
+                    .clipShape(Capsule())
+                    .shadow(color: Theme.glow.opacity(0.28), radius: 14, y: 10)
+                }
+                .buttonStyle(PressableCardStyle())
+                .sensoryFeedback(.impact(weight: .medium), trigger: isBuying) { _, new in new }
+                .disabled(isBuying || !plus.canPurchase)
+                .padding(.top, 12)
+                .accessibilityIdentifier("plusOfferPurchaseButton")
+
+                Text(finePrint)
+                    .font(Theme.font(12, relativeTo: .caption))
+                    .foregroundStyle(Theme.secondaryInk)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 8)
+
+                HStack(spacing: 16) {
+                    Button("Restore") { Task { await restore() } }
+                    Button("Terms of Use") { openURL(PaywallView.termsURL) }
+                    Button("Privacy Policy") { openURL(PaywallView.privacyURL) }
+                }
+                .font(Theme.font(12, .semibold, relativeTo: .caption))
+                .foregroundStyle(Theme.secondaryInk)
+                .padding(.top, 6)
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 10)
+            .padding(.bottom, 8)
+        }
+    }
+
+    private var headline: some View {
+        let name = firstName?.trimmingCharacters(in: .whitespaces) ?? ""
+        let lead = name.isEmpty ? "Try Aisle+\n" : "\(name), try Aisle+\n"
+        let accent: String = {
+            if hasTrial, let days = trialDays { return days == 7 ? "free for 7 days" : "free for \(days) days" }
+            return plan == .monthly ? "for \(plus.price(.monthly)) a month" : "for \(plus.yearlyPerMonth) a month"
+        }()
+        return (Text(lead) + Text(accent).foregroundStyle(Theme.accentInk))
+            .font(Theme.font(31, .bold, relativeTo: .largeTitle))
+            .tracking(-1)
+            .foregroundStyle(Theme.ink)
+            .fixedSize(horizontal: false, vertical: true)
+            .contentTransition(.opacity)
+            .accessibilityAddTraits(.isHeader)
+    }
+
+    private var subtitle: String {
+        if let storeName { return "Your account is ready. Here’s what Aisle+ adds at \(storeName)." }
+        return "Your account is ready. Here’s what Aisle+ adds."
+    }
+
+    private var ctaTitle: String {
+        if !plus.canPurchase { return plus.isLoading ? "Loading…" : "Not available yet" }
+        if hasTrial { return trialDays == 7 ? "Start my free week" : "Start my free trial" }
+        return "Get Aisle+"
+    }
+
+    private var finePrint: String {
+        if let error = plus.loadError, !plus.canPurchase { return error }
+        switch plan {
+        case .yearly:
+            let start = trialDays.map { "\($0) days free, then " } ?? ""
+            return "\(start)\(plus.price(.yearly))/year. Renews automatically. Cancel anytime in Settings."
+        case .monthly:
+            return "\(plus.price(.monthly))/month. Renews automatically. Cancel anytime in Settings."
+        }
+    }
+
+    private func select(_ newPlan: PlusStore.Plan) {
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) { plan = newPlan }
+    }
+
+    private func buy() async {
+        isBuying = true
+        defer { isBuying = false }
+        do {
+            if try await plus.purchase(plan) == .purchased {
+                withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) { welcomed = true }
+            }
+        } catch {
+            errorMessage = (error as? LocalizedError)?.errorDescription ?? "Something went wrong. You weren't charged."
+        }
+    }
+
+    private func restore() async {
+        do {
+            try await plus.restore()
+            if plus.isPlus {
+                withAnimation { welcomed = true }
+            } else {
+                errorMessage = "No Aisle+ purchase was found for this Apple ID."
+            }
+        } catch {
+            errorMessage = "Couldn't reach the App Store. Try again in a moment."
+        }
+    }
+}
+
+/// Today → last day to cancel → first charge, so nobody is surprised by the bill.
+private struct TrialTimeline: View {
+    let days: Int
+    let price: String
+
+    private var rows: [(String, String)] {
+        [("Today", "Everything in Aisle+ unlocks."),
+         ("Day \(max(1, days - 1))", "Last full day to cancel. Nothing charged yet."),
+         ("Day \(days)", "\(price)/year starts. Cancel anytime in Settings.")]
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
+                HStack(alignment: .top, spacing: 14) {
+                    VStack(spacing: 0) {
+                        Group {
+                            if index == 0 {
+                                Circle().fill(Theme.accent)
+                            } else {
+                                Circle().strokeBorder(Theme.secondaryInk.opacity(0.6), lineWidth: 2)
+                            }
+                        }
+                        .frame(width: 12, height: 12)
+                        .padding(.top, 4)
+                        if index < rows.count - 1 {
+                            Rectangle().fill(Theme.hairline).frame(width: 2).frame(minHeight: 26)
+                        }
+                    }
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(row.0).font(Theme.font(15, .semibold, relativeTo: .subheadline)).foregroundStyle(Theme.ink)
+                        Text(row.1).font(Theme.font(13, relativeTo: .footnote)).foregroundStyle(Theme.secondaryInk)
+                    }
+                    .padding(.bottom, 12)
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -1149,14 +1452,12 @@ private struct PlanTile: View {
             }
             .overlay(alignment: .topTrailing) {
                 Image(systemName: "checkmark")
-                    .font(.system(size: 12, weight: .heavy))
-                    .foregroundStyle(Theme.onAccent)
+                    .font(.system(size: 17, weight: .heavy))
+                    .foregroundStyle(Theme.accentInk)
                     .frame(width: 28, height: 28)
-                    .background(Theme.accent, in: Circle())
-                    .shadow(color: Theme.glow.opacity(0.3), radius: 5, y: 4)
                     .scaleEffect(selected ? 1 : 0.4)
                     .opacity(selected ? 1 : 0)
-                    .offset(x: 8, y: -10)
+                    .padding(10)
             }
             .shadow(color: Theme.glow.opacity(selected ? 0.18 : 0), radius: 12, y: 10)
             .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
@@ -1168,34 +1469,36 @@ private struct PlanTile: View {
     }
 }
 
-/// After buying: a burst around the badge and a first thing to try.
+/// After buying: a burst around the bare Aisle mark (a plain fade under Reduce Motion)
+/// and a first thing to try.
 private struct PlusWelcome: View {
     let onDone: () -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var burst = false
 
     var body: some View {
         VStack(spacing: 0) {
             Spacer()
             ZStack {
-                ForEach(0..<12, id: \.self) { index in
-                    let angle = Double(index) / 12 * 2 * .pi
-                    Circle()
-                        .fill(Theme.accentColors[index % Theme.accentColors.count])
-                        .frame(width: index.isMultiple(of: 3) ? 11 : 8)
-                        .offset(x: burst ? cos(angle) * 130 : 0, y: burst ? sin(angle) * 130 : 0)
-                        .opacity(burst ? 0 : 1)
+                if !reduceMotion {
+                    ForEach(0..<12, id: \.self) { index in
+                        let angle = Double(index) / 12 * 2 * .pi
+                        Circle()
+                            .fill(Theme.accentColors[index % Theme.accentColors.count])
+                            .frame(width: index.isMultiple(of: 3) ? 11 : 8)
+                            .offset(x: burst ? cos(angle) * 130 : 0, y: burst ? sin(angle) * 130 : 0)
+                            .opacity(burst ? 0 : 1)
+                    }
                 }
                 Image("AisleLogo")
                     .resizable()
                     .renderingMode(.template)
                     .scaledToFit()
-                    .foregroundStyle(Theme.onAccent)
-                    .frame(width: 58, height: 58)
-                    .frame(width: 120, height: 120)
-                    .background(Theme.accent, in: RoundedRectangle(cornerRadius: 36, style: .continuous))
-                    .shadow(color: Theme.glow.opacity(0.35), radius: 22, y: 14)
-                    .scaleEffect(burst ? 1 : 0.8)
+                    .foregroundStyle(Theme.ink)
+                    .frame(width: 96, height: 96)
+                    .scaleEffect(burst || reduceMotion ? 1 : 0.8)
+                    .opacity(burst || !reduceMotion ? 1 : 0)
             }
             .accessibilityHidden(true)
             (Text("Welcome to ") + Text("Aisle+").foregroundStyle(Theme.accentInk))
@@ -1216,7 +1519,7 @@ private struct PlusWelcome: View {
         .padding(.horizontal, 26)
         .padding(.bottom, 24)
         .onAppear {
-            withAnimation(.spring(response: 0.6, dampingFraction: 0.6)) { burst = true }
+            withAnimation(reduceMotion ? .easeOut(duration: 0.25) : .spring(response: 0.6, dampingFraction: 0.6)) { burst = true }
         }
     }
 }

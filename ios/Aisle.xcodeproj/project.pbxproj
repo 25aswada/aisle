@@ -538,6 +538,7 @@
 			buildConfigurationList = F3AB02678589FDD52AAEB7D9 /* Build configuration list for PBXNativeTarget "Aisle" */;
 			buildPhases = (
 				AAF071400FE981485CB7B86A /* Sources */,
+				C8A71C8D4194F8AD52997148 /* Allow a local test server (Debug only) */,
 				8F54142B489C53A72304E3D8 /* Resources */,
 			);
 			buildRules = (
@@ -620,6 +621,28 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		C8A71C8D4194F8AD52997148 /* Allow a local test server (Debug only) */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Allow a local test server (Debug only)";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "[ \"$CONFIGURATION\" = \"Debug\" ] || exit 0\nplist=\"$TARGET_BUILD_DIR/$INFOPLIST_PATH\"\nbuddy=/usr/libexec/PlistBuddy\n$buddy -c \"Delete :NSLocalNetworkUsageDescription\" \"$plist\" 2>/dev/null || true\n$buddy -c \"Add :NSLocalNetworkUsageDescription string 'Aisle can connect to a test server on your local network.'\" \"$plist\"\n$buddy -c \"Delete :NSAppTransportSecurity\" \"$plist\" 2>/dev/null || true\n$buddy -c \"Add :NSAppTransportSecurity dict\" \"$plist\"\n$buddy -c \"Add :NSAppTransportSecurity:NSAllowsLocalNetworking bool true\" \"$plist\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		AAF071400FE981485CB7B86A /* Sources */ = {

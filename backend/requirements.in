@@ -10,3 +10,5 @@ httpx>=0.27,<1
 anthropic>=1.11,<2
 openai>=2,<3
 pyjwt[crypto]>=2.9,<3
+# Error reports, only when SENTRY_DSN is set.
+sentry-sdk[fastapi]>=2.30,<3

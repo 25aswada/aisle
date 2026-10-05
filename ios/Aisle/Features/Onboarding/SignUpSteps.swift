@@ -8,11 +8,9 @@ struct SignUpMethodStep: View {
     let onPhone: () -> Void
     let onEmail: () -> Void
     let onProviderSuccess: () -> Void
-    /// Nil hides "Not now": in onboarding an account is required.
-    let onSkip: (() -> Void)?
 
     var body: some View {
-        OnboardingPage(onBack: onBack, trailingLabel: onSkip == nil ? nil : "Not now", onTrailing: onSkip) {
+        OnboardingPage(onBack: onBack) {
             VStack(alignment: .leading, spacing: 12) {
                 // Without a Back button the top bar already shows the mark.
                 if onBack != nil {
@@ -299,6 +297,9 @@ struct CodeStep: View {
         .onChange(of: model.code) {
             if model.isCodeComplete { verify() }
         }
+        // A tick per digit, and a buzz when the code is wrong.
+        .sensoryFeedback(.selection, trigger: model.code.count)
+        .sensoryFeedback(.error, trigger: model.errorMessage) { _, new in new != nil }
     }
 
     /// One hidden field drives six boxes, so paste and the one-time-code keyboard suggestion work.
@@ -424,10 +425,9 @@ struct NameStep: View {
         OnboardingPage(onBack: onBack, progress: "Step 3 of 3") {
             VStack(alignment: .leading, spacing: 12) {
                 Text(model.trimmedName.first.map { String($0).uppercased() } ?? "?")
-                    .font(Theme.font(26, .bold, relativeTo: .title))
-                    .foregroundStyle(Theme.onAccent)
-                    .frame(width: 64, height: 64)
-                    .background(Theme.accent, in: Circle())
+                    .font(Theme.font(48, .bold, relativeTo: .largeTitle))
+                    .foregroundStyle(Theme.accentInk)
+                    .frame(width: 64, height: 64, alignment: .leading)
                     .accessibilityHidden(true)
                     .padding(.bottom, 10)
                 Text("What should we call you?")
@@ -436,7 +436,9 @@ struct NameStep: View {
                     .foregroundStyle(Theme.ink)
                     .fixedSize(horizontal: false, vertical: true)
                     .accessibilityAddTraits(.isHeader)
-                OnboardingBody(text: "Just a first name is fine.")
+                OnboardingBody(text: model.isNameOptional
+                               ? "Just a first name is fine, or leave it blank."
+                               : "Just a first name is fine.")
                 Text("First name")
                     .font(Theme.font(13, .semibold, relativeTo: .footnote))
                     .foregroundStyle(Theme.secondaryInk)
@@ -458,7 +460,11 @@ struct NameStep: View {
             }
         } footer: {
             Button(action: create) {
-                if model.isWorking { ProgressView() } else { Text("Create account") }
+                if model.isWorking {
+                    ProgressView()
+                } else {
+                    Text(model.isNameOptional && model.trimmedName.isEmpty ? "Continue without a name" : "Create account")
+                }
             }
             .buttonStyle(.aisleAccent)
             .disabled(!model.canFinish || model.isWorking)

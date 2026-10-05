@@ -11,8 +11,12 @@ struct OnboardingFlow: View {
     let onFinish: () -> Void
 
     @Environment(AccountStore.self) private var accounts
+    @Environment(PlusStore.self) private var plus
+    @Environment(StoreSelection.self) private var storeSelection
     @State private var path: [AccountFlowStep] = []
     @State private var signUp: SignUpModel
+    /// Bumps when the shopper signs in, for the success haptic.
+    @State private var signedIn = 0
 
     init(api: AisleAPI, location: LocationProviding, auth: AuthService, signInOnly: Bool = false,
          onFinish: @escaping () -> Void) {
@@ -27,7 +31,7 @@ struct OnboardingFlow: View {
         NavigationStack(path: $path) {
             Group {
                 if signInOnly {
-                    accountScreen(.method(returning: true), canLeave: false)
+                    accountScreen(.method(returning: true))
                 } else {
                     LiveOnboarding(
                         api: api,
@@ -41,11 +45,14 @@ struct OnboardingFlow: View {
             }
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(for: AccountFlowStep.self) { step in
-                accountScreen(step, canLeave: true)
+                destination(step)
             }
         }
         .tint(Theme.ink)
         .font(.aisleBody)
+        .environment(\.pressHaptics, true)
+        .sensoryFeedback(.selection, trigger: path.count)
+        .sensoryFeedback(.success, trigger: signedIn)
     }
 
     /// Replaying the intro from You while signed in just ends it.
@@ -53,17 +60,33 @@ struct OnboardingFlow: View {
         if accounts.isSignedIn { onFinish() } else { path.append(.method(returning: false)) }
     }
 
-    private func accountScreen(_ step: AccountFlowStep, canLeave: Bool) -> some View {
+    private func accountScreen(_ step: AccountFlowStep) -> some View {
         AccountFlowScreen(
             step: step, model: signUp, path: $path,
-            onLeave: canLeave ? {} : nil, onSkip: nil,
             onSignedIn: { session in
+                signedIn += 1
                 accounts.signIn(session)
-                onFinish()
+                // New accounts see the Aisle+ offer once; returning ones go straight in.
+                if path.contains(.name) && !plus.isPlus {
+                    path.append(.plus)
+                } else {
+                    onFinish()
+                }
             }
         )
         .toolbar(.hidden, for: .navigationBar)
         .navigationBarBackButtonHidden(true)
+    }
+
+    @ViewBuilder
+    private func destination(_ step: AccountFlowStep) -> some View {
+        if step == .plus {
+            OnboardingPlusOffer(firstName: accounts.account?.firstName, storeName: storeSelection.current?.name, onDone: onFinish)
+                .toolbar(.hidden, for: .navigationBar)
+                .navigationBarBackButtonHidden(true)
+        } else {
+            accountScreen(step)
+        }
     }
 }
 
@@ -209,6 +232,15 @@ struct OnboardingBody: View {
 /// Dark button for "Continue with Apple" (inverts in dark mode).
 struct InkButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
+        InkButtonBody(configuration: configuration)
+    }
+}
+
+private struct InkButtonBody: View {
+    let configuration: ButtonStyleConfiguration
+    @Environment(\.pressHaptics) private var pressHaptics
+
+    var body: some View {
         configuration.label
             .font(.aisleHeadline)
             .foregroundStyle(Theme.background)
@@ -216,6 +248,7 @@ struct InkButtonStyle: ButtonStyle {
             .padding(.horizontal, 16)
             .background(Theme.ink, in: RoundedRectangle(cornerRadius: Theme.Radius.button, style: .continuous))
             .opacity(configuration.isPressed ? 0.8 : 1)
+            .pressHaptic(configuration.isPressed, enabled: pressHaptics, weight: .medium)
     }
 }
 

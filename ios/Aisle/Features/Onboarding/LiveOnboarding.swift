@@ -42,6 +42,8 @@ struct LiveOnboarding: View {
         }
         .font(.aisleBody)
         .foregroundStyle(Theme.ink)
+        // A soft tick each time the walkthrough moves on.
+        .sensoryFeedback(.impact(weight: .light, intensity: 0.6), trigger: step)
     }
 
     @ViewBuilder
@@ -873,9 +875,8 @@ private struct LocationStage: View {
                         HStack(spacing: 12) {
                             RetailerLogo(url: store.retailerLogoURL, size: 40) {
                                 Image(systemName: "storefront")
-                                    .font(.system(size: 17, weight: .semibold))
+                                    .font(.system(size: 21, weight: .semibold))
                                     .frame(width: 40, height: 40)
-                                    .background(Theme.fill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                             }
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(store.name)
@@ -1812,10 +1813,9 @@ private struct StopRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
             Text("\(number)")
-                .font(Theme.font(14, .bold, relativeTo: .subheadline))
-                .foregroundStyle(number == 1 ? Theme.onAccent : Theme.ink)
+                .font(Theme.font(20, .bold, relativeTo: .title3))
+                .foregroundStyle(number == 1 ? AnyShapeStyle(Theme.accentInk) : AnyShapeStyle(Theme.secondaryInk))
                 .frame(width: 30, height: 30)
-                .background(number == 1 ? AnyShapeStyle(Theme.accent) : AnyShapeStyle(Theme.fill), in: Circle())
                 .padding(.top, 10)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 8) {

@@ -53,10 +53,9 @@ struct ShareListSheet: View {
                     ForEach(Array(shared.members.enumerated()), id: \.offset) { _, member in
                         HStack(spacing: 10) {
                             Text(member.firstName.first.map { String($0).uppercased() } ?? "?")
-                                .font(Theme.font(14, .bold, relativeTo: .subheadline))
-                                .foregroundStyle(Theme.onAccent)
+                                .font(Theme.font(20, .bold, relativeTo: .title3))
+                                .foregroundStyle(Theme.accentInk)
                                 .frame(width: 32, height: 32)
-                                .background(Theme.accent, in: Circle())
                             Text(member.isYou ? "\(member.firstName) (you)" : member.firstName)
                                 .font(.aisleBody)
                             Spacer()

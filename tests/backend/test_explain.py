@@ -6,6 +6,7 @@ from backend.app.ai.explain import (
 )
 from backend.app.ai.providers import _anthropic_content, _openai_content
 from backend.app.ai.providers import get_explainer
+from backend.app.config import get_settings
 from backend.app.main import app
 from conftest import store_id_for
 
@@ -191,7 +192,8 @@ def test_chat_rejects_bad_photos(signed_in_client):
         assert signed_in_client.post("/chat", json={"store_id": store_id, "messages": messages}).status_code == 422
 
 
-def test_identify_names_the_photo(signed_in_client):
+def test_identify_names_the_photo(signed_in_client, monkeypatch):
+    monkeypatch.setattr(get_settings(), "aisle_free_photo_searches", 5)
     fake = FakeExplainer(' "Chocolate chip cookies." ')
     app.dependency_overrides[get_explainer] = lambda: fake
     store_id = int(store_id_for(signed_in_client, "Costco"))

@@ -137,12 +137,9 @@ struct StoreWayView: View {
                 ForEach(steps) { step in
                     HStack(spacing: 12) {
                         Image(systemName: step.symbol)
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(.system(size: 17, weight: .semibold))
+                            .foregroundStyle(step.kind == .arrive ? AnyShapeStyle(Theme.accentInk) : AnyShapeStyle(Theme.ink))
                             .frame(width: 34, height: 34)
-                            .background(
-                                step.kind == .arrive ? AnyShapeStyle(Theme.accent) : AnyShapeStyle(Theme.fill),
-                                in: RoundedRectangle(cornerRadius: 11, style: .continuous)
-                            )
                         VStack(alignment: .leading, spacing: 1) {
                             Text(step.title).font(Theme.font(15, .semibold, relativeTo: .subheadline))
                             Text(step.detail)
@@ -342,9 +339,8 @@ private struct StepsMode: View {
             Button(action: onShowMap) {
                 HStack(spacing: 12) {
                     Image(systemName: "map")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.system(size: 20, weight: .semibold))
                         .frame(width: 44, height: 44)
-                        .background(Theme.fill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     VStack(alignment: .leading, spacing: 2) {
                         Text("See it on the map").font(Theme.font(15, .semibold, relativeTo: .subheadline))
                         Text(caption).font(Theme.font(12, relativeTo: .caption)).foregroundStyle(Theme.secondaryInk)

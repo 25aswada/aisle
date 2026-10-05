@@ -72,8 +72,13 @@ class Settings(BaseSettings):
     aisle_new_store_maps_per_day: int = 3000
 
     # Aisle+. The free tier's daily limits (per account, or per network when signed out).
-    aisle_free_photo_searches: int = 3
+    # Searches a day for a signed-in free account; past it, search needs Aisle+.
+    # (Signed out, searches are limited by the hourly rate limit and AI answers below.)
+    aisle_free_searches: int = 5
+    aisle_free_photo_searches: int = 1
     aisle_free_follow_ups: int = 5
+    # Follow-up questions about one search, on the free plan.
+    aisle_free_follow_ups_per_search: int = 1
     # Searches answered with the AI's help. Past the limit, searches still work with
     # Aisle's own answers and wording.
     aisle_free_ai_searches: int = 20
@@ -83,11 +88,20 @@ class Settings(BaseSettings):
     aisle_plus_photo_searches: int = 50
     aisle_plus_follow_ups: int = 100
     aisle_plus_ai_searches: int = 300
-    # Everyone's AI requests together in a day. Past it, AI features pause until tomorrow
+    # What everyone's AI use together may cost in a day, in US dollars, priced per call
+    # from the tokens it used (see ai.budget). Past it, AI features pause until tomorrow
     # (searches fall back to Aisle's own answers): a backstop on the AI bill.
-    aisle_ai_requests_per_day: int = 30000
+    aisle_ai_budget_usd_per_day: float = 25.0
     # Accept purchases from Xcode's local StoreKit testing. Ignored on Heroku.
     aisle_plus_allow_xcode: bool = False
+
+    # Logging, to stdout (Heroku collects it). DEBUG, INFO, WARNING or ERROR.
+    aisle_log_level: str = "INFO"
+    # Error reports to Sentry, off until a DSN is set. Without an environment, "production"
+    # on Heroku and "development" elsewhere. Traces are performance samples (0 to 1).
+    sentry_dsn: str | None = None
+    sentry_environment: str | None = None
+    sentry_traces_sample_rate: float = 0.0
     model_config = SettingsConfigDict(
         env_file=Path(__file__).resolve().parents[1] / ".env", extra="ignore"
     )

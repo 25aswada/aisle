@@ -24,7 +24,7 @@ struct AisleApp: App {
         let api = APIClient(
             baseURL: AppConfig.current.apiBaseURL,
             session: URLSession(configuration: configuration),
-            deviceID: DeviceIdentity.current(),
+            deviceIDProvider: { DeviceIdentity.current() },
             authToken: { KeychainTokenStore().token }
         )
         // Aisle+ saves store maps and answers on the phone for when there's no signal.

@@ -108,10 +108,9 @@ struct TermsStep: View {
             ForEach(Legal.summary, id: \.text) { point in
                 HStack(alignment: .top, spacing: 12) {
                     Image(systemName: point.symbol)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(Theme.onAccent)
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(Theme.accentInk)
                         .frame(width: 30, height: 30)
-                        .background(Theme.accent, in: Circle())
                         .accessibilityHidden(true)
                     Text(point.text)
                         .font(Theme.font(15, relativeTo: .subheadline))

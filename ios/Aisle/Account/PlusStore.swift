@@ -24,8 +24,8 @@ final class PlusStore {
         /// Shown until StoreKit returns real prices, and in previews.
         var fallbackPrice: String {
             switch self {
-            case .yearly: return "$29.99"
-            case .monthly: return "$3.99"
+            case .yearly: return "$39.99"
+            case .monthly: return "$5.99"
             }
         }
     }
@@ -74,26 +74,41 @@ final class PlusStore {
         products[plan]?.displayPrice ?? plan.fallbackPrice
     }
 
-    /// "$2.50 a month" for the yearly plan, from the real price when available.
+    /// "$3.33 a month" for the yearly plan, from the real price when available.
     var yearlyPerMonth: String {
-        guard let yearly = products[.yearly] else { return "$2.50" }
+        guard let yearly = products[.yearly] else { return "$3.33" }
         return (yearly.price / 12).formatted(yearly.priceFormatStyle)
     }
 
-    /// Twelve monthly payments, e.g. "$47.88", to compare with yearly.
+    /// Twelve monthly payments, e.g. "$71.88", to compare with yearly.
     var monthlyPerYear: String {
-        guard let monthly = products[.monthly] else { return "$47.88" }
+        guard let monthly = products[.monthly] else { return "$71.88" }
         return (monthly.price * 12).formatted(monthly.priceFormatStyle)
     }
 
     /// Savings of yearly over twelve monthly payments, rounded, e.g. 37.
     var yearlySavingsPercent: Int {
-        guard let yearly = products[.yearly], let monthly = products[.monthly], monthly.price > 0 else { return 37 }
+        guard let yearly = products[.yearly], let monthly = products[.monthly], monthly.price > 0 else { return 44 }
         let ratio = (yearly.price as NSDecimalNumber).doubleValue / ((monthly.price as NSDecimalNumber).doubleValue * 12)
         return max(0, Int(((1 - ratio) * 100).rounded()))
     }
 
     /// Free-trial length of a plan, e.g. "7-day", when the App Store offers one to this user.
+    /// Length of a plan's free trial in days, when this user can get one.
+    func trialDays(_ plan: Plan) async -> Int? {
+        guard let product = products[plan], let offer = product.subscription?.introductoryOffer,
+              offer.paymentMode == .freeTrial,
+              await product.subscription?.isEligibleForIntroOffer == true else { return nil }
+        let value = offer.period.value
+        switch offer.period.unit {
+        case .day: return value
+        case .week: return value * 7
+        case .month: return value * 30
+        case .year: return value * 365
+        @unknown default: return nil
+        }
+    }
+
     func trialLabel(_ plan: Plan) async -> String? {
         guard let product = products[plan], let offer = product.subscription?.introductoryOffer,
               offer.paymentMode == .freeTrial,
@@ -234,6 +249,13 @@ final class PlusStore {
             serverStatus = try? await client.plusStatus()
         }
     }
+
+    /// The free plan's daily limits, from the server when it has answered, otherwise the
+    /// server's defaults (backend/app/config.py).
+    var freeSearchesPerDay: Int { serverStatus?.search?.limit ?? 5 }
+    var freePhotoSearchesPerDay: Int { serverStatus?.photoSearch.limit ?? MemberActivity.freePhotosPerDay }
+    /// Follow-up questions per search on the free plan (backend: aisle_free_follow_ups_per_search).
+    let freeFollowUpsPerSearch = 1
 
     /// Picks up today's free use after a photo search or follow-up.
     func refreshUsage() async {

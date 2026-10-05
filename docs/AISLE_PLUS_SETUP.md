@@ -26,8 +26,8 @@ two auto-renewable subscriptions in it. The product IDs must match exactly:
 
 | Reference name | Product ID | Duration | Price | Intro offer |
 | --- | --- | --- | --- | --- |
-| Aisle+ Yearly | `app.shopaisle.plus.yearly` | 1 year | $29.99 | Free trial, 1 week |
-| Aisle+ Monthly | `app.shopaisle.plus.monthly` | 1 month | $3.99 | none |
+| Aisle+ Yearly | `app.shopaisle.plus.yearly` | 1 year | $39.99 | Free trial, 1 week |
+| Aisle+ Monthly | `app.shopaisle.plus.monthly` | 1 month | $5.99 | none |
 
 Give each one a display name ("Aisle+ Yearly", "Aisle+ Monthly"), a description ("Unlimited
 photo search and follow-ups, shared family lists, multi-store trips and offline store

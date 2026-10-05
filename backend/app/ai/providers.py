@@ -6,8 +6,12 @@ import logging
 from typing import Protocol
 
 from ..config import get_settings
+from .budget import charge, estimate_prompt_tokens, estimate_tokens
 from .catalog import CATEGORIES, LayoutDef
-from .explain import EXPLAIN_SYSTEM_PROMPT, CachedExplainer, Explainer, ExplainFacts, facts_prompt
+from .explain import (
+    EXPLAIN_SYSTEM_PROMPT, FIND_PROMPT, IDENTIFY_PROMPT, READ_LIST_PROMPT, CachedExplainer, Explainer,
+    ExplainFacts, facts_prompt,
+)
 from .intent import Intent
 from .reasoning import (
     LocationGuess,
@@ -51,6 +55,62 @@ def response_schema(layout: LayoutDef) -> dict:
     }
 
 
+# Output caps (max_tokens), per use. Models that think spend part of the cap on it, so
+# even one-line answers leave room; what a call actually used is what's charged.
+LOCATE_MAX_TOKENS = 1024  # A location guess: a small JSON object.
+PHRASE_MAX_TOKENS = 1024  # A search phrase from a photo or a follow-up, or NONE.
+LIST_MAX_TOKENS = 2000  # The items on a photographed shopping list.
+REPLY_MAX_TOKENS = 2000  # A "where to find it" answer or a follow-up reply.
+
+
+def max_tokens_for(system: str) -> int:
+    """The output cap for a chat call, by what it's for."""
+    if system in (IDENTIFY_PROMPT, FIND_PROMPT):
+        return PHRASE_MAX_TOKENS
+    if system == READ_LIST_PROMPT:
+        return LIST_MAX_TOKENS
+    return REPLY_MAX_TOKENS
+
+
+class MeteredCalls:
+    """Sends provider calls and charges each one to today's AI budget: by the tokens the
+    response reports, or estimated from the prompt and reply when it reports none. A call
+    that times out may still have run and been billed, so it's charged its full cap."""
+
+    name: str
+    _model: str
+    _cap_param: str  # What the provider calls max_tokens.
+    _timeout_error: type[Exception] = TimeoutError
+
+    def _send(self, create, prompt_tokens: int, max_tokens: int, **request):
+        try:
+            response = create(**{self._cap_param: max_tokens}, **request)
+        except self._timeout_error:
+            charge(self._model, prompt_tokens, max_tokens)
+            raise
+        used = self._usage(response)
+        model = getattr(response, "model", None)
+        if used is None:
+            used = (prompt_tokens, estimate_tokens(self._reply_text(response)))
+        charge(model if isinstance(model, str) and model else self._model, *used)
+        return response
+
+    def _usage(self, response) -> tuple[int, int] | None:
+        """(input tokens, output tokens) as the response reports them, or None."""
+        raise NotImplementedError
+
+    def _reply_text(self, response) -> str:
+        raise NotImplementedError
+
+
+def _count(usage, *fields: str) -> int | None:
+    """The sum of token counts on a usage object, or None when it lacks the first."""
+    values = [getattr(usage, field, None) for field in fields]
+    if not isinstance(values[0], int):
+        return None
+    return sum(value for value in values if isinstance(value, int))
+
+
 def guess_from_model_output(data: dict, intent: Intent, layout: LayoutDef) -> LocationGuess | None:
     """Validate model JSON against the layout. Anything off-list is discarded."""
     zone_names = {z.name for z in layout.zones}
@@ -75,14 +135,16 @@ def guess_from_model_output(data: dict, intent: Intent, layout: LayoutDef) -> Lo
     )
 
 
-class AnthropicLocationModel:
+class AnthropicLocationModel(MeteredCalls):
     name = "anthropic"
+    _cap_param = "max_tokens"
 
     def __init__(self, api_key: str, model: str, timeout: float, reply_timeout: float | None = None,
                  explain_timeout: float | None = None):
         import anthropic  # Imported lazily so the fallback works without the SDK.
 
         self._client = anthropic.Anthropic(api_key=api_key, timeout=timeout, max_retries=0)
+        self._timeout_error = anthropic.APITimeoutError
         self._model = model
         # Written replies run longer than structured guesses. No retries: a retry doubles
         # the wait, and Heroku ends any request after 30 seconds.
@@ -96,15 +158,17 @@ class AnthropicLocationModel:
             f"Departments: {departments}.\n"
             f"Item searched: {intent.raw.strip()}"
         )
+        schema = response_schema(layout)
         try:
-            response = self._client.beta.messages.create(
+            response = self._send(
+                self._client.beta.messages.create, estimate_tokens(SYSTEM_PROMPT + prompt + json.dumps(schema)),
+                LOCATE_MAX_TOKENS,
                 model=self._model,
-                max_tokens=2048,
                 system=SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": prompt}],
                 output_config={
                     "effort": "low",
-                    "format": {"type": "json_schema", "schema": response_schema(layout)},
+                    "format": {"type": "json_schema", "schema": schema},
                 },
                 # Re-run on Anthropic's recommended model if this one declines.
                 betas=["server-side-fallback-2026-07-01"],
@@ -123,9 +187,9 @@ class AnthropicLocationModel:
                          timeout=self._explain_timeout)
 
     def chat(self, system: str, messages: list[dict], timeout: float | None = None) -> str | None:
-        response = self._client.messages.create(
+        response = self._send(
+            self._client.messages.create, estimate_prompt_tokens(system, messages), max_tokens_for(system),
             model=self._model,
-            max_tokens=1500,
             system=system,
             messages=[{"role": m["role"], "content": _anthropic_content(m)} for m in messages],
             timeout=timeout or self._reply_timeout,
@@ -134,15 +198,27 @@ class AnthropicLocationModel:
             return None
         return "".join(block.text for block in response.content if block.type == "text").strip() or None
 
+    def _usage(self, response) -> tuple[int, int] | None:
+        usage = getattr(response, "usage", None)
+        tokens_in = _count(usage, "input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens")
+        tokens_out = _count(usage, "output_tokens")
+        return None if tokens_in is None or tokens_out is None else (tokens_in, tokens_out)
 
-class OpenAILocationModel:
+    def _reply_text(self, response) -> str:
+        return "".join(getattr(block, "text", None) or "" for block in getattr(response, "content", None) or [])
+
+
+class OpenAILocationModel(MeteredCalls):
     name = "openai"
+    # max_tokens is deprecated, and reasoning models refuse it.
+    _cap_param = "max_completion_tokens"
 
     def __init__(self, api_key: str, model: str, timeout: float, reply_timeout: float | None = None,
                  explain_timeout: float | None = None):
         import openai  # Imported lazily so the fallback works without the SDK.
 
         self._client = openai.OpenAI(api_key=api_key, timeout=timeout, max_retries=0)
+        self._timeout_error = openai.APITimeoutError
         self._model = model
         # Written replies run longer than structured guesses. No retries: a retry doubles
         # the wait, and Heroku ends any request after 30 seconds.
@@ -156,8 +232,11 @@ class OpenAILocationModel:
             f"Departments: {departments}.\n"
             f"Item searched: {intent.raw.strip()}"
         )
+        schema = response_schema(layout)
         try:
-            response = self._client.chat.completions.create(
+            response = self._send(
+                self._client.chat.completions.create, estimate_tokens(SYSTEM_PROMPT + prompt + json.dumps(schema)),
+                LOCATE_MAX_TOKENS,
                 model=self._model,
                 messages=[
                     {"role": "system", "content": SYSTEM_PROMPT},
@@ -165,7 +244,7 @@ class OpenAILocationModel:
                 ],
                 response_format={
                     "type": "json_schema",
-                    "json_schema": {"name": "location_guess", "schema": response_schema(layout), "strict": True},
+                    "json_schema": {"name": "location_guess", "schema": schema, "strict": True},
                 },
             )
             choice = response.choices[0]
@@ -176,13 +255,13 @@ class OpenAILocationModel:
             log.warning("AI provider failed; using deterministic fallback", exc_info=True)
             return None
 
-
     def explain(self, facts: ExplainFacts) -> str | None:
         return self.chat(EXPLAIN_SYSTEM_PROMPT, [{"role": "user", "content": facts_prompt(facts)}],
                          timeout=self._explain_timeout)
 
     def chat(self, system: str, messages: list[dict], timeout: float | None = None) -> str | None:
-        response = self._client.chat.completions.create(
+        response = self._send(
+            self._client.chat.completions.create, estimate_prompt_tokens(system, messages), max_tokens_for(system),
             model=self._model,
             messages=[
                 {"role": "system", "content": system},
@@ -194,6 +273,16 @@ class OpenAILocationModel:
         if choice.finish_reason != "stop" or choice.message.refusal:
             return None
         return (choice.message.content or "").strip() or None
+
+    def _usage(self, response) -> tuple[int, int] | None:
+        usage = getattr(response, "usage", None)
+        tokens_in, tokens_out = _count(usage, "prompt_tokens"), _count(usage, "completion_tokens")
+        return None if tokens_in is None or tokens_out is None else (tokens_in, tokens_out)
+
+    def _reply_text(self, response) -> str:
+        choices = getattr(response, "choices", None) or []
+        message = getattr(choices[0], "message", None) if choices else None
+        return getattr(message, "content", None) or ""
 
 
 def _media_type(image: str) -> str:

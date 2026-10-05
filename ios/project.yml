@@ -61,18 +61,26 @@ targets:
         NSLocationWhenInUseUsageDescription: >-
           Aisle uses your location only to show stores near you. This is
           optional: you can always search for a store by name or address instead.
-        # Only test builds pointed at a server on this network use it; the App Store app
-        # talks to the HTTPS server.
-        NSLocalNetworkUsageDescription: >-
-          Aisle can connect to a test server on your local network.
         # Only standard HTTPS and hashing, which are exempt from export paperwork.
         ITSAppUsesNonExemptEncryption: false
         # aisle://join/CODE opens a shared-list invite.
         CFBundleURLTypes:
           - CFBundleURLName: app.shopaisle.aisle
             CFBundleURLSchemes: [aisle]
-        NSAppTransportSecurity:
-          NSAllowsLocalNetworking: true
+    # Debug builds can talk to a test server on this Mac or network (plain http on the
+    # LAN). Release builds leave both keys out: the App Store app only uses HTTPS.
+    postCompileScripts:
+      - name: Allow a local test server (Debug only)
+        basedOnDependencyAnalysis: false
+        script: |
+          [ "$CONFIGURATION" = "Debug" ] || exit 0
+          plist="$TARGET_BUILD_DIR/$INFOPLIST_PATH"
+          buddy=/usr/libexec/PlistBuddy
+          $buddy -c "Delete :NSLocalNetworkUsageDescription" "$plist" 2>/dev/null || true
+          $buddy -c "Add :NSLocalNetworkUsageDescription string 'Aisle can connect to a test server on your local network.'" "$plist"
+          $buddy -c "Delete :NSAppTransportSecurity" "$plist" 2>/dev/null || true
+          $buddy -c "Add :NSAppTransportSecurity dict" "$plist"
+          $buddy -c "Add :NSAppTransportSecurity:NSAllowsLocalNetworking bool true" "$plist"
   AisleTests:
     type: bundle.unit-test
     platform: iOS
